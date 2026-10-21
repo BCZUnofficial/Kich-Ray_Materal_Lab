@@ -1,12 +1,59 @@
 # Changelog
 
+## 0.8.5
+
+### Selection workflow
+
+- Renamed the selection toggle to **Режим выделения**.
+- Hovering a visible mesh in selection mode now gives a light material highlight without an outline.
+- LMB fixes the mesh selection; the outline appears only after selection.
+- RMB clears the current selection while selection mode is active instead of rotating the light.
+- Switching tabs exits selection mode but preserves the current selected mesh and outline.
+- While a mesh is selected, bump/normal shading on other visible mesh parts is disabled so editing is visually isolated to the selected part(s).
+
+### Mesh availability / bump generation
+
+- Hidden mesh parts are excluded from brush editing, bump generation target lists, texture-name selection and default export targeting.
+- `Создать bump` now opens a mesh target list when more than one visible mesh with a diffuse texture is available. The user can select one target or use **Все**.
+- Brush editing respects an active mesh selection and cannot silently jump to another visible part.
+
+### Blur / normal processing
+
+- Blur and Sharp now post-process the composed tangent-space normal field as well as the scalar height source. This makes Blur visibly affect imported/painted normal layers instead of only diffuse-derived height.
+
+### Preview performance / quality
+
+- Viewport material textures are capped at 768 instead of 1024 and live brush preview at 384 instead of 512. This slightly lowers preview smoothing/detail while reducing GPU uploads and CPU conversion work. Export resolution is unchanged.
+
+## 0.8.4
+
+### Brush correctness
+
+- Brush editing is now allowed only on a material that already has a valid `_bump/_bump#` pair or on a material for which Material Lab has explicitly created a bump.
+- Added a per-session coverage layer: overlapping passes with identical brush settings use maximum coverage instead of repeatedly mixing into the same pixel. `Ctrl+S` / **Применить** clears the coverage layer and starts a new application layer.
+- Local gloss is treated as an authored absolute value during bump packing, so a brush value of 4% remains 4% rather than being multiplied again by the global gloss generator.
+- Changing brush target, radius, gloss, height, or preset starts a fresh coverage layer. Undo also resets coverage so an undone area can be painted again.
+
+### Performance / memory
+
+- Editable brush layers are capped at 1024 on the longest side. Normal uses RGBA while gloss/height remain compact 8-bit grayscale. Undo is capped at 12 MiB / 16 strokes.
+- Interactive brush preview now runs at 512 maximum dimension and updates at a lower cadence; a 1024 preview is generated only on Ctrl+S / Применить, avoiding 512↔1024 D3D texture churn after every stroke.
+- Reworked the Sobel/Blur/Sharp generator to precompute the scalar height field once instead of repeatedly bilinear-sampling it for every Sobel tap.
+- Added mesh AABB rejection and selected-part-first picking, avoiding full triangle scans across unrelated mesh parts during continuous brush movement.
+- Brush activation stops animation playback to avoid simultaneous CPU skinning and UV painting work.
+
+### Validation
+
+- 512x512 synthetic bump-preview benchmark decreased from roughly 1238 ms in the previous path to roughly 83 ms on the same local test.
+- Repeated identical normal and scalar layer stamps are bit-identical after the first application.
+
 ## 0.8.3
 
 ### Memory / responsiveness
 
 - Reduced editable brush resolution cap from 4096 to 2048.
 - Normal remains RGBA, while editable gloss and height are now stored as single-channel 8-bit maps. A 2048 material edit set is roughly 24 MiB instead of three RGBA maps.
-- Undo now stores only the channel changed by the stroke and its memory budget is capped at 24 MiB.
+- Undo stores only the channel changed by the stroke. In 0.8.4 its memory budget is capped at 12 MiB / 16 strokes.
 - Brush live preview uses a fast non-BC3 path; full BC3 encode/decode remains for explicit generation/export.
 - Reused existing D3D11 bump textures with `UpdateSubresource` when dimensions match instead of recreating SRVs/textures on every brush preview.
 - OGF bump pairs are resized one at a time during preview loading to reduce transient import peaks.

@@ -20,49 +20,65 @@ Image makeBump(const Sources& s,const Settings& cfg,uint32_t w,uint32_t h){
  const float normalGain=std::max(0.f,cfg.normalStrength);
  const float blurAmount=std::clamp(cfg.blur,0.f,1.f);
  const float sharpAmount=std::clamp(cfg.sharpness,0.f,2.f);
- auto wrap01=[](float a){a=std::fmod(a,1.f);return a<0.f?a+1.f:a;};
- auto H0=[&](float u,float v){return lum(sample(heightMap,wrap01(u),wrap01(v)));};
- auto H=[&](float u,float v,float du,float dv){
-  const float c=H0(u,v);
-  if(blurAmount<=0.0001f && sharpAmount<=0.0001f) return c;
-  const float t =H0(u,v-dv), b=H0(u,v+dv), l=H0(u-du,v), r=H0(u+du,v);
-  const float tl=H0(u-du,v-dv), tr=H0(u+du,v-dv), bl=H0(u-du,v+dv), br=H0(u+du,v+dv);
-  const float blur=(c*4.f + (t+b+l+r)*2.f + tl+tr+bl+br)/16.f;
-  float v0=c + (blur-c)*blurAmount;
-  if(sharpAmount>0.0001f){
-   const float hp=c-blur;
-   v0=std::clamp(v0 + hp*sharpAmount,0.f,1.f);
+ auto wrapI=[](int v,int n){v%=n;return v<0?v+n:v;};
+ std::vector<float> heightField(size_t(w)*h),filteredHeight;
+ for(uint32_t y=0;y<h;++y)for(uint32_t x=0;x<w;++x)
+  heightField[size_t(y)*w+x]=lum(sample(heightMap,(x+.5f)/float(w),(y+.5f)/float(h)));
+ if(blurAmount>0.0001f||sharpAmount>0.0001f){
+  filteredHeight.resize(heightField.size());
+  for(uint32_t y=0;y<h;++y)for(uint32_t x=0;x<w;++x){
+   auto at=[&](int ox,int oy){return heightField[size_t(wrapI(int(y)+oy,int(h)))*w+uint32_t(wrapI(int(x)+ox,int(w)))];};
+   const float c=at(0,0);
+   const float avg=(c*4.f+(at(0,-1)+at(0,1)+at(-1,0)+at(1,0))*2.f+at(-1,-1)+at(1,-1)+at(-1,1)+at(1,1))/16.f;
+   const float softened=c+(avg-c)*blurAmount;
+   filteredHeight[size_t(y)*w+x]=std::clamp(softened+(c-avg)*sharpAmount,0.f,1.f);
   }
-  return v0;
- };
+  heightField.swap(filteredHeight);
+ }
+ auto H=[&](int x,int y){return heightField[size_t(wrapI(y,int(h)))*w+uint32_t(wrapI(x,int(w)))];};
  auto decodeNormal=[&](Pixel p){return norm({p.r/127.5f-1.f,p.g/127.5f-1.f,p.b/127.5f-1.f});};
+ std::vector<V3> normalField(size_t(w)*h),normalFiltered;
  for(uint32_t y=0;y<h;++y)for(uint32_t x=0;x<w;++x){
-  const float u=(x+.5f)/float(w),v=(y+.5f)/float(h),du=1.f/float(w),dv=1.f/float(h);
-  const float tl=H(u-du,v-dv,du,dv),t=H(u,v-dv,du,dv),tr=H(u+du,v-dv,du,dv);
-  const float l=H(u-du,v,du,dv),r=H(u+du,v,du,dv);
-  const float bl=H(u-du,v+dv,du,dv),b=H(u,v+dv,du,dv),br=H(u+du,v+dv,du,dv);
+  const int ix=int(x),iy=int(y);
+  const float tl=H(ix-1,iy-1),t=H(ix,iy-1),tr=H(ix+1,iy-1);
+  const float l=H(ix-1,iy),r=H(ix+1,iy);
+  const float bl=H(ix-1,iy+1),b=H(ix,iy+1),br=H(ix+1,iy+1);
   const float gx=tl+2.f*l+bl-tr-2.f*r-br;
   const float gy=tl+2.f*t+tr-bl-2.f*b-br;
   V3 reliefN=norm({gx*relief,gy*relief*(cfg.invertY?-1.f:1.f),1.f});
+  const float u=(x+.5f)/float(w),v=(y+.5f)/float(h);
   V3 n=reliefN;
   if(s.normal.valid()){
-   Pixel p=sample(s.normal,u,v);
-   V3 base=decodeNormal(p);
+   V3 base=decodeNormal(sample(s.normal,u,v));
    base=norm({base.x*std::max(0.25f,normalGain),base.y*std::max(0.25f,normalGain)*(cfg.invertY?-1.f:1.f),base.z});
    const float blend=std::clamp(cfg.height*1.35f,0.f,1.35f);
-   n=norm({base.x + reliefN.x*blend, base.y + reliefN.y*blend, std::max(0.15f,base.z*reliefN.z)});
-  }else{
-   n=norm({reliefN.x*std::max(0.25f,normalGain),reliefN.y*std::max(0.25f,normalGain),reliefN.z});
+   n=norm({base.x+reliefN.x*blend,base.y+reliefN.y*blend,std::max(0.15f,base.z*reliefN.z)});
+  }else n=norm({reliefN.x*std::max(0.25f,normalGain),reliefN.y*std::max(0.25f,normalGain),reliefN.z});
+  normalField[size_t(y)*w+x]=n;
+ }
+ // Blur/sharp must also affect an authored or painted normal layer.  Applying
+ // it only to the scalar height source made the control almost invisible once
+ // a normal map existed.
+ if(blurAmount>0.0001f||sharpAmount>0.0001f){
+  normalFiltered.resize(normalField.size());
+  for(uint32_t y=0;y<h;++y)for(uint32_t x=0;x<w;++x){
+   auto at=[&](int ox,int oy){return normalField[size_t(wrapI(int(y)+oy,int(h)))*w+uint32_t(wrapI(int(x)+ox,int(w)))];};
+   V3 c=at(0,0),avg{};
+   for(int oy=-1;oy<=1;++oy)for(int ox=-1;ox<=1;++ox){V3 q=at(ox,oy);const float k=(ox==0&&oy==0)?4.f:((ox==0||oy==0)?2.f:1.f);avg.x+=q.x*k;avg.y+=q.y*k;avg.z+=q.z*k;}
+   avg=norm({avg.x/16.f,avg.y/16.f,avg.z/16.f});
+   V3 softened=norm({c.x+(avg.x-c.x)*blurAmount,c.y+(avg.y-c.y)*blurAmount,c.z+(avg.z-c.z)*blurAmount});
+   V3 n=norm({softened.x+(c.x-avg.x)*sharpAmount,softened.y+(c.y-avg.y)*sharpAmount,softened.z+(c.z-avg.z)*sharpAmount});
+   normalFiltered[size_t(y)*w+x]=n;
   }
+  normalField.swap(normalFiltered);
+ }
+ for(uint32_t y=0;y<h;++y)for(uint32_t x=0;x<w;++x){
+  const float u=(x+.5f)/float(w),v=(y+.5f)/float(h);const V3 n=normalField[size_t(y)*w+x];
   const Pixel gp=s.gloss.valid()?sample(s.gloss,u,v):sample(s.diffuse,u,v);
   const float sourceGloss=s.gloss.valid()?lum(gp):(std::max(gp.r,std::max(gp.g,gp.b))/255.f);
   const float glossBoost=std::clamp(0.55f+cfg.gloss*1.45f,0.f,2.25f);
-  const float g=s.gloss.valid()?sat(sourceGloss*glossBoost):sat(std::pow(std::max(0.f,sourceGloss),0.82f)*glossBoost);
-  Pixel p;
-  p.r=b8(std::sqrt(g));
-  p.g=b8(n.z*.5f+.5f);
-  p.b=b8(n.y*.5f+.5f);
-  p.a=b8(n.x*.5f+.5f);
+  const float g=s.gloss.valid()?sat(sourceGloss):sat(std::pow(std::max(0.f,sourceGloss),0.82f)*glossBoost);
+  Pixel p;p.r=b8(std::sqrt(g));p.g=b8(n.z*.5f+.5f);p.b=b8(n.y*.5f+.5f);p.a=b8(n.x*.5f+.5f);
   out.pixels[size_t(y)*w+x]=p;
  }
  return out;
@@ -156,7 +172,8 @@ Image MakeDefaultNormalPreset(uint32_t size){
   const float fx=((x+.5f)/float(size))*2.f-1.f,fy=((y+.5f)/float(size))*2.f-1.f,r2=fx*fx+fy*fy;Pixel p{128,128,255,0};
   if(r2<=1.f){const float z=std::sqrt(std::max(0.f,1.f-r2));const V3 n=norm({fx,-fy,z});const float edge=sat((1.f-std::sqrt(r2))*4.f);p={b8(n.x*.5f+.5f),b8(n.y*.5f+.5f),b8(n.z*.5f+.5f),b8(edge)};}
   out.pixels[size_t(y)*size+x]=p;
- }return out;
+ }
+ return out;
 }
 void StampNormalPreset(Image& target,const Image& preset,float u,float v,float radiusPixels,float opacity){
  if(!target.valid()||!preset.valid()||radiusPixels<.5f||opacity<=0.f)return;
@@ -176,6 +193,39 @@ void StampScalarPreset(GrayImage& target,const Image& preset,float u,float v,flo
  value=sat(value);u-=std::floor(u);v-=std::floor(v);const uint8_t q=b8(value);
  const int cx=int(std::floor(u*target.w)),cy=int(std::floor(v*target.h)),r=int(std::ceil(radiusPixels));
  for(int oy=-r;oy<=r;++oy)for(int ox=-r;ox<=r;++ox){const float nx=ox/radiusPixels,ny=oy/radiusPixels,d2=nx*nx+ny*ny;if(d2>1.f)continue;const float pu=nx*.5f+.5f,pv=ny*.5f+.5f;const Pixel sp=sample(preset,pu,pv);const float radial=sat(1.f-std::sqrt(d2));const float a=(sp.a/255.f)*std::min(1.f,radial*4.f);if(a<.08f)continue;int tx=(cx+ox)%int(target.w),ty=(cy+oy)%int(target.h);if(tx<0)tx+=int(target.w);if(ty<0)ty+=int(target.h);target.pixels[size_t(ty)*target.w+uint32_t(tx)]=q;}
+}
+void StampNormalPresetLayer(Image& target,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels){
+ if(!target.valid()||!preset.valid()||radiusPixels<.5f)return;
+ if(!coverage.valid()||coverage.w!=target.w||coverage.h!=target.h){coverage.w=target.w;coverage.h=target.h;coverage.pixels.assign(size_t(target.w)*target.h,0);}
+ u-=std::floor(u);v-=std::floor(v);const int cx=int(std::floor(u*target.w)),cy=int(std::floor(v*target.h)),r=int(std::ceil(radiusPixels));
+ auto decode=[](Pixel p){return norm({p.r/127.5f-1.f,p.g/127.5f-1.f,p.b/127.5f-1.f});};
+ for(int oy=-r;oy<=r;++oy)for(int ox=-r;ox<=r;++ox){const float nx=ox/radiusPixels,ny=oy/radiusPixels,d2=nx*nx+ny*ny;if(d2>1.f)continue;const float pu=nx*.5f+.5f,pv=ny*.5f+.5f;const Pixel sp=sample(preset,pu,pv);const float radial=sat(1.f-std::sqrt(d2));const uint8_t cov=b8((sp.a/255.f)*std::min(1.f,radial*4.f));if(cov<20)continue;int tx=(cx+ox)%int(target.w),ty=(cy+oy)%int(target.h);if(tx<0)tx+=int(target.w);if(ty<0)ty+=int(target.h);const size_t at=size_t(ty)*target.w+uint32_t(tx);if(cov<=coverage.pixels[at])continue;coverage.pixels[at]=cov;const V3 sn=decode(sp);target.pixels[at]={b8(sn.x*.5f+.5f),b8(sn.y*.5f+.5f),b8(sn.z*.5f+.5f),255};}
+}
+void StampScalarPresetLayer(GrayImage& target,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float value){
+ if(!target.valid()||!preset.valid()||radiusPixels<.5f)return;
+ if(!coverage.valid()||coverage.w!=target.w||coverage.h!=target.h){coverage.w=target.w;coverage.h=target.h;coverage.pixels.assign(size_t(target.w)*target.h,0);}
+ value=sat(value);const uint8_t q=b8(value);u-=std::floor(u);v-=std::floor(v);const int cx=int(std::floor(u*target.w)),cy=int(std::floor(v*target.h)),r=int(std::ceil(radiusPixels));
+ for(int oy=-r;oy<=r;++oy)for(int ox=-r;ox<=r;++ox){const float nx=ox/radiusPixels,ny=oy/radiusPixels,d2=nx*nx+ny*ny;if(d2>1.f)continue;const float pu=nx*.5f+.5f,pv=ny*.5f+.5f;const Pixel sp=sample(preset,pu,pv);const float radial=sat(1.f-std::sqrt(d2));const uint8_t cov=b8((sp.a/255.f)*std::min(1.f,radial*4.f));if(cov<20)continue;int tx=(cx+ox)%int(target.w),ty=(cy+oy)%int(target.h);if(tx<0)tx+=int(target.w);if(ty<0)ty+=int(target.h);const size_t at=size_t(ty)*target.w+uint32_t(tx);if(cov<=coverage.pixels[at])continue;coverage.pixels[at]=cov;target.pixels[at]=q;}
+}
+void StampNormalStrengthLayer(Image& target,const Image& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float strength,bool invert){
+ if(!target.valid()||!base.valid()||target.w!=base.w||target.h!=base.h||!preset.valid()||radiusPixels<.5f)return;
+ if(!coverage.valid()||coverage.w!=target.w||coverage.h!=target.h){coverage.w=target.w;coverage.h=target.h;coverage.pixels.assign(size_t(target.w)*target.h,0);}
+ strength=sat(strength);u-=std::floor(u);v-=std::floor(v);const int cx=int(std::floor(u*target.w)),cy=int(std::floor(v*target.h)),r=int(std::ceil(radiusPixels));
+ auto decode=[](Pixel p){return norm({p.r/127.5f-1.f,p.g/127.5f-1.f,p.b/127.5f-1.f});};
+ for(int oy=-r;oy<=r;++oy)for(int ox=-r;ox<=r;++ox){const float nx=ox/radiusPixels,ny=oy/radiusPixels,d2=nx*nx+ny*ny;if(d2>1.f)continue;const float pu=nx*.5f+.5f,pv=ny*.5f+.5f;const Pixel sp=sample(preset,pu,pv);const float radial=sat(1.f-std::sqrt(d2));const uint8_t cov=b8((sp.a/255.f)*std::min(1.f,radial*4.f));if(cov<8)continue;int tx=(cx+ox)%int(target.w),ty=(cy+oy)%int(target.h);if(tx<0)tx+=int(target.w);if(ty<0)ty+=int(target.h);const size_t at=size_t(ty)*target.w+uint32_t(tx);if(cov<=coverage.pixels[at])continue;coverage.pixels[at]=cov;V3 bn=decode(base.pixels[at]),sn=decode(sp);if(invert){sn.x=-sn.x;sn.y=-sn.y;}const float a=strength*(cov/255.f);V3 n=norm({bn.x+(sn.x-bn.x)*a,bn.y+(sn.y-bn.y)*a,bn.z+(sn.z-bn.z)*a});target.pixels[at]={b8(n.x*.5f+.5f),b8(n.y*.5f+.5f),b8(n.z*.5f+.5f),255};}
+}
+void StampScalarDeltaLayer(GrayImage& target,const GrayImage& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float delta){
+ if(!target.valid()||!base.valid()||target.w!=base.w||target.h!=base.h||!preset.valid()||radiusPixels<.5f)return;
+ if(!coverage.valid()||coverage.w!=target.w||coverage.h!=target.h){coverage.w=target.w;coverage.h=target.h;coverage.pixels.assign(size_t(target.w)*target.h,0);}
+ delta=std::clamp(delta,-1.f,1.f);u-=std::floor(u);v-=std::floor(v);const int cx=int(std::floor(u*target.w)),cy=int(std::floor(v*target.h)),r=int(std::ceil(radiusPixels));
+ for(int oy=-r;oy<=r;++oy)for(int ox=-r;ox<=r;++ox){const float nx=ox/radiusPixels,ny=oy/radiusPixels,d2=nx*nx+ny*ny;if(d2>1.f)continue;const float pu=nx*.5f+.5f,pv=ny*.5f+.5f;const Pixel sp=sample(preset,pu,pv);const float radial=sat(1.f-std::sqrt(d2));const uint8_t cov=b8((sp.a/255.f)*std::min(1.f,radial*4.f));if(cov<8)continue;int tx=(cx+ox)%int(target.w),ty=(cy+oy)%int(target.h);if(tx<0)tx+=int(target.w);if(ty<0)ty+=int(target.h);const size_t at=size_t(ty)*target.w+uint32_t(tx);if(cov<=coverage.pixels[at])continue;coverage.pixels[at]=cov;const float b=base.pixels[at]/255.f;target.pixels[at]=b8(b+delta*(cov/255.f));}
+}
+void StampNormalFilterLayer(Image& target,const Image& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float strength,bool sharpen){
+ if(!target.valid()||!base.valid()||target.w!=base.w||target.h!=base.h||!preset.valid()||radiusPixels<.5f)return;
+ if(!coverage.valid()||coverage.w!=target.w||coverage.h!=target.h){coverage.w=target.w;coverage.h=target.h;coverage.pixels.assign(size_t(target.w)*target.h,0);}
+ strength=sat(strength);u-=std::floor(u);v-=std::floor(v);const int cx=int(std::floor(u*target.w)),cy=int(std::floor(v*target.h)),r=int(std::ceil(radiusPixels));
+ auto decode=[](Pixel p){return norm({p.r/127.5f-1.f,p.g/127.5f-1.f,p.b/127.5f-1.f});};auto wrap=[](int a,int n){a%=n;return a<0?a+n:a;};
+ for(int oy=-r;oy<=r;++oy)for(int ox=-r;ox<=r;++ox){const float nx=ox/radiusPixels,ny=oy/radiusPixels,d2=nx*nx+ny*ny;if(d2>1.f)continue;const float pu=nx*.5f+.5f,pv=ny*.5f+.5f;const Pixel sp=sample(preset,pu,pv);const float radial=sat(1.f-std::sqrt(d2));const uint8_t cov=b8((sp.a/255.f)*std::min(1.f,radial*4.f));if(cov<8)continue;int tx=wrap(cx+ox,int(target.w)),ty=wrap(cy+oy,int(target.h));const size_t at=size_t(ty)*target.w+uint32_t(tx);if(cov<=coverage.pixels[at])continue;coverage.pixels[at]=cov;V3 c=decode(base.pixels[at]),avg{};for(int fy=-1;fy<=1;++fy)for(int fx=-1;fx<=1;++fx){const V3 q=decode(base.pixels[size_t(wrap(ty+fy,int(base.h)))*base.w+uint32_t(wrap(tx+fx,int(base.w)))]);const float k=(fx==0&&fy==0)?4.f:((fx==0||fy==0)?2.f:1.f);avg.x+=q.x*k;avg.y+=q.y*k;avg.z+=q.z*k;}avg=norm({avg.x/16.f,avg.y/16.f,avg.z/16.f});const float a=strength*(cov/255.f);V3 filtered=sharpen?norm({c.x+(c.x-avg.x)*2.f,c.y+(c.y-avg.y)*2.f,c.z+(c.z-avg.z)*2.f}):avg;V3 n=norm({c.x+(filtered.x-c.x)*a,c.y+(filtered.y-c.y)*a,c.z+(filtered.z-c.z)*a});target.pixels[at]={b8(n.x*.5f+.5f),b8(n.y*.5f+.5f),b8(n.z*.5f+.5f),255};}
 }
 void StampMaterialPreset(Image& normalTarget,Image& glossTarget,const Image& preset,float u,float v,float radiusPixels,float glossValue){
  if(!normalTarget.valid()||!preset.valid()||radiusPixels<.5f)return;

@@ -59,7 +59,7 @@ class Renderer {
   float normalStrength_=1.f,glossStrength_=0.5f;
   float tint_[3]={1.f,1.f,1.f},light_[3]={1.f,0.93f,0.78f},ambient_[3]={0.21f,0.24f,0.29f};
   bool invertNormalY_=false,bumpOn_=true,skeletonOn_=true;
-  int selectedPrimary_=-1;
+  int selectedPrimary_=-1,hoverPart_=-1;
   bool createViews(UINT w,UINT h,std::wstring& error);
   bool makeTexture(const Image& img,Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>& out,Microsoft::WRL::ComPtr<ID3D11Texture2D>* textureOut=nullptr);
   bool updateTexture(const Image& img,Microsoft::WRL::ComPtr<ID3D11Texture2D>& texture,Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>& view);
@@ -96,7 +96,11 @@ public:
   void SetGlossStrength(float strength){glossStrength_=std::max(0.f,std::min(strength,1.f));}
   void SetPartVisible(size_t part,bool visible);
   bool PartVisible(size_t part)const;
+  bool PartSelected(size_t part)const{return part<parts_.size()&&parts_[part].selected&&parts_[part].visible;}
   void SelectPart(int part,bool withMirror=false);
+  void SetHoverPart(int part){hoverPart_=(part>=0&&size_t(part)<parts_.size()&&parts_[size_t(part)].visible)?part:-1;}
+  void ClearHover(){hoverPart_=-1;}
+  int HoverPart()const{return hoverPart_;}
   struct PickHit{int part=-1;float u=0.f,v=0.f;V3 position{},normal{},du{},dv{};};
   bool PickUV(int screenX,int screenY,PickHit& hit);
   void SetBrushCursor(const PickHit& hit,float radiusU,float radiusV);
