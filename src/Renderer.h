@@ -56,6 +56,7 @@ class Renderer {
   UINT skeletonVertexCount_=0,brushVertexCount_=0,width_=0,height_=0;
   V3 modelCenter_{}; float modelScale_=1.f;
   float yaw_=0.65f,pitch_=0.25f,dist_=3.8f,cameraY_=0.f,lightYaw_=0.9f,lightPitch_=0.65f;
+  float modelYaw_=0.f,modelPitch_=0.f;
   float normalStrength_=1.f,glossStrength_=0.5f;
   float tint_[3]={1.f,1.f,1.f},light_[3]={1.f,0.93f,0.78f},ambient_[3]={0.21f,0.24f,0.29f};
   bool invertNormalY_=false,bumpOn_=true,skeletonOn_=true;
@@ -82,6 +83,8 @@ public:
   void SetColor(int which,COLORREF color);
   COLORREF GetColor(int which) const;
   void OrbitCamera(float dx,float dy);
+  void RotateModel(float dx,float dy);
+  void ResetModelRotation(){modelYaw_=0.f;modelPitch_=0.f;}
   void PanVertical(float dy);
   void OrbitLight(float dx,float dy);
   void SetLightOrbitDegrees(float azimuth,float elevation);

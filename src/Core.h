@@ -79,9 +79,9 @@ void StampNormalPresetLayer(Image& target,GrayImage& coverage,const Image& prese
 void StampScalarPreset(Image& target,const Image& preset,float u,float v,float radiusPixels,float value);
 void StampScalarPreset(GrayImage& target,const Image& preset,float u,float v,float radiusPixels,float value);
 void StampScalarPresetLayer(GrayImage& target,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float value);
-void StampNormalStrengthLayer(Image& target,const Image& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float strength,bool invert);
-void StampScalarDeltaLayer(GrayImage& target,const GrayImage& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float delta);
-void StampNormalFilterLayer(Image& target,const Image& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float strength,bool sharpen);
+void StampNormalStrengthLayer(Image& target,const Image& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float strength,bool invert,float hardness);
+void StampScalarDeltaLayer(GrayImage& target,const GrayImage& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float delta,float hardness);
+void StampNormalFilterLayer(Image& target,const Image& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float strength,bool sharpen,float hardness);
 void StampMaterialPreset(Image& normalTarget,Image& glossTarget,const Image& preset,float u,float v,float radiusPixels,float glossValue);
 bool SaveNormalPreset(const Image& preset,float gloss,const std::wstring& path,std::string& error);
 bool LoadNormalPreset(const std::wstring& path,Image& preset,float& gloss,std::string& error);
@@ -89,6 +89,8 @@ bool SaveNormalPreset(const Image& preset,const std::wstring& path,std::string& 
 bool LoadNormalPreset(const std::wstring& path,Image& preset,std::string& error);
 BumpPair GenerateBump(const Sources& src,const Settings& cfg);
 BumpPair GenerateBumpPreview(const Sources& src,const Settings& cfg);
+BumpPair PackBumpLayersPreview(const Image& normal,const GrayImage& gloss,const GrayImage& height,uint32_t maxDimension=0,const GrayImage* baseHeight=nullptr);
+bool ExportBumpLayers(const Image& normal,const GrayImage& gloss,const GrayImage& height,uint32_t width,uint32_t heightPixels,const std::wstring& baseWithoutSuffix,std::string& error,const GrayImage* baseHeight=nullptr);
 bool ExportBumpPair(const Sources& src,const Settings& cfg,const std::wstring& baseWithoutSuffix,std::string& error);
 Mesh MakeCube();
 bool LoadOGFMesh(const std::vector<uint8_t>& bytes,Mesh& mesh,std::string& error);

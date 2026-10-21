@@ -12,7 +12,7 @@ namespace {
 using Microsoft::WRL::ComPtr;
 struct GPUVertex{XMFLOAT3 p,n;XMFLOAT2 uv;XMFLOAT3 t,b;};
 struct BoneGPU{XMFLOAT3 p;XMFLOAT4 c;};
-struct alignas(16) CB{XMFLOAT4X4 wvp;XMFLOAT4 eye,ld,lc,ambient,tint,params,outline;};
+struct alignas(16) CB{XMFLOAT4X4 wvp,world;XMFLOAT4 eye,ld,lc,ambient,tint,params,outline;};
 V3 sub(V3 a,V3 b){return {a.x-b.x,a.y-b.y,a.z-b.z};}
 V3 add(V3 a,V3 b){return {a.x+b.x,a.y+b.y,a.z+b.z};}
 V3 mul(V3 a,float s){return {a.x*s,a.y*s,a.z*s};}
@@ -126,13 +126,14 @@ void Renderer::SetBumpImages(const Image& bump,const Image& bumpX,bool hasBump){
 void Renderer::SetColor(int which,COLORREF c){float* a=(which==0?tint_:which==1?light_:ambient_);a[0]=GetRValue(c)/255.f;a[1]=GetGValue(c)/255.f;a[2]=GetBValue(c)/255.f;}
 COLORREF Renderer::GetColor(int which)const{const float* a=(which==0?tint_:which==1?light_:ambient_);return RGB(int(a[0]*255),int(a[1]*255),int(a[2]*255));}
 void Renderer::OrbitCamera(float dx,float dy){yaw_+=dx*.01f;pitch_=std::clamp(pitch_+dy*.01f,-1.42f,1.42f);}
+void Renderer::RotateModel(float dx,float dy){modelYaw_+=dx*.012f;modelPitch_=std::clamp(modelPitch_+dy*.012f,-XM_PIDIV2,XM_PIDIV2);}
 void Renderer::PanVertical(float dy){cameraY_=std::clamp(cameraY_-dy*.0045f*dist_,-8.f,8.f);}
 void Renderer::OrbitLight(float dx,float dy){lightYaw_+=dx*.01f;lightPitch_=std::clamp(lightPitch_+dy*.01f,-1.42f,1.42f);}
 void Renderer::SetLightOrbitDegrees(float azimuth,float elevation){lightYaw_=azimuth*XM_PI/180.f;lightPitch_=std::clamp(elevation,-80.f,80.f)*XM_PI/180.f;}
 float Renderer::LightAzimuthDegrees()const{float d=lightYaw_*180.f/XM_PI;d=std::fmod(d,360.f);if(d<0)d+=360.f;return d;}
 float Renderer::LightElevationDegrees()const{return lightPitch_*180.f/XM_PI;}
 void Renderer::Zoom(float steps){dist_=std::clamp(dist_*std::pow(0.86f,steps),0.32f,24.f);}
-void Renderer::ResetView(){yaw_=0.65f;pitch_=0.25f;dist_=3.8f;cameraY_=0.f;}
+void Renderer::ResetView(){yaw_=0.65f;pitch_=0.25f;dist_=3.8f;cameraY_=0.f;modelYaw_=0.f;modelPitch_=0.f;}
 void Renderer::Reset(){ResetView();lightYaw_=0.9f;lightPitch_=0.65f;}
 void Renderer::ClearSelection(){for(auto& p:parts_)p.selected=false;selectedPrimary_=-1;}
 bool Renderer::HasSelection()const{for(const auto& p:parts_)if(p.selected&&p.visible)return true;return false;}
@@ -142,7 +143,7 @@ void Renderer::SelectPart(int part,bool withMirror){ClearSelection();if(part<0||
 bool Renderer::PickUV(int screenX,int screenY,PickHit& out){
  out={};if(parts_.empty()||!width_||!height_)return false;
  XMVECTOR target=XMVectorSet(0,cameraY_,0,1);XMVECTOR orbit=XMVectorSet(dist_*cosf(pitch_)*sinf(yaw_),dist_*sinf(pitch_),dist_*cosf(pitch_)*cosf(yaw_),0);XMVECTOR eye=target+orbit;
- XMMATRIX view=XMMatrixLookAtLH(eye,target,XMVectorSet(0,1,0,0));XMMATRIX proj=XMMatrixPerspectiveFovLH(XM_PIDIV4,float(width_)/std::max(1.f,float(height_)),.005f,100.f);XMMATRIX world=XMMatrixIdentity();
+ XMMATRIX view=XMMatrixLookAtLH(eye,target,XMVectorSet(0,1,0,0));XMMATRIX proj=XMMatrixPerspectiveFovLH(XM_PIDIV4,float(width_)/std::max(1.f,float(height_)),.005f,100.f);XMMATRIX world=XMMatrixRotationX(modelPitch_)*XMMatrixRotationY(modelYaw_);
  XMVECTOR n=XMVector3Unproject(XMVectorSet(float(screenX),float(screenY),0,1),0,0,float(width_),float(height_),0,1,proj,view,world);XMVECTOR f=XMVector3Unproject(XMVectorSet(float(screenX),float(screenY),1,1),0,0,float(width_),float(height_),0,1,proj,view,world);XMFLOAT3 nf,ff;XMStoreFloat3(&nf,n);XMStoreFloat3(&ff,f);V3 ro{nf.x,nf.y,nf.z},rd=normalize(V3{ff.x-nf.x,ff.y-nf.y,ff.z-nf.z});
  struct Candidate{float nearT;size_t part;};std::vector<Candidate> candidates;candidates.reserve(parts_.size());for(size_t pi=0;pi<parts_.size();++pi){const auto& p=parts_[pi];if(!p.visible)continue;float nearT=0;if(rayAabb(ro,rd,p.center,p.half,nearT))candidates.push_back({nearT,pi});}std::sort(candidates.begin(),candidates.end(),[](const Candidate& a,const Candidate& b){return a.nearT<b.nearT;});
  float best=1e30f;
@@ -158,8 +159,8 @@ int Renderer::PickGeometry(int screenX,int screenY){PickHit hit;if(!PickUV(scree
 void Renderer::Draw(){
  if(!device_||!rtv_||!dsv_||parts_.empty()||!width_||!height_)return;
  float back[4]={.095f,.105f,.12f,1.f};context_->ClearRenderTargetView(rtv_.Get(),back);context_->ClearDepthStencilView(dsv_.Get(),D3D11_CLEAR_DEPTH,1.f,0);ID3D11RenderTargetView* rtv=rtv_.Get();context_->OMSetRenderTargets(1,&rtv,dsv_.Get());D3D11_VIEWPORT vp={0.f,0.f,float(width_),float(height_),0.f,1.f};context_->RSSetViewports(1,&vp);
- XMVECTOR target=XMVectorSet(0,cameraY_,0,1);XMVECTOR orbit=XMVectorSet(dist_*cosf(pitch_)*sinf(yaw_),dist_*sinf(pitch_),dist_*cosf(pitch_)*cosf(yaw_),0);XMVECTOR eye=target+orbit;XMMATRIX view=XMMatrixLookAtLH(eye,target,XMVectorSet(0,1,0,0));XMMATRIX proj=XMMatrixPerspectiveFovLH(XM_PIDIV4,float(width_)/std::max(1.f,float(height_)),.005f,100.f);
- CB cb={};XMStoreFloat4x4(&cb.wvp,view*proj);XMFLOAT3 eye3;XMStoreFloat3(&eye3,eye);cb.eye={eye3.x,eye3.y,eye3.z,1};cb.ld={cosf(lightPitch_)*sinf(lightYaw_),sinf(lightPitch_),cosf(lightPitch_)*cosf(lightYaw_),0};cb.lc={light_[0],light_[1],light_[2],1};cb.ambient={ambient_[0],ambient_[1],ambient_[2],1};cb.tint={tint_[0],tint_[1],tint_[2],1};cb.outline={1.f,.58f,.08f,.0038f};
+ XMVECTOR target=XMVectorSet(0,cameraY_,0,1);XMVECTOR orbit=XMVectorSet(dist_*cosf(pitch_)*sinf(yaw_),dist_*sinf(pitch_),dist_*cosf(pitch_)*cosf(yaw_),0);XMVECTOR eye=target+orbit;XMMATRIX view=XMMatrixLookAtLH(eye,target,XMVectorSet(0,1,0,0));XMMATRIX proj=XMMatrixPerspectiveFovLH(XM_PIDIV4,float(width_)/std::max(1.f,float(height_)),.005f,100.f);XMMATRIX world=XMMatrixRotationX(modelPitch_)*XMMatrixRotationY(modelYaw_);
+ CB cb={};XMStoreFloat4x4(&cb.wvp,world*view*proj);XMStoreFloat4x4(&cb.world,world);XMFLOAT3 eye3;XMStoreFloat3(&eye3,eye);cb.eye={eye3.x,eye3.y,eye3.z,1};cb.ld={cosf(lightPitch_)*sinf(lightYaw_),sinf(lightPitch_),cosf(lightPitch_)*cosf(lightYaw_),0};cb.lc={light_[0],light_[1],light_[2],1};cb.ambient={ambient_[0],ambient_[1],ambient_[2],1};cb.tint={tint_[0],tint_[1],tint_[2],1};cb.outline={1.f,.58f,.08f,.0038f};
  ID3D11Buffer* c=cb_.Get();context_->VSSetConstantBuffers(0,1,&c);context_->PSSetConstantBuffers(0,1,&c);ID3D11SamplerState* sampler=sampler_.Get();context_->PSSetSamplers(0,1,&sampler);UINT stride=sizeof(GPUVertex),offset=0;bool anySelection=HasSelection();
  context_->IASetInputLayout(input_.Get());context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);context_->RSSetState(raster_.Get());context_->OMSetDepthStencilState(nullptr,0);context_->VSSetShader(vs_.Get(),nullptr,0);context_->PSSetShader(ps_.Get(),nullptr,0);
  for(size_t pi=0;pi<parts_.size();++pi){auto& part=parts_[pi];if(!part.visible||!part.vb||!part.ib||!part.textures[0])continue;const bool editable=!anySelection||part.selected;const bool hovered=int(pi)==hoverPart_&&!part.selected;cb.tint={tint_[0]*(hovered?1.12f:1.f),tint_[1]*(hovered?1.07f:1.f),tint_[2]*(hovered?.88f:1.f),1.f};cb.params={(bumpOn_&&part.hasBump&&editable)?1.f:0.f,editable?normalStrength_:1.f,editable?glossStrength_:.5f,(editable&&invertNormalY_)?1.f:0.f};context_->UpdateSubresource(cb_.Get(),0,nullptr,&cb,0,0);ID3D11Buffer* vb=part.vb.Get();context_->IASetVertexBuffers(0,1,&vb,&stride,&offset);context_->IASetIndexBuffer(part.ib.Get(),DXGI_FORMAT_R32_UINT,0);ID3D11ShaderResourceView* images[]={part.textures[0].Get(),part.textures[1].Get(),part.textures[2].Get()};context_->PSSetShaderResources(0,3,images);context_->DrawIndexed(part.indexCount,0,0);}cb.tint={tint_[0],tint_[1],tint_[2],1.f};

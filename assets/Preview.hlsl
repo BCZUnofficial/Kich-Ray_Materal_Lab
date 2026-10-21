@@ -1,6 +1,7 @@
 // R2-inspired preview on D3D11. Bump channel unpack matches SoC r2/sload.h.
 cbuffer Preview : register(b0) {
     row_major float4x4 worldViewProjection;
+    row_major float4x4 worldMatrix;
     float4 eyePosition;
     float4 lightDirection;
     float4 lightColor;
@@ -15,7 +16,17 @@ Texture2D BumpErrorMap : register(t2);
 SamplerState LinearWrap : register(s0);
 struct In {float3 pos:POSITION;float3 norm:NORMAL;float2 uv:TEXCOORD;float3 tangent:TANGENT;float3 bitangent:BINORMAL;};
 struct Out {float4 pos:SV_Position;float3 wp:TEXCOORD0;float3 n:TEXCOORD1;float2 uv:TEXCOORD2;float3 t:TEXCOORD3;float3 b:TEXCOORD4;};
-Out VSMain(In i){Out o;o.pos=mul(float4(i.pos,1),worldViewProjection);o.wp=i.pos;o.n=i.norm;o.uv=i.uv;o.t=i.tangent;o.b=i.bitangent;return o;}
+Out VSMain(In i){
+    Out o;
+    float4 wp=mul(float4(i.pos,1),worldMatrix);
+    o.pos=mul(float4(i.pos,1),worldViewProjection);
+    o.wp=wp.xyz;
+    o.n=normalize(mul(float4(i.norm,0),worldMatrix).xyz);
+    o.uv=i.uv;
+    o.t=normalize(mul(float4(i.tangent,0),worldMatrix).xyz);
+    o.b=normalize(mul(float4(i.bitangent,0),worldMatrix).xyz);
+    return o;
+}
 float4 PSMain(Out i):SV_Target {
     float4 albedo=DiffuseMap.Sample(LinearWrap,i.uv);float gloss=0.25;float3 N=normalize(i.n);
     if(parameters.x>0.5){

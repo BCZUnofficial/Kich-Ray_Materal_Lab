@@ -1,5 +1,79 @@
 # Changelog
 
+## 0.8.9
+
+### Interface
+
+- Replaced per-control tab visibility toggling with real child page containers. Each tab now owns a separate page window, so controls from different tabs cannot overlap or bleed through during redraws.
+- Page notifications are forwarded to the main window, preserving existing buttons, sliders and mesh-list behavior.
+
+### Brush precision
+
+- Reworked the brush strength slider to a nonlinear cubic curve with a true zero endpoint. The lower part of the slider now provides extremely small strengths for subtle height/gloss/relief adjustments.
+- Added a dedicated **Резкость края** (brush hardness) control. It changes the radial feather independently from the Sharp/Blur material operations.
+- Reduced the minimum brush footprint again to about 1.35 editable texels, while keeping a guard against single-pixel degeneration.
+
+## 0.8.8
+
+### Generated base / brush pipeline
+
+- Split material editing into explicit stages: **Generated Base -> Brush Composite -> Export**.
+- `Создать bump` now freezes the exact slider-generated result into `temp/<model>/<material>_base.krlt`. The temporary snapshot stores unpacked normal, gloss and height layers without an additional BC3 round trip. Slider dragging previews in memory; the temp snapshot is written only when tracking ends, avoiding repeated disk writes.
+- Entering the brush no longer regenerates the slider result from diffuse/height. The brush always starts from the frozen `base` snapshot, preventing the previous double application of height/Sobel relief.
+- `Ctrl+S / Применить` writes the confirmed composite into a separate `*_brush.krlt` snapshot. Clearing the brush returns to `*_base.krlt` instead of running the normal generator again.
+- Creating a new generated base for a material starts a new brush stage for that material and clears the old brush working layer.
+
+### Direct layer packing
+
+- Added a direct X-Ray bump packing path for already-authored normal/gloss/height layers. Painted layers are no longer sent back through the general diffuse/height normal generator.
+- Final export of painted material uses the direct packer, so slider-generated normal and brush edits are combined once into a single `_bump.dds` / `_bump#.dds` pair.
+- Brush height remains visually active by deriving normals only from the **height delta relative to the frozen base height**. The base height itself is not converted into relief a second time.
+
+## 0.8.7
+
+### Interface
+
+- Removed fixed-width tabs. Tab headers now size from their text and are forced into a single line, preventing long labels such as **Настройка** / **Анимация** from wrapping beneath another tab.
+- Tab switching now hides every old page first and only then shows the new page, with redraw suspended during the transition. This removes the visual bleed where controls from one page could briefly remain visible under another.
+
+### Model rotation
+
+- Added a dedicated model-rotation mode on **R**.
+- Press **R** while the viewport has focus, then drag with LMB to rotate the model independently from the orbit camera.
+- Model rotation uses a real world transform. Lighting normals, tangents/binormals, outline, skeleton, brush cursor and UV picking remain aligned with the rotated model.
+- Model rotation is unavailable on the Animation page and while an animation is playing.
+
+### Animation isolation
+
+- Animation pose evaluation is now limited to the **Анимация** tab.
+- Leaving the Animation tab immediately stops playback, resets the timeline and restores the bind/T-pose.
+- Entering the Animation tab starts in bind/T-pose; animation is shown only after play/scrub/select operations inside that page.
+- While playback is running, all model-editing commands are hard-blocked: material controls, brush operations, selection/mesh editing, Ctrl+Z/Ctrl+S and model rotation.
+- Camera orbit, light orbit, pan and zoom remain available during playback because they do not modify the model.
+
+
+## 0.8.6
+
+### Interface
+
+- Reworked the side panel layout with Segoe UI, grouped sections, wider tabs and cleaner spacing.
+- Import, export, material, scene and brush controls are visually grouped instead of appearing as one continuous control stack.
+- Brush controls now show their own **Размер** and **Сила** values explicitly.
+
+### Independent brush tool
+
+- Brush operations no longer consume the global material `Normal / Gloss / Height / Blur / Sharp` settings during live preview or export of painted layers.
+- Added independent brush operations: **Рельеф**, **Высота +**, **Впадина**, **Блеск +**, **Блеск -**, **Sharp**, and **Blur**.
+- Added an independent brush **Сила** control.
+- Added **Инвертировать действие**: height/gloss add/sub and sharp/blur swap direction; relief inverts the tangent-space XY direction.
+- Each uncommitted brush settings session uses its own baseline snapshot, so repeated passes do not accumulate. Changing operation/strength/size/inversion starts a fresh brush session baseline.
+- Local Sharp/Blur are applied only inside the brush footprint and use the brush preset alpha as the falloff mask.
+
+### Precision editing
+
+- Brush radius minimum is reduced to about a 2-texel radius on the 1024 editable layer; it never drops to a single-pixel stamp.
+- Camera zoom range is extended from `1.6` minimum distance to `0.32`, and the near clip plane is reduced to `0.005` for close material inspection.
+
 ## 0.8.5
 
 ### Selection workflow
