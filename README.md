@@ -2,7 +2,7 @@
 
 Standalone DirectX 11 material and OGF preview tool for **S.T.A.L.K.E.R.: Shadow of Chernobyl 1.0006** and the Kich-Ray engine workstream.
 
-Current development version: **0.7**.
+Current development version: **0.7.1**.
 
 ## Features
 
@@ -30,7 +30,7 @@ Material Lab first uses motions embedded in the opened OGF. If the OGF contains 
 
 A same-name `.omf` is also tried when the model has no explicit motion reference.
 
-The 0.7 preview implements the SoC OGF4 motion path used by `SkeletonMotions.cpp` / `SkeletonAnimated.cpp`:
+The 0.7.1 preview implements the SoC OGF4 motion path used by `SkeletonMotions.cpp` / `SkeletonAnimated.cpp`:
 
 - 30 FPS motion keys;
 - constant or per-frame quaternion rotation keys;
@@ -52,6 +52,8 @@ Animation preview intentionally does not reproduce the complete runtime `CBlend`
 ## Bump workflow
 
 `Создать bump` only works when an actual diffuse texture is available.
+
+When a normal map is not supplied, Material Lab derives tangent-space normals from the diffuse/height source with a tileable 3x3 Sobel filter. `Высота` controls the generated relief and `Блеск` controls the packed gloss intensity; changing either value regenerates a bump pair that was created by Material Lab. Existing imported `_bump/_bump#` files are left untouched until a new pair is generated.
 
 For an OGF with several material slots, Material Lab generates the bump preview independently from each slot's loaded diffuse texture. If geometry is selected, generation is limited to the selected part(s).
 
@@ -105,5 +107,12 @@ Additional format references used during development:
 
 - https://github.com/VaIeroK/OGF-tool
 - https://github.com/justtails/OGFViewer
+
+
+Normal-generation behavior was also compared against:
+
+- https://github.com/cpetry/NormalMap-Online
+- https://github.com/Theverat/NormalmapGenerator
+- https://github.com/iOrange/bumpx
 
 The Kich-Ray engine repository is maintained separately from this standalone tool.

@@ -11,20 +11,66 @@ uint8_t b8(float x){return uint8_t(sat(x)*255.f+0.5f);}
 float lum(Pixel p){return (0.2126f*p.r+0.7152f*p.g+0.0722f*p.b)/255.f;}
 Pixel sample(const Image& im,float u,float v){if(!im.valid())return {};u=sat(u)*im.w-.5f;v=sat(v)*im.h-.5f;int x=int(floor(u)),y=int(floor(v));float a=u-x,b=v-y;auto at=[&](int i,int j)->Pixel{return im.pixels[size_t(std::min(int(im.h)-1,std::max(0,j)))*im.w+std::min(int(im.w)-1,std::max(0,i))];};Pixel a0=at(x,y),b0=at(x+1,y),a1=at(x,y+1),b1=at(x+1,y+1),o;uint8_t* d=&o.r;for(int k=0;k<4;++k){const float v0=(&a0.r)[k]*(1-a)+(&b0.r)[k]*a,v1=(&a1.r)[k]*(1-a)+(&b1.r)[k]*a;d[k]=b8((v0*(1-b)+v1*b)/255.f);}return o;}
 V3 norm(V3 n){float l=sqrt(n.x*n.x+n.y*n.y+n.z*n.z);if(l<1e-5f)return {0,0,1};return{n.x/l,n.y/l,n.z/l};}
-Image makeBump(const Sources& s,const Settings& cfg,uint32_t w,uint32_t h){Image out;out.w=w;out.h=h;out.pixels.resize(size_t(w)*h);for(uint32_t y=0;y<h;++y)for(uint32_t x=0;x<w;++x){float u=(x+.5f)/w,v=(y+.5f)/h;V3 n{0,0,1};if(s.normal.valid()){Pixel p=sample(s.normal,u,v);n=norm({p.r/127.5f-1,p.g/127.5f-1,p.b/127.5f-1});}else{
-     const Image& hmap=s.height.valid()?s.height:s.diffuse;
-     // Symmetric central gradient in texture space, with edge clamp.
-     float a=lum(sample(hmap,u-1.f/w,v)),b=lum(sample(hmap,u+1.f/w,v));
-     float c=lum(sample(hmap,u,v-1.f/h)),d=lum(sample(hmap,u,v+1.f/h));
-     n=norm({(a-b)*2.f,(c-d)*2.f,1.f});
-   }
-   n=norm({n.x*cfg.normalStrength,n.y*cfg.normalStrength*(cfg.invertY?-1.f:1.f),n.z});
-   float g=s.gloss.valid()?lum(sample(s.gloss,u,v)):lum(sample(s.diffuse,u,v));
-   g=sat(g*cfg.gloss*2.f);Pixel p;
-   p.r=b8(sqrt(g));p.g=b8(n.z*.5f+.5f);p.b=b8(n.y*.5f+.5f);p.a=b8(n.x*.5f+.5f);
-   out.pixels[size_t(y)*w+x]=p;
- }return out;}
-Image correction(const Image& original,const Image& decoded,const Sources& src,const Settings& cfg){Image out;out.w=original.w;out.h=original.h;out.pixels.resize(original.pixels.size());for(uint32_t y=0;y<out.h;++y)for(uint32_t x=0;x<out.w;++x){size_t i=size_t(y)*out.w+x;Pixel p=original.pixels[i],c=decoded.pixels[i];Pixel e;e.r=b8(.5f+(int(p.a)-int(c.a))/255.f);e.g=b8(.5f+(int(p.b)-int(c.b))/255.f);e.b=b8(.5f+(int(p.g)-int(c.g))/255.f);const Image& map=src.height.valid()?src.height:src.diffuse;float hh=lum(sample(map,(x+.5f)/out.w,(y+.5f)/out.h));e.a=b8(.5f+(hh-.5f)*cfg.height);out.pixels[i]=e;}return out;}
+Image makeBump(const Sources& s,const Settings& cfg,uint32_t w,uint32_t h){
+ if(!s.diffuse.valid()||!w||!h)return {};
+ Image out;out.w=w;out.h=h;out.pixels.resize(size_t(w)*h);
+ const Image& heightMap=s.height.valid()?s.height:s.diffuse;
+ // The 3x3 Sobel kernel follows the standard normal-map generators used as
+ // references (NormalMap-Online / NormalmapGenerator).  Height is the actual
+ // relief gain now, rather than being stored only in bump# alpha.
+ const float relief=std::max(0.f,cfg.height)*4.f;
+ const float normalGain=std::max(0.f,cfg.normalStrength);
+ auto wrap01=[](float a){a=std::fmod(a,1.f);return a<0.f?a+1.f:a;};
+ for(uint32_t y=0;y<h;++y)for(uint32_t x=0;x<w;++x){
+  const float u=(x+.5f)/float(w),v=(y+.5f)/float(h),du=1.f/float(w),dv=1.f/float(h);
+  V3 n{0,0,1};
+  if(s.normal.valid()){
+   Pixel p=sample(s.normal,u,v);
+   n=norm({p.r/127.5f-1.f,p.g/127.5f-1.f,p.b/127.5f-1.f});
+   const float gain=std::max(.0001f,relief)*normalGain;
+   n=norm({n.x*gain,n.y*gain*(cfg.invertY?-1.f:1.f),n.z});
+  }else{
+   auto H=[&](float ox,float oy){return lum(sample(heightMap,wrap01(u+ox),wrap01(v+oy)));};
+   const float tl=H(-du,-dv),t=H(0,-dv),tr=H(du,-dv);
+   const float l=H(-du,0),r=H(du,0);
+   const float bl=H(-du,dv),b=H(0,dv),br=H(du,dv);
+   const float gx=tl+2.f*l+bl-tr-2.f*r-br;
+   const float gy=tl+2.f*t+tr-bl-2.f*b-br;
+   const float gain=relief*normalGain;
+   n=norm({gx*gain,gy*gain*(cfg.invertY?-1.f:1.f),1.f});
+  }
+  const float sourceGloss=s.gloss.valid()?lum(sample(s.gloss,u,v)):lum(sample(s.diffuse,u,v));
+  const float glossGain=std::clamp(cfg.gloss*2.f,0.f,2.f);
+  const float g=sat(sourceGloss*glossGain);
+  Pixel p;
+  p.r=b8(std::sqrt(g)); // SoC R2: S.gloss = Nu.x * Nu.x
+  p.g=b8(n.z*.5f+.5f);
+  p.b=b8(n.y*.5f+.5f);
+  p.a=b8(n.x*.5f+.5f);
+  out.pixels[size_t(y)*w+x]=p;
+ }
+ return out;
+}
+Image correction(const Image& original,const Image& decoded,const Sources& src,const Settings& cfg){
+ Image out;out.w=original.w;out.h=original.h;out.pixels.resize(original.pixels.size());
+ const Image& map=src.height.valid()?src.height:src.diffuse;
+ for(uint32_t y=0;y<out.h;++y)for(uint32_t x=0;x<out.w;++x){
+  const size_t i=size_t(y)*out.w+x;const Pixel p=original.pixels[i],c=decoded.pixels[i];
+  // BumpX / SDK-style compensation: RGB stores twice the BC3 normal error
+  // around neutral 128, alpha stores height.  This is the pair expected by
+  // the classic X-Ray bump workflow.
+  auto err8=[](int d)->uint8_t{return uint8_t(std::clamp(d*2+128,0,255));};
+  Pixel e;
+  e.r=err8(int(p.a)-int(c.a));
+  e.g=err8(int(p.b)-int(c.b));
+  e.b=err8(int(p.g)-int(c.g));
+  const float hh=lum(sample(map,(x+.5f)/float(out.w),(y+.5f)/float(out.h)));
+  const float hscale=std::clamp(cfg.height,0.f,1.f);
+  e.a=b8(.5f+(hh-.5f)*hscale);
+  out.pixels[i]=e;
+ }
+ return out;
+}
 BumpPair oneMip(const Sources& src,const Settings& cfg,uint32_t w,uint32_t h){BumpPair pair;pair.bump=makeBump(src,cfg,w,h);auto compressed=EncodeBC3DDS(pair.bump,{pair.bump});std::string err;Image decoded=DecodeDDS(compressed,err);if(!decoded.valid())return {};pair.bumpX=correction(pair.bump,decoded,src,cfg);return pair;}
 }
 Image DefaultChecker(uint32_t w){Image im;im.w=im.h=w;im.pixels.resize(size_t(w)*w);for(uint32_t y=0;y<w;++y)for(uint32_t x=0;x<w;++x){int check=((x/32)^(y/32))&1;uint8_t k=uint8_t(check?166:104);im.pixels[size_t(y)*w+x]={uint8_t(k+18),k,uint8_t(k-7),255};}return im;}

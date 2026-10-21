@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.7.1
+
+### Skeleton / animation fixes
+
+- Replaced DirectXMath quaternion-to-matrix conversion in animation skinning with the exact X-Ray `Fmatrix::mk_xform` convention.
+- Bone hierarchy composition and model-to-bone skin matrices now follow SoC `mul_43` ordering used by `SkeletonAnimated.cpp`.
+- SoC quaternion keys are read as `s16 / 32767` without pre-normalizing them, matching `QR2Quat`.
+- Loading an OGF no longer immediately applies frame 0 of the first motion; the model stays in bind pose until an animation is selected or started.
+
+### Bump / normal generation fixes
+
+- Replaced the two-sample diffuse gradient with a tileable 3x3 Sobel normal generator.
+- `Высота` now changes generated relief instead of affecting only bump# height storage.
+- `Блеск` and `Высота` regenerate generated bump pairs live, including multi-material OGF previews.
+- Bump normal-error compensation now uses the classic BumpX/SDK-style `error * 2 + 128` packing.
+- Height remains stored in bump# alpha; gloss remains packed as square-root data for the SoC R2 `Nu.x * Nu.x` path.
+
 ## 0.7
 
 ### Animation preview

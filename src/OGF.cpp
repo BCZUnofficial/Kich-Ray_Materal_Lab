@@ -60,7 +60,7 @@ bool parseBones(Block src,Mesh& mesh,std::string& error){Block names{};if(!chunk
 void parseMotionRefs(Block src,Mesh& mesh){Block refs{};if(!chunk(src,OGF_S_MOTION_REFS,refs)||!refs.size)return;size_t at=0;std::string all;if(!zstr(refs,at,all))return;std::stringstream ss(all);std::string item;while(std::getline(ss,item,',')){while(!item.empty()&&std::isspace(static_cast<unsigned char>(item.front())))item.erase(item.begin());while(!item.empty()&&std::isspace(static_cast<unsigned char>(item.back())))item.pop_back();if(!item.empty())mesh.motionRefs.push_back(item);}}
 
 struct MotionDef{std::string name;float speed=1.f;bool stopAtEnd=false;};
-Quat readQuat(const uint8_t* p){Quat q{float(s16(p))/32767.f,float(s16(p+2))/32767.f,float(s16(p+4))/32767.f,float(s16(p+6))/32767.f};float l=std::sqrt(q.x*q.x+q.y*q.y+q.z*q.z+q.w*q.w);if(l>1e-6f){q.x/=l;q.y/=l;q.z/=l;q.w/=l;}else q={0,0,0,1};return q;}
+Quat readQuat(const uint8_t* p){return {float(s16(p))/32767.f,float(s16(p+2))/32767.f,float(s16(p+4))/32767.f,float(s16(p+6))/32767.f};}
 
 bool parseMotionContainer(Block src,Mesh& mesh,std::string& error,bool append){Block params{},motions{};if(!chunk(src,OGF_S_SMPARAMS,params)||!chunk(src,OGF_S_MOTIONS,motions))return false;if(mesh.bones.empty()){error="Motion data requires skeleton bones";return false;}
  Reader p{params};uint16_t version=0,partCount=0;if(!p.ru16(version)||!p.ru16(partCount)){error="SMPARAMS truncated";return false;}if(version<1||version>3){error="Unsupported SoC SMPARAMS version: "+std::to_string(version);return false;}if(partCount>16){error="SMPARAMS partition count invalid";return false;}

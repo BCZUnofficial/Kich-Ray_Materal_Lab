@@ -24,9 +24,37 @@ bool rayTriangle(V3 ro,V3 rd,V3 a,V3 b,V3 c,float& t){const float eps=1e-7f;V3 e
 std::wstring hrtext(const wchar_t* context,HRESULT hr){wchar_t t[192];swprintf_s(t,L"%ls (HRESULT 0x%08X)",context,unsigned(hr));return t;}
 XMFLOAT3 vec(const V3& v){return {v.x,v.y,v.z};}
 XMFLOAT3 norm3(XMVECTOR v){XMFLOAT3 a;XMStoreFloat3(&a,XMVector3Normalize(v));return a;}
-XMMATRIX loadMatrix(const std::array<float,16>& a){XMFLOAT4X4 f;std::memcpy(&f,a.data(),sizeof(f));return XMLoadFloat4x4(&f);}
-XMVECTOR qvec(const Quat& q){return XMVectorSet(q.x,q.y,q.z,q.w);}
-Quat sampleQ(const MotionTrack& t,uint32_t a,uint32_t b,float d){if(t.rotations.empty())return {};if(t.rotations.size()==1)return t.rotations[0];a%=uint32_t(t.rotations.size());b%=uint32_t(t.rotations.size());XMVECTOR q=XMQuaternionSlerp(qvec(t.rotations[a]),qvec(t.rotations[b]),d);XMFLOAT4 o;XMStoreFloat4(&o,XMQuaternionNormalize(q));return {o.x,o.y,o.z,o.w};}
+struct XRMat{float m[4][4];};
+XRMat xrIdentity(){XRMat r={};for(int i=0;i<4;++i)r.m[i][i]=1.f;return r;}
+XRMat xrFromArray(const std::array<float,16>& a){XRMat r{};std::memcpy(r.m,a.data(),sizeof(r.m));return r;}
+XRMat xrFromQuat(const Quat& q,V3 t){
+ // Exact X-Ray Fmatrix::mk_xform convention. DirectXMath's quaternion matrix
+ // uses a different sign/transposition convention and corrupts SoC skeletons.
+ const float xx=q.x*q.x,yy=q.y*q.y,zz=q.z*q.z,xy=q.x*q.y,xz=q.x*q.z,yz=q.y*q.z;
+ const float wx=q.w*q.x,wy=q.w*q.y,wz=q.w*q.z;XRMat r=xrIdentity();
+ r.m[0][0]=1.f-2.f*(yy+zz);r.m[0][1]=2.f*(xy-wz);r.m[0][2]=2.f*(xz+wy);
+ r.m[1][0]=2.f*(xy+wz);r.m[1][1]=1.f-2.f*(xx+zz);r.m[1][2]=2.f*(yz-wx);
+ r.m[2][0]=2.f*(xz-wy);r.m[2][1]=2.f*(yz+wx);r.m[2][2]=1.f-2.f*(xx+yy);
+ r.m[3][0]=t.x;r.m[3][1]=t.y;r.m[3][2]=t.z;return r;
+}
+XRMat xrMul43(const XRMat& A,const XRMat& B){
+ // Byte-for-byte algebraic equivalent of X-Ray Fmatrix::mul_43(A,B).
+ XRMat r=xrIdentity();
+ for(int row=0;row<3;++row)for(int col=0;col<3;++col)
+  r.m[row][col]=A.m[0][col]*B.m[row][0]+A.m[1][col]*B.m[row][1]+A.m[2][col]*B.m[row][2];
+ for(int col=0;col<3;++col)
+  r.m[3][col]=A.m[0][col]*B.m[3][0]+A.m[1][col]*B.m[3][1]+A.m[2][col]*B.m[3][2]+A.m[3][col];
+ return r;
+}
+V3 xrPoint(const XRMat& M,V3 v){return {v.x*M.m[0][0]+v.y*M.m[1][0]+v.z*M.m[2][0]+M.m[3][0],v.x*M.m[0][1]+v.y*M.m[1][1]+v.z*M.m[2][1]+M.m[3][1],v.x*M.m[0][2]+v.y*M.m[1][2]+v.z*M.m[2][2]+M.m[3][2]};}
+V3 xrDir(const XRMat& M,V3 v){return {v.x*M.m[0][0]+v.y*M.m[1][0]+v.z*M.m[2][0],v.x*M.m[0][1]+v.y*M.m[1][1]+v.z*M.m[2][1],v.x*M.m[0][2]+v.y*M.m[1][2]+v.z*M.m[2][2]};}
+Quat qnorm(Quat q){float m=std::sqrt(q.x*q.x+q.y*q.y+q.z*q.z+q.w*q.w);if(m<1e-8f)return {};float k=1.f/m;return {q.x*k,q.y*k,q.z*k,q.w*k};}
+Quat qslerp(Quat a,Quat b,float t){
+ float cosom=a.w*b.w+a.x*b.x+a.y*b.y+a.z*b.z,sign=1.f;if(cosom<0.f){cosom=-cosom;sign=-1.f;}cosom=std::clamp(cosom,-1.f,1.f);
+ float s0=1.f-t,s1=t;if(1.f-cosom>1e-6f){float omega=std::acos(cosom),inv=1.f/std::sin(omega);s0=std::sin((1.f-t)*omega)*inv;s1=std::sin(t*omega)*inv;}s1*=sign;
+ return qnorm({a.x*s0+b.x*s1,a.y*s0+b.y*s1,a.z*s0+b.z*s1,a.w*s0+b.w*s1});
+}
+Quat sampleQ(const MotionTrack& t,uint32_t a,uint32_t b,float d){if(t.rotations.empty())return {};if(t.rotations.size()==1)return t.rotations[0];a%=uint32_t(t.rotations.size());b%=uint32_t(t.rotations.size());return qslerp(t.rotations[a],t.rotations[b],std::clamp(d,0.f,1.f));}
 V3 sampleT(const MotionTrack& t,uint32_t a,uint32_t b,float d){if(t.translations.empty())return {};if(t.translations.size()==1)return t.translations[0];a%=uint32_t(t.translations.size());b%=uint32_t(t.translations.size());V3 x=t.translations[a],y=t.translations[b];return {x.x+(y.x-x.x)*d,x.y+(y.y-x.y)*d,x.z+(y.z-x.z)*d};}
 }
 
@@ -55,11 +83,36 @@ bool Renderer::uploadBindPose(std::wstring* error){for(auto& part:parts_){if(!pa
  if(skeletonVB_&&!bones_.empty()){std::vector<BoneGPU> lines;lines.reserve(bones_.size()*2);for(size_t i=0;i<bones_.size();++i){const Bone& b=bones_[i];if(b.parent<0||b.parent>=int(bones_.size()))continue;auto cv=[&](const V3& p){V3 q=mul(sub(p,modelCenter_),modelScale_);return XMFLOAT3{q.x,q.y,q.z};};lines.push_back({cv(bones_[size_t(b.parent)].position),{1.f,.75f,.15f,1.f}});lines.push_back({cv(b.position),{.15f,1.f,.55f,1.f}});}skeletonVertexCount_=UINT(lines.size());if(!lines.empty()){D3D11_MAPPED_SUBRESOURCE map{};HRESULT hr=context_->Map(skeletonVB_.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&map);if(FAILED(hr)){if(error)*error=hrtext(L"Map skeleton buffer",hr);return false;}std::memcpy(map.pData,lines.data(),lines.size()*sizeof(BoneGPU));context_->Unmap(skeletonVB_.Get(),0);}}
  return true;}
 
-bool Renderer::SetAnimationPose(size_t motionIndex,float seconds,bool loop,std::wstring& error){error.clear();if(motionIndex>=motions_.size()){error=L"Animation index out of range";return false;}const Motion& motion=motions_[motionIndex];if(motion.frames==0||motion.tracks.size()!=bones_.size()){error=L"Animation does not match skeleton";return false;}float frameTime=std::max(0.f,seconds)*motion.fps;float maxFrame=float(motion.frames);if(loop&&maxFrame>0)frameTime=std::fmod(frameTime,maxFrame);else frameTime=std::min(frameTime,std::max(0.f,maxFrame-1.f));uint32_t f0=uint32_t(std::floor(frameTime));uint32_t f1=loop?(f0+1)%motion.frames:std::min(f0+1,motion.frames-1);float delta=frameTime-float(f0);
- std::vector<XMMATRIX> global(bones_.size(),XMMatrixIdentity()),skin(bones_.size(),XMMatrixIdentity());std::vector<uint8_t> done(bones_.size(),0),visiting(bones_.size(),0);auto solve=[&](auto&& self,size_t i)->bool{if(done[i])return true;if(visiting[i])return false;visiting[i]=1;const MotionTrack& tr=motion.tracks[i];Quat q=sampleQ(tr,f0,f1,delta);V3 t=sampleT(tr,f0,f1,delta);XMMATRIX local=XMMatrixRotationQuaternion(XMQuaternionNormalize(qvec(q)));local.r[3]=XMVectorSet(t.x,t.y,t.z,1.f);int p=bones_[i].parent;if(p>=0){if(size_t(p)>=bones_.size()||!self(self,size_t(p)))return false;global[i]=local*global[size_t(p)];}else global[i]=local;skin[i]=loadMatrix(bones_[i].inverseBind)*global[i];visiting[i]=0;done[i]=1;return true;};for(size_t i=0;i<bones_.size();++i)if(!solve(solve,i)){error=L"Animation bone hierarchy contains a cycle";return false;}
- for(auto& part:parts_){if(!part.skeletal)continue;std::vector<GPUVertex> gpu(part.source.size());V3 lo{},hi{};bool first=true;for(size_t k=0;k<part.source.size();++k){const auto& s=part.source[k];auto transform=[&](V3 v,bool point,uint16_t bone)->V3{if(bone>=skin.size())return v;XMVECTOR x=XMVectorSet(v.x,v.y,v.z,point?1.f:0.f);XMVECTOR y=point?XMVector3TransformCoord(x,skin[bone]):XMVector3TransformNormal(x,skin[bone]);return {XMVectorGetX(y),XMVectorGetY(y),XMVectorGetZ(y)};};V3 p,n,t,b;if(s.links==1){p=transform(s.p,true,s.bone0);n=transform(s.n,false,s.bone0);t=transform(s.t,false,s.bone0);b=transform(s.b,false,s.bone0);}else if(s.links==2){V3 p0=transform(s.p,true,s.bone0),p1=transform(s.p,true,s.bone1),n0=transform(s.n,false,s.bone0),n1=transform(s.n,false,s.bone1),t0=transform(s.t,false,s.bone0),t1=transform(s.t,false,s.bone1),b0=transform(s.b,false,s.bone0),b1=transform(s.b,false,s.bone1);float w=s.weight;p=add(mul(p0,1-w),mul(p1,w));n=add(mul(n0,1-w),mul(n1,w));t=add(mul(t0,1-w),mul(t1,w));b=add(mul(b0,1-w),mul(b1,w));}else{p=s.p;n=s.n;t=s.t;b=s.b;}n=normalize(n);t=normalize(t);b=normalize(b);p=mul(sub(p,modelCenter_),modelScale_);gpu[k].p=vec(p);gpu[k].n=vec(n);gpu[k].uv={s.u,s.v};gpu[k].t=vec(t);gpu[k].b=vec(b);part.cpuPositions[k]=p;if(first){lo=hi=p;first=false;}else{lo.x=std::min(lo.x,p.x);lo.y=std::min(lo.y,p.y);lo.z=std::min(lo.z,p.z);hi.x=std::max(hi.x,p.x);hi.y=std::max(hi.y,p.y);hi.z=std::max(hi.z,p.z);}}D3D11_MAPPED_SUBRESOURCE map{};HRESULT hr=context_->Map(part.vb.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&map);if(FAILED(hr)){error=hrtext(L"Map animated vertex buffer",hr);return false;}std::memcpy(map.pData,gpu.data(),gpu.size()*sizeof(GPUVertex));context_->Unmap(part.vb.Get(),0);if(!first){part.center={(lo.x+hi.x)*.5f,(lo.y+hi.y)*.5f,(lo.z+hi.z)*.5f};part.half={(hi.x-lo.x)*.5f,(hi.y-lo.y)*.5f,(hi.z-lo.z)*.5f};}}
- if(skeletonVB_){std::vector<BoneGPU> lines;lines.reserve(bones_.size()*2);for(size_t i=0;i<bones_.size();++i){int p=bones_[i].parent;if(p<0||p>=int(bones_.size()))continue;auto pos=[&](size_t id){XMFLOAT4X4 f;XMStoreFloat4x4(&f,global[id]);V3 q{f._41,f._42,f._43};q=mul(sub(q,modelCenter_),modelScale_);return XMFLOAT3{q.x,q.y,q.z};};lines.push_back({pos(size_t(p)),{1.f,.75f,.15f,1.f}});lines.push_back({pos(i),{.15f,1.f,.55f,1.f}});}skeletonVertexCount_=UINT(lines.size());if(!lines.empty()){D3D11_MAPPED_SUBRESOURCE map{};HRESULT hr=context_->Map(skeletonVB_.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&map);if(FAILED(hr)){error=hrtext(L"Map animated skeleton buffer",hr);return false;}std::memcpy(map.pData,lines.data(),lines.size()*sizeof(BoneGPU));context_->Unmap(skeletonVB_.Get(),0);}}
- return true;}
+bool Renderer::SetAnimationPose(size_t motionIndex,float seconds,bool loop,std::wstring& error){
+ error.clear();if(motionIndex>=motions_.size()){error=L"Animation index out of range";return false;}
+ const Motion& motion=motions_[motionIndex];if(motion.frames==0||motion.tracks.size()!=bones_.size()){error=L"Animation does not match skeleton";return false;}
+ float frameTime=std::max(0.f,seconds)*motion.fps;const float maxFrame=float(motion.frames);
+ if(loop&&maxFrame>0)frameTime=std::fmod(frameTime,maxFrame);else frameTime=std::min(frameTime,std::max(0.f,maxFrame-1.f));
+ const uint32_t f0=uint32_t(std::floor(frameTime));const uint32_t f1=loop?(f0+1)%motion.frames:std::min(f0+1,motion.frames-1);const float delta=frameTime-float(f0);
+ std::vector<XRMat> global(bones_.size(),xrIdentity()),skin(bones_.size(),xrIdentity());std::vector<uint8_t> done(bones_.size(),0),visiting(bones_.size(),0);
+ auto solve=[&](auto&& self,size_t i)->bool{
+  if(done[i])return true;if(visiting[i])return false;visiting[i]=1;
+  const MotionTrack& tr=motion.tracks[i];const Quat q=sampleQ(tr,f0,f1,delta);const V3 t=sampleT(tr,f0,f1,delta);const XRMat local=xrFromQuat(q,t);
+  const int parent=bones_[i].parent;
+  if(parent>=0){if(size_t(parent)>=bones_.size()||!self(self,size_t(parent)))return false;global[i]=xrMul43(global[size_t(parent)],local);}else global[i]=local;
+  // Exact CKinematicsAnimated::CLBone order:
+  // mRenderTransform.mul_43(mTransform, bd->m2b_transform).
+  skin[i]=xrMul43(global[i],xrFromArray(bones_[i].inverseBind));visiting[i]=0;done[i]=1;return true;
+ };
+ for(size_t i=0;i<bones_.size();++i)if(!solve(solve,i)){error=L"Animation bone hierarchy contains a cycle";return false;}
+ for(auto& part:parts_){if(!part.skeletal)continue;std::vector<GPUVertex> gpu(part.source.size());V3 lo{},hi{};bool first=true;
+  for(size_t k=0;k<part.source.size();++k){const auto& s=part.source[k];auto transform=[&](V3 v,bool point,uint16_t bone)->V3{if(bone>=skin.size())return v;return point?xrPoint(skin[bone],v):xrDir(skin[bone],v);};V3 p,n,t,b;
+   if(s.links==1){p=transform(s.p,true,s.bone0);n=transform(s.n,false,s.bone0);t=transform(s.t,false,s.bone0);b=transform(s.b,false,s.bone0);}
+   else if(s.links==2){const V3 p0=transform(s.p,true,s.bone0),p1=transform(s.p,true,s.bone1),n0=transform(s.n,false,s.bone0),n1=transform(s.n,false,s.bone1),t0=transform(s.t,false,s.bone0),t1=transform(s.t,false,s.bone1),b0=transform(s.b,false,s.bone0),b1=transform(s.b,false,s.bone1);const float w=std::clamp(s.weight,0.f,1.f);p=add(mul(p0,1-w),mul(p1,w));n=add(mul(n0,1-w),mul(n1,w));t=add(mul(t0,1-w),mul(t1,w));b=add(mul(b0,1-w),mul(b1,w));}
+   else{p=s.p;n=s.n;t=s.t;b=s.b;}
+   n=normalize(n);t=normalize(t);b=normalize(b);p=mul(sub(p,modelCenter_),modelScale_);gpu[k].p=vec(p);gpu[k].n=vec(n);gpu[k].uv={s.u,s.v};gpu[k].t=vec(t);gpu[k].b=vec(b);part.cpuPositions[k]=p;
+   if(first){lo=hi=p;first=false;}else{lo.x=std::min(lo.x,p.x);lo.y=std::min(lo.y,p.y);lo.z=std::min(lo.z,p.z);hi.x=std::max(hi.x,p.x);hi.y=std::max(hi.y,p.y);hi.z=std::max(hi.z,p.z);}
+  }
+  D3D11_MAPPED_SUBRESOURCE map{};HRESULT hr=context_->Map(part.vb.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&map);if(FAILED(hr)){error=hrtext(L"Map animated vertex buffer",hr);return false;}std::memcpy(map.pData,gpu.data(),gpu.size()*sizeof(GPUVertex));context_->Unmap(part.vb.Get(),0);if(!first){part.center={(lo.x+hi.x)*.5f,(lo.y+hi.y)*.5f,(lo.z+hi.z)*.5f};part.half={(hi.x-lo.x)*.5f,(hi.y-lo.y)*.5f,(hi.z-lo.z)*.5f};}
+ }
+ if(skeletonVB_){std::vector<BoneGPU> lines;lines.reserve(bones_.size()*2);for(size_t i=0;i<bones_.size();++i){const int parent=bones_[i].parent;if(parent<0||parent>=int(bones_.size()))continue;auto pos=[&](size_t id){V3 q{global[id].m[3][0],global[id].m[3][1],global[id].m[3][2]};q=mul(sub(q,modelCenter_),modelScale_);return XMFLOAT3{q.x,q.y,q.z};};lines.push_back({pos(size_t(parent)),{1.f,.75f,.15f,1.f}});lines.push_back({pos(i),{.15f,1.f,.55f,1.f}});}skeletonVertexCount_=UINT(lines.size());if(!lines.empty()){D3D11_MAPPED_SUBRESOURCE map{};HRESULT hr=context_->Map(skeletonVB_.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&map);if(FAILED(hr)){error=hrtext(L"Map animated skeleton buffer",hr);return false;}std::memcpy(map.pData,lines.data(),lines.size()*sizeof(BoneGPU));context_->Unmap(skeletonVB_.Get(),0);}}
+ return true;
+}
 
 void Renderer::SetBindPose(){uploadBindPose(nullptr);}
 bool Renderer::makeTexture(const Image& im,ComPtr<ID3D11ShaderResourceView>& out){if(!im.valid()||!device_)return false;D3D11_TEXTURE2D_DESC d={};d.Width=im.w;d.Height=im.h;d.MipLevels=1;d.ArraySize=1;d.Format=DXGI_FORMAT_R8G8B8A8_UNORM;d.SampleDesc.Count=1;d.Usage=D3D11_USAGE_IMMUTABLE;d.BindFlags=D3D11_BIND_SHADER_RESOURCE;D3D11_SUBRESOURCE_DATA data={im.pixels.data(),im.w*4,0};ComPtr<ID3D11Texture2D> texture;HRESULT hr=device_->CreateTexture2D(&d,&data,texture.GetAddressOf());if(FAILED(hr))return false;ComPtr<ID3D11ShaderResourceView> srv;hr=device_->CreateShaderResourceView(texture.Get(),nullptr,srv.GetAddressOf());if(FAILED(hr))return false;out=srv;return true;}
