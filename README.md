@@ -2,7 +2,7 @@
 
 Standalone DirectX 11 material and OGF preview tool for **S.T.A.L.K.E.R.: Shadow of Chernobyl 1.0006** and the Kich-Ray engine workstream.
 
-Current development version: **0.8.2**.
+Current development version: **0.8.3**.
 
 ## Features
 
@@ -51,6 +51,7 @@ Animation preview intentionally does not reproduce the complete runtime `CBlend`
 - **Mouse wheel** — zoom.
 - **Выделение** — click mesh parts to select geometry for local material preview changes.
 - **Ctrl+Z** — undo the last completed brush stroke.
+- **Ctrl+S** — confirm/apply the current brush edit session.
 
 
 ## Mesh selection and brush
@@ -63,16 +64,18 @@ The **Кисть** tab paints material data in texture space while the user pain
 - a surface ring shows the approximate current UV brush footprint;
 - strokes are interpolated between mouse samples to avoid dotted gaps;
 - the brush mode can target **Рельеф**, **Блеск**, or **Высота**; there is no pressure/opacity control;
+- repeated passes with the same settings are assignment-based and do not accumulate: e.g. gloss 4% remains 4% where repainted;
 - **Рельеф** stamps the selected normal preset directly into the editable normal layer;
 - **Блеск** paints a dedicated local gloss layer, so different areas of one texture can be matte/rough or smooth/shiny;
 - **Высота** paints a dedicated local height layer that is regenerated back into visible relief live;
 - if the material already has `_bump/_bump#`, the existing normal, packed gloss, and bump# alpha height are reconstructed as the editable base;
 - painting is shared by mesh parts that reference the same texture;
-- `Ctrl+Z` undoes complete brush strokes; undo stores only touched 64x64 tiles and is capped to avoid runaway RAM usage;
+- `Ctrl+Z` undoes complete brush strokes; undo stores only touched 64x64 tiles for the channel actually changed and is capped to 24 MiB;
+- **Применить** or `Ctrl+S` confirms the current brush edit session;
 - preset images can be loaded from normal-map images or `.krnp`;
 - `.krnp` v2 stores the reusable RGBA normal stamp plus its brush gloss value; v1 presets remain loadable.
 
-The brush layer is created lazily. Large editable layers are capped at 4096 on the longest side to avoid runaway RAM usage; viewport textures are capped at 1024 while export reloads the source texture.
+The brush layer is created lazily. Editable layers are capped at 2048 on the longest side; normal uses RGBA while gloss and height use compact single-channel 8-bit storage. Viewport textures remain capped at 1024. Live brush preview skips BC3 round-trips and reuses D3D11 textures when possible; exact BC3 processing is retained for explicit generation/export.
 
 ## Bump workflow
 

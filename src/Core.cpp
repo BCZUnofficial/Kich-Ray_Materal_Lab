@@ -122,6 +122,34 @@ Image UnpackHeightMap(const Image& bumpX){
  for(size_t i=0;i<bumpX.pixels.size();++i){const uint8_t h=bumpX.pixels[i].a;out.pixels[i]={h,h,h,255};}
  return out;
 }
+GrayImage UnpackGlossGray(const Image& bump){
+ if(!bump.valid())return {};
+ GrayImage out;out.w=bump.w;out.h=bump.h;out.pixels.resize(bump.pixels.size());
+ for(size_t i=0;i<bump.pixels.size();++i){const float p=bump.pixels[i].r/255.f;out.pixels[i]=b8(p*p);}
+ return out;
+}
+GrayImage UnpackHeightGray(const Image& bumpX){
+ if(!bumpX.valid())return {};
+ GrayImage out;out.w=bumpX.w;out.h=bumpX.h;out.pixels.resize(bumpX.pixels.size());
+ for(size_t i=0;i<bumpX.pixels.size();++i)out.pixels[i]=bumpX.pixels[i].a;
+ return out;
+}
+GrayImage ToGrayImage(const Image& src,uint32_t maxDimension){
+ if(!src.valid())return {};
+ Image resized=maxDimension?ResizeImageMax(src,maxDimension):src;
+ GrayImage out;out.w=resized.w;out.h=resized.h;out.pixels.resize(resized.pixels.size());
+ for(size_t i=0;i<resized.pixels.size();++i)out.pixels[i]=b8(lum(resized.pixels[i]));
+ return out;
+}
+Image GrayToImage(const GrayImage& src,uint32_t maxDimension){
+ if(!src.valid())return {};
+ uint32_t w=src.w,h=src.h;
+ if(maxDimension&&std::max(w,h)>maxDimension){const float k=float(maxDimension)/float(std::max(w,h));w=std::max(1u,uint32_t(std::lround(w*k)));h=std::max(1u,uint32_t(std::lround(h*k)));}
+ Image out;out.w=w;out.h=h;out.pixels.resize(size_t(w)*h);
+ auto at=[&](uint32_t x,uint32_t y){return src.pixels[size_t(y)*src.w+x];};
+ for(uint32_t y=0;y<h;++y)for(uint32_t x=0;x<w;++x){const uint32_t sx=std::min(src.w-1,uint32_t((uint64_t(x)*src.w)/w)),sy=std::min(src.h-1,uint32_t((uint64_t(y)*src.h)/h));const uint8_t q=at(sx,sy);out.pixels[size_t(y)*w+x]={q,q,q,255};}
+ return out;
+}
 Image MakeDefaultNormalPreset(uint32_t size){
  size=std::max(8u,size);Image out;out.w=out.h=size;out.pixels.resize(size_t(size)*size);
  for(uint32_t y=0;y<size;++y)for(uint32_t x=0;x<size;++x){
@@ -132,17 +160,22 @@ Image MakeDefaultNormalPreset(uint32_t size){
 }
 void StampNormalPreset(Image& target,const Image& preset,float u,float v,float radiusPixels,float opacity){
  if(!target.valid()||!preset.valid()||radiusPixels<.5f||opacity<=0.f)return;
- opacity=sat(opacity);
- u-=std::floor(u);v-=std::floor(v);
+ opacity=sat(opacity);u-=std::floor(u);v-=std::floor(v);
  const int cx=int(std::floor(u*target.w)),cy=int(std::floor(v*target.h)),r=int(std::ceil(radiusPixels));
  auto decode=[](Pixel p){return norm({p.r/127.5f-1.f,p.g/127.5f-1.f,p.b/127.5f-1.f});};
- for(int oy=-r;oy<=r;++oy)for(int ox=-r;ox<=r;++ox){const float nx=ox/radiusPixels,ny=oy/radiusPixels,d2=nx*nx+ny*ny;if(d2>1.f)continue;const float pu=nx*.5f+.5f,pv=ny*.5f+.5f;Pixel sp=sample(preset,pu,pv);const float radial=sat(1.f-std::sqrt(d2));const float a=opacity*(sp.a/255.f)*std::min(1.f,radial*4.f);if(a<=.001f)continue;int tx=(cx+ox)%int(target.w),ty=(cy+oy)%int(target.h);if(tx<0)tx+=int(target.w);if(ty<0)ty+=int(target.h);Pixel& dp=target.pixels[size_t(ty)*target.w+uint32_t(tx)];V3 dn=decode(dp),sn=decode(sp);V3 n=norm({dn.x+(sn.x-dn.x)*a,dn.y+(sn.y-dn.y)*a,dn.z+(sn.z-dn.z)*a});dp.r=b8(n.x*.5f+.5f);dp.g=b8(n.y*.5f+.5f);dp.b=b8(n.z*.5f+.5f);dp.a=255;}
+ for(int oy=-r;oy<=r;++oy)for(int ox=-r;ox<=r;++ox){const float nx=ox/radiusPixels,ny=oy/radiusPixels,d2=nx*nx+ny*ny;if(d2>1.f)continue;const float pu=nx*.5f+.5f,pv=ny*.5f+.5f;const Pixel sp=sample(preset,pu,pv);const float radial=sat(1.f-std::sqrt(d2));const float a=opacity*(sp.a/255.f)*std::min(1.f,radial*4.f);if(a<.08f)continue;int tx=(cx+ox)%int(target.w),ty=(cy+oy)%int(target.h);if(tx<0)tx+=int(target.w);if(ty<0)ty+=int(target.h);const V3 sn=decode(sp);target.pixels[size_t(ty)*target.w+uint32_t(tx)]={b8(sn.x*.5f+.5f),b8(sn.y*.5f+.5f),b8(sn.z*.5f+.5f),255};}
 }
 void StampScalarPreset(Image& target,const Image& preset,float u,float v,float radiusPixels,float value){
  if(!target.valid()||!preset.valid()||radiusPixels<.5f)return;
- value=sat(value);u-=std::floor(u);v-=std::floor(v);
+ value=sat(value);u-=std::floor(u);v-=std::floor(v);const uint8_t q=b8(value);
  const int cx=int(std::floor(u*target.w)),cy=int(std::floor(v*target.h)),r=int(std::ceil(radiusPixels));
- for(int oy=-r;oy<=r;++oy)for(int ox=-r;ox<=r;++ox){const float nx=ox/radiusPixels,ny=oy/radiusPixels,d2=nx*nx+ny*ny;if(d2>1.f)continue;const float pu=nx*.5f+.5f,pv=ny*.5f+.5f;const Pixel sp=sample(preset,pu,pv);const float radial=sat(1.f-std::sqrt(d2));const float a=(sp.a/255.f)*std::min(1.f,radial*4.f);if(a<=.001f)continue;int tx=(cx+ox)%int(target.w),ty=(cy+oy)%int(target.h);if(tx<0)tx+=int(target.w);if(ty<0)ty+=int(target.h);Pixel& dp=target.pixels[size_t(ty)*target.w+uint32_t(tx)];const float old=lum(dp);const float out=old+(value-old)*a;const uint8_t q=b8(out);dp={q,q,q,255};}
+ for(int oy=-r;oy<=r;++oy)for(int ox=-r;ox<=r;++ox){const float nx=ox/radiusPixels,ny=oy/radiusPixels,d2=nx*nx+ny*ny;if(d2>1.f)continue;const float pu=nx*.5f+.5f,pv=ny*.5f+.5f;const Pixel sp=sample(preset,pu,pv);const float radial=sat(1.f-std::sqrt(d2));const float a=(sp.a/255.f)*std::min(1.f,radial*4.f);if(a<.08f)continue;int tx=(cx+ox)%int(target.w),ty=(cy+oy)%int(target.h);if(tx<0)tx+=int(target.w);if(ty<0)ty+=int(target.h);target.pixels[size_t(ty)*target.w+uint32_t(tx)]={q,q,q,255};}
+}
+void StampScalarPreset(GrayImage& target,const Image& preset,float u,float v,float radiusPixels,float value){
+ if(!target.valid()||!preset.valid()||radiusPixels<.5f)return;
+ value=sat(value);u-=std::floor(u);v-=std::floor(v);const uint8_t q=b8(value);
+ const int cx=int(std::floor(u*target.w)),cy=int(std::floor(v*target.h)),r=int(std::ceil(radiusPixels));
+ for(int oy=-r;oy<=r;++oy)for(int ox=-r;ox<=r;++ox){const float nx=ox/radiusPixels,ny=oy/radiusPixels,d2=nx*nx+ny*ny;if(d2>1.f)continue;const float pu=nx*.5f+.5f,pv=ny*.5f+.5f;const Pixel sp=sample(preset,pu,pv);const float radial=sat(1.f-std::sqrt(d2));const float a=(sp.a/255.f)*std::min(1.f,radial*4.f);if(a<.08f)continue;int tx=(cx+ox)%int(target.w),ty=(cy+oy)%int(target.h);if(tx<0)tx+=int(target.w);if(ty<0)ty+=int(target.h);target.pixels[size_t(ty)*target.w+uint32_t(tx)]=q;}
 }
 void StampMaterialPreset(Image& normalTarget,Image& glossTarget,const Image& preset,float u,float v,float radiusPixels,float glossValue){
  if(!normalTarget.valid()||!preset.valid()||radiusPixels<.5f)return;
@@ -177,6 +210,11 @@ BumpPair GenerateBump(const Sources& src,const Settings& cfg){
  preview.bump=DecodeDDS(EncodeBC3DDS(raw.bump,{raw.bump}),err);
  preview.bumpX=DecodeDDS(EncodeBC3DDS(raw.bumpX,{raw.bumpX}),err);
  return preview;
+}
+BumpPair GenerateBumpPreview(const Sources& src,const Settings& cfg){
+ const Image& ref=src.diffuse;if(!ref.valid())return {};
+ const float scale=std::min(1.f,1024.f/float(std::max(ref.w,ref.h)));const uint32_t w=std::max(1u,uint32_t(ref.w*scale)),h=std::max(1u,uint32_t(ref.h*scale));
+ BumpPair p;p.bump=makeBump(src,cfg,w,h);if(!p.bump.valid())return {};p.bumpX=correction(p.bump,p.bump,src,cfg);return p;
 }
 bool ExportBumpPair(const Sources& src,const Settings& cfg,const std::wstring& name,std::string& error){error.clear();const Image& ref=src.diffuse;if(!ref.valid()){error="Diffuse texture is required";return false;}if(ref.w>4096||ref.h>4096){error="Export limited to 4096x4096 in prototype";return false;}
  std::vector<Image> mips,corrections;uint32_t w=ref.w,h=ref.h;try{for(;;){BumpPair p=oneMip(src,cfg,w,h);if(!p.bump.valid()){error="Failed to generate bump";return false;}mips.push_back(std::move(p.bump));corrections.push_back(std::move(p.bumpX));if(w==1&&h==1)break;w=std::max(1u,w/2);h=std::max(1u,h/2);}auto a=EncodeBC3DDS(mips[0],mips),b=EncodeBC3DDS(corrections[0],corrections);if(a.empty()||b.empty())throw std::runtime_error("BC3 encode failed");std::filesystem::path base(name);std::filesystem::path path1(base.wstring()+L"_bump.dds"),path2(base.wstring()+L"_bump#.dds");auto write=[&](const std::filesystem::path& path,const std::vector<uint8_t>& bytes){std::ofstream out(path,std::ios::binary|std::ios::trunc);if(!out)throw std::runtime_error("Cannot open output DDS file");out.write(reinterpret_cast<const char*>(bytes.data()),std::streamsize(bytes.size()));if(!out)throw std::runtime_error("DDS file write failed");};write(path1,a);write(path2,b);return true;

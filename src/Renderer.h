@@ -26,6 +26,7 @@ class Renderer {
   struct RenderPart {
     Microsoft::WRL::ComPtr<ID3D11Buffer> vb,ib;
     Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> textures[3];
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> textureResources[3];
     std::vector<CPUVertex> source;
     std::vector<V3> cpuPositions;
     std::vector<V3> cpuUV;
@@ -60,7 +61,8 @@ class Renderer {
   bool invertNormalY_=false,bumpOn_=true,skeletonOn_=true;
   int selectedPrimary_=-1;
   bool createViews(UINT w,UINT h,std::wstring& error);
-  bool makeTexture(const Image& img,Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>& out);
+  bool makeTexture(const Image& img,Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>& out,Microsoft::WRL::ComPtr<ID3D11Texture2D>* textureOut=nullptr);
+  bool updateTexture(const Image& img,Microsoft::WRL::ComPtr<ID3D11Texture2D>& texture,Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>& view);
   bool uploadBindPose(std::wstring* error=nullptr);
 public:
   bool Init(HWND hwnd,std::wstring& error);

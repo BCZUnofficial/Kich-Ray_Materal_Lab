@@ -6,6 +6,7 @@
 namespace lab {
 struct Pixel {uint8_t r=255,g=255,b=255,a=255;};
 struct Image {uint32_t w=0,h=0;std::vector<Pixel> pixels; bool valid()const{return w>0&&h>0&&pixels.size()==size_t(w)*h;} };
+struct GrayImage {uint32_t w=0,h=0;std::vector<uint8_t> pixels; bool valid()const{return w>0&&h>0&&pixels.size()==size_t(w)*h;} };
 struct V3 {float x=0,y=0,z=0;};
 struct Quat {float x=0,y=0,z=0,w=1;};
 struct Vertex {
@@ -69,14 +70,20 @@ Image MakeDefaultNormalPreset(uint32_t size=128);
 Image UnpackNormalMap(const Image& bump,const Image& bumpX);
 Image UnpackGlossMap(const Image& bump);
 Image UnpackHeightMap(const Image& bumpX);
+GrayImage UnpackGlossGray(const Image& bump);
+GrayImage UnpackHeightGray(const Image& bumpX);
+GrayImage ToGrayImage(const Image& src,uint32_t maxDimension=0);
+Image GrayToImage(const GrayImage& src,uint32_t maxDimension=0);
 void StampNormalPreset(Image& target,const Image& preset,float u,float v,float radiusPixels,float opacity);
 void StampScalarPreset(Image& target,const Image& preset,float u,float v,float radiusPixels,float value);
+void StampScalarPreset(GrayImage& target,const Image& preset,float u,float v,float radiusPixels,float value);
 void StampMaterialPreset(Image& normalTarget,Image& glossTarget,const Image& preset,float u,float v,float radiusPixels,float glossValue);
 bool SaveNormalPreset(const Image& preset,float gloss,const std::wstring& path,std::string& error);
 bool LoadNormalPreset(const std::wstring& path,Image& preset,float& gloss,std::string& error);
 bool SaveNormalPreset(const Image& preset,const std::wstring& path,std::string& error);
 bool LoadNormalPreset(const std::wstring& path,Image& preset,std::string& error);
 BumpPair GenerateBump(const Sources& src,const Settings& cfg);
+BumpPair GenerateBumpPreview(const Sources& src,const Settings& cfg);
 bool ExportBumpPair(const Sources& src,const Settings& cfg,const std::wstring& baseWithoutSuffix,std::string& error);
 Mesh MakeCube();
 bool LoadOGFMesh(const std::vector<uint8_t>& bytes,Mesh& mesh,std::string& error);

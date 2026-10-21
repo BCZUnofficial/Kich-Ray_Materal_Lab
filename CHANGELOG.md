@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.8.3
+
+### Memory / responsiveness
+
+- Reduced editable brush resolution cap from 4096 to 2048.
+- Normal remains RGBA, while editable gloss and height are now stored as single-channel 8-bit maps. A 2048 material edit set is roughly 24 MiB instead of three RGBA maps.
+- Undo now stores only the channel changed by the stroke and its memory budget is capped at 24 MiB.
+- Brush live preview uses a fast non-BC3 path; full BC3 encode/decode remains for explicit generation/export.
+- Reused existing D3D11 bump textures with `UpdateSubresource` when dimensions match instead of recreating SRVs/textures on every brush preview.
+- OGF bump pairs are resized one at a time during preview loading to reduce transient import peaks.
+- Animated skinning writes directly into the mapped dynamic vertex buffer instead of allocating a complete temporary GPU vertex array every frame.
+
+### Brush transaction
+
+- Brush painting is now assignment/idempotent rather than cumulative blending for identical settings. Repainting the same region with `Блеск 4%` keeps it at 4% instead of layering another 4% pass.
+- Relief stamps likewise apply the selected preset directly instead of progressively increasing it on repeated passes.
+- Added **Применить** and `Ctrl+S` as the confirmation/checkpoint for the current brush edits.
+- `Ctrl+Z` continues to undo completed strokes before confirmation.
+
 ## 0.8.2
 
 ### Brush
