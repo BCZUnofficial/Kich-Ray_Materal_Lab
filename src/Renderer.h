@@ -45,14 +45,14 @@ class Renderer {
   Microsoft::WRL::ComPtr<ID3D11VertexShader> vs_,vsSkeleton_,vsOutline_;
   Microsoft::WRL::ComPtr<ID3D11PixelShader> ps_,psSkeleton_,psOutline_;
   Microsoft::WRL::ComPtr<ID3D11InputLayout> input_,inputSkeleton_;
-  Microsoft::WRL::ComPtr<ID3D11Buffer> cb_,skeletonVB_;
+  Microsoft::WRL::ComPtr<ID3D11Buffer> cb_,skeletonVB_,brushVB_;
   Microsoft::WRL::ComPtr<ID3D11RasterizerState> raster_,outlineRaster_;
   Microsoft::WRL::ComPtr<ID3D11DepthStencilState> skeletonDepth_;
   Microsoft::WRL::ComPtr<ID3D11SamplerState> sampler_;
   std::vector<RenderPart> parts_;
   std::vector<Bone> bones_;
   std::vector<Motion> motions_;
-  UINT skeletonVertexCount_=0,width_=0,height_=0;
+  UINT skeletonVertexCount_=0,brushVertexCount_=0,width_=0,height_=0;
   V3 modelCenter_{}; float modelScale_=1.f;
   float yaw_=0.65f,pitch_=0.25f,dist_=3.8f,cameraY_=0.f,lightYaw_=0.9f,lightPitch_=0.65f;
   float normalStrength_=1.f,glossStrength_=0.5f;
@@ -95,8 +95,10 @@ public:
   void SetPartVisible(size_t part,bool visible);
   bool PartVisible(size_t part)const;
   void SelectPart(int part,bool withMirror=false);
-  struct PickHit{int part=-1;float u=0.f,v=0.f;V3 position{};};
+  struct PickHit{int part=-1;float u=0.f,v=0.f;V3 position{},normal{},du{},dv{};};
   bool PickUV(int screenX,int screenY,PickHit& hit);
+  void SetBrushCursor(const PickHit& hit,float radiusU,float radiusV);
+  void ClearBrushCursor();
   int PickGeometry(int screenX,int screenY);
   void ClearSelection();
   bool HasSelection()const;

@@ -2,7 +2,7 @@
 
 Standalone DirectX 11 material and OGF preview tool for **S.T.A.L.K.E.R.: Shadow of Chernobyl 1.0006** and the Kich-Ray engine workstream.
 
-Current development version: **0.8**.
+Current development version: **0.8.2**.
 
 ## Features
 
@@ -13,12 +13,12 @@ Current development version: **0.8**.
 - R2-inspired DX11 material preview using the SoC bump channel layout.
 - Bump generation and BC3/DXT5 export with mipmaps.
 - Bump generation requires a real diffuse image. A checker/fallback texture, normal map, or height map alone cannot create/export a bump pair.
-- Geometry selection uses an outline pass, so the material and relief remain unobscured.
+- Geometry selection uses a thin outline pass, so the material and relief remain unobscured.
 - Scene mesh list supports selecting and hiding individual mesh parts.
 - Bind skeleton preview for skeletal OGF models.
 - SoC skeletal animation preview for embedded motions and external OMF motion sets.
 - Light orbit controls with persistent azimuth/elevation stored in `MaterialLab.ini` next to the executable.
-- Texture-space normal brush: paint normal presets directly on the 3D model through its UVs, with save/loadable `.krnp` presets.
+- Texture-space material brush: paint relief normals, local gloss, or local height directly on the 3D model through its UVs, with save/loadable `.krnp` presets and Ctrl+Z stroke undo.
 - Export to `export/<model name>/` next to `MaterialLab.exe`.
 
 ## Animation preview
@@ -50,20 +50,27 @@ Animation preview intentionally does not reproduce the complete runtime `CBlend`
 - **MMB drag up/down** — move camera vertically.
 - **Mouse wheel** — zoom.
 - **Выделение** — click mesh parts to select geometry for local material preview changes.
+- **Ctrl+Z** — undo the last completed brush stroke.
 
 
 ## Mesh selection and brush
 
 The **Сцена** tab contains a mesh list. Selecting a row selects that mesh part in the viewport; its checkbox controls visibility. Selection is rendered as an outline instead of a color tint.
 
-The **Кисть** tab paints normal data in texture space while the user paints directly on the 3D surface:
+The **Кисть** tab paints material data in texture space while the user paints directly on the 3D surface:
 
 - the ray hit is converted to interpolated triangle UV coordinates;
+- a surface ring shows the approximate current UV brush footprint;
 - strokes are interpolated between mouse samples to avoid dotted gaps;
-- if the material already has `_bump/_bump#`, the existing normal is reconstructed and used as the base layer;
+- the brush mode can target **Рельеф**, **Блеск**, or **Высота**; there is no pressure/opacity control;
+- **Рельеф** stamps the selected normal preset directly into the editable normal layer;
+- **Блеск** paints a dedicated local gloss layer, so different areas of one texture can be matte/rough or smooth/shiny;
+- **Высота** paints a dedicated local height layer that is regenerated back into visible relief live;
+- if the material already has `_bump/_bump#`, the existing normal, packed gloss, and bump# alpha height are reconstructed as the editable base;
 - painting is shared by mesh parts that reference the same texture;
+- `Ctrl+Z` undoes complete brush strokes; undo stores only touched 64x64 tiles and is capped to avoid runaway RAM usage;
 - preset images can be loaded from normal-map images or `.krnp`;
-- `.krnp` stores the reusable RGBA normal brush preset.
+- `.krnp` v2 stores the reusable RGBA normal stamp plus its brush gloss value; v1 presets remain loadable.
 
 The brush layer is created lazily. Large editable layers are capped at 4096 on the longest side to avoid runaway RAM usage; viewport textures are capped at 1024 while export reloads the source texture.
 
@@ -71,7 +78,7 @@ The brush layer is created lazily. Large editable layers are capped at 4096 on t
 
 `Создать bump` only works when an actual diffuse texture is available.
 
-When a normal map is not supplied, Material Lab derives tangent-space normals from the diffuse/height source with a tileable 3x3 Sobel filter. `Высота` controls the generated relief and `Блеск` controls the packed gloss intensity; changing either value regenerates a bump pair that was created by Material Lab. Existing imported `_bump/_bump#` files are left untouched until a new pair is generated.
+When a normal map is not supplied, Material Lab derives tangent-space normals from the diffuse/height source with a tileable 3x3 Sobel filter. The generator now also supports **Blur** and **Sharp** shaping controls, inspired by common normal-map tools, and combines painted/imported normals with additional relief extracted from height where available. `Высота` controls generated relief and `Блеск` controls packed gloss intensity; changing these values regenerates a bump pair that was created by Material Lab. Existing imported `_bump/_bump#` files are left untouched until a new pair is generated.
 
 For an OGF with several material slots, Material Lab generates the bump preview independently from each slot's loaded diffuse texture. If geometry is selected, generation is limited to the selected part(s).
 

@@ -16,36 +16,50 @@ Image makeBump(const Sources& s,const Settings& cfg,uint32_t w,uint32_t h){
  if(!s.diffuse.valid()||!w||!h)return {};
  Image out;out.w=w;out.h=h;out.pixels.resize(size_t(w)*h);
  const Image& heightMap=s.height.valid()?s.height:s.diffuse;
- // The 3x3 Sobel kernel follows the standard normal-map generators used as
- // references (NormalMap-Online / NormalmapGenerator).  Height is the actual
- // relief gain now, rather than being stored only in bump# alpha.
- const float relief=std::max(0.f,cfg.height)*4.f;
+ const float relief=std::max(0.f,cfg.height)*8.f;
  const float normalGain=std::max(0.f,cfg.normalStrength);
+ const float blurAmount=std::clamp(cfg.blur,0.f,1.f);
+ const float sharpAmount=std::clamp(cfg.sharpness,0.f,2.f);
  auto wrap01=[](float a){a=std::fmod(a,1.f);return a<0.f?a+1.f:a;};
+ auto H0=[&](float u,float v){return lum(sample(heightMap,wrap01(u),wrap01(v)));};
+ auto H=[&](float u,float v,float du,float dv){
+  const float c=H0(u,v);
+  if(blurAmount<=0.0001f && sharpAmount<=0.0001f) return c;
+  const float t =H0(u,v-dv), b=H0(u,v+dv), l=H0(u-du,v), r=H0(u+du,v);
+  const float tl=H0(u-du,v-dv), tr=H0(u+du,v-dv), bl=H0(u-du,v+dv), br=H0(u+du,v+dv);
+  const float blur=(c*4.f + (t+b+l+r)*2.f + tl+tr+bl+br)/16.f;
+  float v0=c + (blur-c)*blurAmount;
+  if(sharpAmount>0.0001f){
+   const float hp=c-blur;
+   v0=std::clamp(v0 + hp*sharpAmount,0.f,1.f);
+  }
+  return v0;
+ };
+ auto decodeNormal=[&](Pixel p){return norm({p.r/127.5f-1.f,p.g/127.5f-1.f,p.b/127.5f-1.f});};
  for(uint32_t y=0;y<h;++y)for(uint32_t x=0;x<w;++x){
   const float u=(x+.5f)/float(w),v=(y+.5f)/float(h),du=1.f/float(w),dv=1.f/float(h);
-  V3 n{0,0,1};
+  const float tl=H(u-du,v-dv,du,dv),t=H(u,v-dv,du,dv),tr=H(u+du,v-dv,du,dv);
+  const float l=H(u-du,v,du,dv),r=H(u+du,v,du,dv);
+  const float bl=H(u-du,v+dv,du,dv),b=H(u,v+dv,du,dv),br=H(u+du,v+dv,du,dv);
+  const float gx=tl+2.f*l+bl-tr-2.f*r-br;
+  const float gy=tl+2.f*t+tr-bl-2.f*b-br;
+  V3 reliefN=norm({gx*relief,gy*relief*(cfg.invertY?-1.f:1.f),1.f});
+  V3 n=reliefN;
   if(s.normal.valid()){
    Pixel p=sample(s.normal,u,v);
-   n=norm({p.r/127.5f-1.f,p.g/127.5f-1.f,p.b/127.5f-1.f});
-   const float gain=std::max(.0001f,relief)*normalGain;
-   n=norm({n.x*gain,n.y*gain*(cfg.invertY?-1.f:1.f),n.z});
+   V3 base=decodeNormal(p);
+   base=norm({base.x*std::max(0.25f,normalGain),base.y*std::max(0.25f,normalGain)*(cfg.invertY?-1.f:1.f),base.z});
+   const float blend=std::clamp(cfg.height*1.35f,0.f,1.35f);
+   n=norm({base.x + reliefN.x*blend, base.y + reliefN.y*blend, std::max(0.15f,base.z*reliefN.z)});
   }else{
-   auto H=[&](float ox,float oy){return lum(sample(heightMap,wrap01(u+ox),wrap01(v+oy)));};
-   const float tl=H(-du,-dv),t=H(0,-dv),tr=H(du,-dv);
-   const float l=H(-du,0),r=H(du,0);
-   const float bl=H(-du,dv),b=H(0,dv),br=H(du,dv);
-   const float gx=tl+2.f*l+bl-tr-2.f*r-br;
-   const float gy=tl+2.f*t+tr-bl-2.f*b-br;
-   const float gain=relief*normalGain;
-   n=norm({gx*gain,gy*gain*(cfg.invertY?-1.f:1.f),1.f});
+   n=norm({reliefN.x*std::max(0.25f,normalGain),reliefN.y*std::max(0.25f,normalGain),reliefN.z});
   }
   const Pixel gp=s.gloss.valid()?sample(s.gloss,u,v):sample(s.diffuse,u,v);
   const float sourceGloss=s.gloss.valid()?lum(gp):(std::max(gp.r,std::max(gp.g,gp.b))/255.f);
-  const float glossGain=std::clamp(cfg.gloss*2.2f,0.f,2.2f);
-  const float g=sat(std::pow(std::max(0.f,sourceGloss),0.85f)*glossGain);
+  const float glossBoost=std::clamp(0.55f+cfg.gloss*1.45f,0.f,2.25f);
+  const float g=s.gloss.valid()?sat(sourceGloss*glossBoost):sat(std::pow(std::max(0.f,sourceGloss),0.82f)*glossBoost);
   Pixel p;
-  p.r=b8(std::sqrt(g)); // SoC R2: S.gloss = Nu.x * Nu.x
+  p.r=b8(std::sqrt(g));
   p.g=b8(n.z*.5f+.5f);
   p.b=b8(n.y*.5f+.5f);
   p.a=b8(n.x*.5f+.5f);
@@ -96,6 +110,18 @@ Image UnpackNormalMap(const Image& bump,const Image& bumpX){
  }
  return out;
 }
+Image UnpackGlossMap(const Image& bump){
+ if(!bump.valid())return {};
+ Image out;out.w=bump.w;out.h=bump.h;out.pixels.resize(bump.pixels.size());
+ for(size_t i=0;i<bump.pixels.size();++i){const float p=bump.pixels[i].r/255.f;const uint8_t g=b8(p*p);out.pixels[i]={g,g,g,255};}
+ return out;
+}
+Image UnpackHeightMap(const Image& bumpX){
+ if(!bumpX.valid())return {};
+ Image out;out.w=bumpX.w;out.h=bumpX.h;out.pixels.resize(bumpX.pixels.size());
+ for(size_t i=0;i<bumpX.pixels.size();++i){const uint8_t h=bumpX.pixels[i].a;out.pixels[i]={h,h,h,255};}
+ return out;
+}
 Image MakeDefaultNormalPreset(uint32_t size){
  size=std::max(8u,size);Image out;out.w=out.h=size;out.pixels.resize(size_t(size)*size);
  for(uint32_t y=0;y<size;++y)for(uint32_t x=0;x<size;++x){
@@ -112,12 +138,29 @@ void StampNormalPreset(Image& target,const Image& preset,float u,float v,float r
  auto decode=[](Pixel p){return norm({p.r/127.5f-1.f,p.g/127.5f-1.f,p.b/127.5f-1.f});};
  for(int oy=-r;oy<=r;++oy)for(int ox=-r;ox<=r;++ox){const float nx=ox/radiusPixels,ny=oy/radiusPixels,d2=nx*nx+ny*ny;if(d2>1.f)continue;const float pu=nx*.5f+.5f,pv=ny*.5f+.5f;Pixel sp=sample(preset,pu,pv);const float radial=sat(1.f-std::sqrt(d2));const float a=opacity*(sp.a/255.f)*std::min(1.f,radial*4.f);if(a<=.001f)continue;int tx=(cx+ox)%int(target.w),ty=(cy+oy)%int(target.h);if(tx<0)tx+=int(target.w);if(ty<0)ty+=int(target.h);Pixel& dp=target.pixels[size_t(ty)*target.w+uint32_t(tx)];V3 dn=decode(dp),sn=decode(sp);V3 n=norm({dn.x+(sn.x-dn.x)*a,dn.y+(sn.y-dn.y)*a,dn.z+(sn.z-dn.z)*a});dp.r=b8(n.x*.5f+.5f);dp.g=b8(n.y*.5f+.5f);dp.b=b8(n.z*.5f+.5f);dp.a=255;}
 }
-bool SaveNormalPreset(const Image& preset,const std::wstring& path,std::string& error){
- error.clear();if(!preset.valid()){error="Normal preset is empty";return false;}try{std::ofstream out(std::filesystem::path(path),std::ios::binary|std::ios::trunc);if(!out){error="Cannot create preset";return false;}const char magic[4]={'K','R','N','P'};const uint32_t ver=1;out.write(magic,4);out.write(reinterpret_cast<const char*>(&ver),4);out.write(reinterpret_cast<const char*>(&preset.w),4);out.write(reinterpret_cast<const char*>(&preset.h),4);out.write(reinterpret_cast<const char*>(preset.pixels.data()),std::streamsize(preset.pixels.size()*sizeof(Pixel)));if(!out){error="Preset write failed";return false;}return true;}catch(const std::exception& e){error=e.what();return false;}
+void StampScalarPreset(Image& target,const Image& preset,float u,float v,float radiusPixels,float value){
+ if(!target.valid()||!preset.valid()||radiusPixels<.5f)return;
+ value=sat(value);u-=std::floor(u);v-=std::floor(v);
+ const int cx=int(std::floor(u*target.w)),cy=int(std::floor(v*target.h)),r=int(std::ceil(radiusPixels));
+ for(int oy=-r;oy<=r;++oy)for(int ox=-r;ox<=r;++ox){const float nx=ox/radiusPixels,ny=oy/radiusPixels,d2=nx*nx+ny*ny;if(d2>1.f)continue;const float pu=nx*.5f+.5f,pv=ny*.5f+.5f;const Pixel sp=sample(preset,pu,pv);const float radial=sat(1.f-std::sqrt(d2));const float a=(sp.a/255.f)*std::min(1.f,radial*4.f);if(a<=.001f)continue;int tx=(cx+ox)%int(target.w),ty=(cy+oy)%int(target.h);if(tx<0)tx+=int(target.w);if(ty<0)ty+=int(target.h);Pixel& dp=target.pixels[size_t(ty)*target.w+uint32_t(tx)];const float old=lum(dp);const float out=old+(value-old)*a;const uint8_t q=b8(out);dp={q,q,q,255};}
 }
-bool LoadNormalPreset(const std::wstring& path,Image& preset,std::string& error){
- error.clear();preset={};try{std::ifstream in(std::filesystem::path(path),std::ios::binary);if(!in){error="Cannot open preset";return false;}char magic[4]{};uint32_t ver=0,w=0,h=0;in.read(magic,4);in.read(reinterpret_cast<char*>(&ver),4);in.read(reinterpret_cast<char*>(&w),4);in.read(reinterpret_cast<char*>(&h),4);if(std::memcmp(magic,"KRNP",4)!=0||ver!=1||!w||!h||w>8192||h>8192||size_t(w)*h>16000000){error="Invalid KRNP preset";return false;}Image out;out.w=w;out.h=h;out.pixels.resize(size_t(w)*h);in.read(reinterpret_cast<char*>(out.pixels.data()),std::streamsize(out.pixels.size()*sizeof(Pixel)));if(!in){error="Preset data truncated";return false;}preset=std::move(out);return true;}catch(const std::exception& e){error=e.what();return false;}
+void StampMaterialPreset(Image& normalTarget,Image& glossTarget,const Image& preset,float u,float v,float radiusPixels,float glossValue){
+ if(!normalTarget.valid()||!preset.valid()||radiusPixels<.5f)return;
+ if(!glossTarget.valid()||glossTarget.w!=normalTarget.w||glossTarget.h!=normalTarget.h){glossTarget.w=normalTarget.w;glossTarget.h=normalTarget.h;glossTarget.pixels.assign(normalTarget.pixels.size(),Pixel{128,128,128,255});}
+ glossValue=sat(glossValue);u-=std::floor(u);v-=std::floor(v);
+ const int cx=int(std::floor(u*normalTarget.w)),cy=int(std::floor(v*normalTarget.h)),r=int(std::ceil(radiusPixels));
+ auto decode=[](Pixel p){return norm({p.r/127.5f-1.f,p.g/127.5f-1.f,p.b/127.5f-1.f});};
+ for(int oy=-r;oy<=r;++oy)for(int ox=-r;ox<=r;++ox){const float nx=ox/radiusPixels,ny=oy/radiusPixels,d2=nx*nx+ny*ny;if(d2>1.f)continue;const float pu=nx*.5f+.5f,pv=ny*.5f+.5f;const Pixel sp=sample(preset,pu,pv);const float radial=sat(1.f-std::sqrt(d2));const float a=(sp.a/255.f)*std::min(1.f,radial*4.f);if(a<=.001f)continue;int tx=(cx+ox)%int(normalTarget.w),ty=(cy+oy)%int(normalTarget.h);if(tx<0)tx+=int(normalTarget.w);if(ty<0)ty+=int(normalTarget.h);const size_t at=size_t(ty)*normalTarget.w+uint32_t(tx);Pixel& np=normalTarget.pixels[at];V3 dn=decode(np),sn=decode(sp);V3 n=norm({dn.x+(sn.x-dn.x)*a,dn.y+(sn.y-dn.y)*a,dn.z+(sn.z-dn.z)*a});np={b8(n.x*.5f+.5f),b8(n.y*.5f+.5f),b8(n.z*.5f+.5f),255};Pixel& gp=glossTarget.pixels[at];const float old=lum(gp),g=old+(glossValue-old)*a;const uint8_t q=b8(g);gp={q,q,q,255};}
 }
+bool SaveNormalPreset(const Image& preset,float gloss,const std::wstring& path,std::string& error){
+ error.clear();if(!preset.valid()){error="Normal preset is empty";return false;}try{std::ofstream out(std::filesystem::path(path),std::ios::binary|std::ios::trunc);if(!out){error="Cannot create preset";return false;}const char magic[4]={'K','R','N','P'};const uint32_t ver=2;gloss=sat(gloss);out.write(magic,4);out.write(reinterpret_cast<const char*>(&ver),4);out.write(reinterpret_cast<const char*>(&preset.w),4);out.write(reinterpret_cast<const char*>(&preset.h),4);out.write(reinterpret_cast<const char*>(&gloss),4);out.write(reinterpret_cast<const char*>(preset.pixels.data()),std::streamsize(preset.pixels.size()*sizeof(Pixel)));if(!out){error="Preset write failed";return false;}return true;}catch(const std::exception& e){error=e.what();return false;}
+}
+bool LoadNormalPreset(const std::wstring& path,Image& preset,float& gloss,std::string& error){
+ error.clear();preset={};gloss=.45f;try{std::ifstream in(std::filesystem::path(path),std::ios::binary);if(!in){error="Cannot open preset";return false;}char magic[4]{};uint32_t ver=0,w=0,h=0;in.read(magic,4);in.read(reinterpret_cast<char*>(&ver),4);in.read(reinterpret_cast<char*>(&w),4);in.read(reinterpret_cast<char*>(&h),4);if(std::memcmp(magic,"KRNP",4)!=0||(ver!=1&&ver!=2)||!w||!h||w>8192||h>8192||size_t(w)*h>16000000){error="Invalid KRNP preset";return false;}if(ver>=2){in.read(reinterpret_cast<char*>(&gloss),4);if(!in||!std::isfinite(gloss)){error="Preset gloss is invalid";return false;}gloss=sat(gloss);}Image out;out.w=w;out.h=h;out.pixels.resize(size_t(w)*h);in.read(reinterpret_cast<char*>(out.pixels.data()),std::streamsize(out.pixels.size()*sizeof(Pixel)));if(!in){error="Preset data truncated";return false;}preset=std::move(out);return true;}catch(const std::exception& e){error=e.what();return false;}
+}
+bool SaveNormalPreset(const Image& preset,const std::wstring& path,std::string& error){return SaveNormalPreset(preset,.45f,path,error);}
+bool LoadNormalPreset(const std::wstring& path,Image& preset,std::string& error){float gloss=.45f;return LoadNormalPreset(path,preset,gloss,error);}
+
 
 Image DefaultChecker(uint32_t w){Image im;im.w=im.h=w;im.pixels.resize(size_t(w)*w);for(uint32_t y=0;y<w;++y)for(uint32_t x=0;x<w;++x){int check=((x/32)^(y/32))&1;uint8_t k=uint8_t(check?166:104);im.pixels[size_t(y)*w+x]={uint8_t(k+18),k,uint8_t(k-7),255};}return im;}
 BumpPair GenerateBump(const Sources& src,const Settings& cfg){

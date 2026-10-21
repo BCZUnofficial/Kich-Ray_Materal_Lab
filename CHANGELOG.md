@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.8.2
+
+### Brush
+
+- Brush target mode is now explicit: **Рельеф**, **Блеск**, or **Высота**.
+- Added a dedicated **Высота кисти** control; gloss and height can now be painted independently.
+- Height painting is stored as a separate editable height layer and participates in live bump regeneration/export.
+- `Ctrl+Z` now restores all painted brush data for the stroke, including normal, gloss, and height tiles.
+- Brush size remains visible directly in the Brush tab.
+
+### Normal / gloss generation
+
+- Reworked generated relief to combine painted/imported normals with an additional Sobel relief pass from height or diffuse data, making painted height changes much more visible.
+- Added **Blur** and **Sharp** controls inspired by common normal-map generators, allowing softer or crisper relief extraction without replacing the existing workflow.
+- Boosted live gloss preview for generated brush materials so local shiny/matte variation is easier to see during painting.
+
+### Selection
+
+- Reduced the selection inverted-hull outline again, from `0.0065` to `0.0038`, so it obscures even less of the surface.
+
+## 0.8.1
+
+### Brush
+
+- Added `Ctrl+Z` undo by complete brush strokes. Undo stores only touched 64x64 normal/gloss tiles, with a bounded history to avoid large full-texture snapshots.
+- Added a surface brush-radius ring derived from the hit triangle UV derivatives.
+- Removed brush pressure/opacity. A stroke now applies the selected normal preset directly, with only the preset/radial edge mask used for feathering.
+- Added per-brush local gloss painting. Low values produce matte/rough-looking areas; high values produce smoother/shinier areas in the SoC gloss model.
+- Existing `_bump` gloss is reconstructed from packed `R` (`gloss = R^2`) before painting, so untouched areas retain their original gloss.
+- `.krnp` preset format v2 stores the normal preset together with brush gloss; v1 remains backward compatible.
+
+### Selection
+
+- Reduced the selection inverted-hull extrusion from 0.018 to 0.0065 so the outline obscures less of the relief silhouette.
+
+### Gloss
+
+- Explicit gloss maps are now treated linearly before SoC square-root packing; a neutral generation setting preserves locally painted gloss values.
+
 ## 0.8
 
 ### Selection / mesh controls

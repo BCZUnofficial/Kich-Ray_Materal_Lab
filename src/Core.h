@@ -56,7 +56,7 @@ struct Mesh {
     size_t vertexCount()const{size_t n=0;for(const auto& p:parts)n+=p.vertices.size();return n;}
     size_t indexCount()const{size_t n=0;for(const auto& p:parts)n+=p.indices.size();return n;}
 };
-struct Settings {float normalStrength=1.f,gloss=0.45f,height=0.5f;bool invertY=false;};
+struct Settings {float normalStrength=1.f,gloss=0.45f,height=0.5f,blur=0.12f,sharpness=0.35f;bool invertY=false;};
 struct Sources {Image diffuse,normal,gloss,height;};
 struct BumpPair {Image bump,bumpX;};
 struct PartImages {Image diffuse,bump,bumpX;bool hasBump=false;};
@@ -67,7 +67,13 @@ Image DecompressBC3Image(const std::vector<uint8_t>& blocks,uint32_t width,uint3
 Image ResizeImageMax(const Image& src,uint32_t maxDimension);
 Image MakeDefaultNormalPreset(uint32_t size=128);
 Image UnpackNormalMap(const Image& bump,const Image& bumpX);
+Image UnpackGlossMap(const Image& bump);
+Image UnpackHeightMap(const Image& bumpX);
 void StampNormalPreset(Image& target,const Image& preset,float u,float v,float radiusPixels,float opacity);
+void StampScalarPreset(Image& target,const Image& preset,float u,float v,float radiusPixels,float value);
+void StampMaterialPreset(Image& normalTarget,Image& glossTarget,const Image& preset,float u,float v,float radiusPixels,float glossValue);
+bool SaveNormalPreset(const Image& preset,float gloss,const std::wstring& path,std::string& error);
+bool LoadNormalPreset(const std::wstring& path,Image& preset,float& gloss,std::string& error);
 bool SaveNormalPreset(const Image& preset,const std::wstring& path,std::string& error);
 bool LoadNormalPreset(const std::wstring& path,Image& preset,std::string& error);
 BumpPair GenerateBump(const Sources& src,const Settings& cfg);
