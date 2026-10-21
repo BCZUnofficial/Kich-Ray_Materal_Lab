@@ -28,8 +28,8 @@ if not exist "%MSBUILD%" (
 )
 
 echo Visual Studio: %VSROOT%
-echo Building KichRay Material Lab - Release / Win32...
-"%MSBUILD%" "%~dp0KichRay_MaterialLab.sln" /m /t:Build /p:Configuration=Release /p:Platform=Win32 /v:minimal
+echo Building KichRay Material Lab - Release / x64...
+"%MSBUILD%" "%~dp0KichRay_MaterialLab.sln" /m /t:Build /p:Configuration=Release /p:Platform=x64 /v:minimal
 if errorlevel 1 (
   echo.
   echo [ERROR] Build failed. Copy the error lines above and send them to me.
@@ -37,7 +37,7 @@ if errorlevel 1 (
   exit /b 4
 )
 
-set "EXE=%~dp0bin\Release\Win32\MaterialLab.exe"
+set "EXE=%~dp0bin\Release\x64\MaterialLab.exe"
 if not exist "%EXE%" (
   echo [ERROR] Build reported success but MaterialLab.exe was not found:
   echo %EXE%

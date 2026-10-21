@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.8
+
+### Selection / mesh controls
+
+- Replaced selection tint with an inverted-hull outline pass so bump relief remains visible.
+- Added a Scene mesh list with per-part selection and visibility checkboxes.
+- Added Show All and Hide Selected controls.
+- Hidden mesh parts are ignored by picking and selection.
+
+### Memory
+
+- `build_vs2022.bat` now builds Release x64 by default.
+- Viewport textures are capped at 1024 on the longest side.
+- Repeated OGF materials share D3D shader-resource views instead of uploading duplicate textures.
+- Static CPU skin/source vertex copies are released after GPU upload; skeletal source data is retained only when animation needs it.
+- OGF/motion working buffers and duplicate model data are released after import.
+- Brush layers are lazy and capped at 4096 on the longest side.
+- Manual export no longer copies all full-resolution source images before encoding.
+
+### OGF
+
+- Verified the SoC `vertBoned2W` layout against `SkeletonX.h`: bone IDs at 0/2, position at 4, weight at 52 and UV at 56, stride 64.
+- Removed the overly strict 0..1 rejection for 2-link weights; finite values are clamped for preview instead of rejecting the entire model.
+
+### Gloss
+
+- Made gloss preview more readable while keeping SoC `Nu.x * Nu.x` packed gloss semantics.
+- Generated gloss uses a slightly broader response; imported bump gloss can be preview-adjusted without rewriting the source pair.
+
+### Normal brush
+
+- Added a UV-space normal brush painted directly through the 3D model.
+- Added radius and opacity controls and interpolated continuous strokes.
+- Existing `_bump/_bump#` normals are reconstructed as the editable base so painting does not flatten untouched detail.
+- Added reusable normal brush presets with `.krnp` save/load, plus import of normal-map images as presets.
+- Painted normal layers participate in preview and bump export.
+
 ## 0.7.1
 
 ### Skeleton / animation fixes

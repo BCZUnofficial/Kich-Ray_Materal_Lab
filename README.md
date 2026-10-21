@@ -2,7 +2,7 @@
 
 Standalone DirectX 11 material and OGF preview tool for **S.T.A.L.K.E.R.: Shadow of Chernobyl 1.0006** and the Kich-Ray engine workstream.
 
-Current development version: **0.7.1**.
+Current development version: **0.8**.
 
 ## Features
 
@@ -13,10 +13,12 @@ Current development version: **0.7.1**.
 - R2-inspired DX11 material preview using the SoC bump channel layout.
 - Bump generation and BC3/DXT5 export with mipmaps.
 - Bump generation requires a real diffuse image. A checker/fallback texture, normal map, or height map alone cannot create/export a bump pair.
-- Geometry selection for applying normal/bump preview settings to individual mesh parts, including mirrored-part selection.
+- Geometry selection uses an outline pass, so the material and relief remain unobscured.
+- Scene mesh list supports selecting and hiding individual mesh parts.
 - Bind skeleton preview for skeletal OGF models.
 - SoC skeletal animation preview for embedded motions and external OMF motion sets.
 - Light orbit controls with persistent azimuth/elevation stored in `MaterialLab.ini` next to the executable.
+- Texture-space normal brush: paint normal presets directly on the 3D model through its UVs, with save/loadable `.krnp` presets.
 - Export to `export/<model name>/` next to `MaterialLab.exe`.
 
 ## Animation preview
@@ -48,6 +50,22 @@ Animation preview intentionally does not reproduce the complete runtime `CBlend`
 - **MMB drag up/down** — move camera vertically.
 - **Mouse wheel** — zoom.
 - **Выделение** — click mesh parts to select geometry for local material preview changes.
+
+
+## Mesh selection and brush
+
+The **Сцена** tab contains a mesh list. Selecting a row selects that mesh part in the viewport; its checkbox controls visibility. Selection is rendered as an outline instead of a color tint.
+
+The **Кисть** tab paints normal data in texture space while the user paints directly on the 3D surface:
+
+- the ray hit is converted to interpolated triangle UV coordinates;
+- strokes are interpolated between mouse samples to avoid dotted gaps;
+- if the material already has `_bump/_bump#`, the existing normal is reconstructed and used as the base layer;
+- painting is shared by mesh parts that reference the same texture;
+- preset images can be loaded from normal-map images or `.krnp`;
+- `.krnp` stores the reusable RGBA normal brush preset.
+
+The brush layer is created lazily. Large editable layers are capped at 4096 on the longest side to avoid runaway RAM usage; viewport textures are capped at 1024 while export reloads the source texture.
 
 ## Bump workflow
 
@@ -83,12 +101,12 @@ Open `KichRay_MaterialLab.sln` and build, or run:
 build_vs2022.bat
 ```
 
-The batch file builds `Release | Win32` and launches the result. The solution also contains x64 configurations for development/testing.
+The batch file builds **`Release | x64`** and launches the result. x64 is the recommended configuration because OGF geometry, decoded DDS data, brush layers and animation data can exceed the practical 32-bit address-space budget.
 
 ## Current limitations
 
 - OGF v4 is the target format; the current loader is focused on Shadow of Chernobyl assets.
-- Skeletal skinning currently supports SoC 1-link and 2-link vertex formats.
+- Skeletal skinning currently supports SoC 1-link and 2-link vertex formats. Finite 2-link weights are clamped for preview, matching the engine's permissive loading behavior more closely.
 - `OGF_CHILDREN_L` external visual references are not expanded yet.
 - Animation blending, motion partitions/channels as a runtime blend system, FX mixing and gameplay IK are not reproduced.
 - Full Windows/MSVC validation should be performed after changes because development tooling may also run outside a Windows SDK environment.
