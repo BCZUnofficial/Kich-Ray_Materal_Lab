@@ -7,7 +7,13 @@ namespace lab {
 struct Pixel {uint8_t r=255,g=255,b=255,a=255;};
 struct Image {uint32_t w=0,h=0;std::vector<Pixel> pixels; bool valid()const{return w>0&&h>0&&pixels.size()==size_t(w)*h;} };
 struct V3 {float x=0,y=0,z=0;};
-struct Vertex {V3 p,n;float u=0,v=0;};
+struct Quat {float x=0,y=0,z=0,w=1;};
+struct Vertex {
+    V3 p,n;float u=0,v=0;
+    uint16_t bone0=0,bone1=0;
+    float weight=0.f; // 2-link: lerp(bone0, bone1, weight)
+    uint8_t links=0; // 0 static, 1 or 2 skeletal
+};
 struct MeshPart {
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
@@ -23,11 +29,27 @@ struct Bone {
     V3 position{};       // model-space bind/rest origin
     V3 localRotate{};
     V3 localTranslate{};
+    std::array<float,16> inverseBind{}; // row-major X-Ray affine matrix
     bool hasBind=false;
+};
+struct MotionTrack {
+    std::vector<Quat> rotations;     // one key when rotation is constant
+    std::vector<V3> translations;    // one key when translation is constant
+};
+struct Motion {
+    std::string name;
+    uint32_t frames=0;
+    float fps=30.f;
+    float speed=1.f;
+    bool stopAtEnd=false;
+    std::vector<MotionTrack> tracks; // indexed by model bone id
+    float duration()const{return fps>0.f?float(frames)/fps:0.f;}
 };
 struct Mesh {
     std::vector<MeshPart> parts;
     std::vector<Bone> bones;
+    std::vector<Motion> motions;
+    std::vector<std::string> motionRefs;
     bool skeletalSource=false;
     uint32_t sourceParts=0;
     bool valid()const{for(const auto& p:parts)if(p.valid())return true;return false;}
@@ -46,4 +68,5 @@ BumpPair GenerateBump(const Sources& src,const Settings& cfg);
 bool ExportBumpPair(const Sources& src,const Settings& cfg,const std::wstring& baseWithoutSuffix,std::string& error);
 Mesh MakeCube();
 bool LoadOGFMesh(const std::vector<uint8_t>& bytes,Mesh& mesh,std::string& error);
+bool LoadOGFMotions(const std::vector<uint8_t>& bytes,Mesh& mesh,std::string& error);
 }

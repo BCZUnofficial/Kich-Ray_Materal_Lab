@@ -29,7 +29,7 @@ BumpPair oneMip(const Sources& src,const Settings& cfg,uint32_t w,uint32_t h){Bu
 }
 Image DefaultChecker(uint32_t w){Image im;im.w=im.h=w;im.pixels.resize(size_t(w)*w);for(uint32_t y=0;y<w;++y)for(uint32_t x=0;x<w;++x){int check=((x/32)^(y/32))&1;uint8_t k=uint8_t(check?166:104);im.pixels[size_t(y)*w+x]={uint8_t(k+18),k,uint8_t(k-7),255};}return im;}
 BumpPair GenerateBump(const Sources& src,const Settings& cfg){
- const Image& ref=src.diffuse.valid()?src.diffuse:(src.normal.valid()?src.normal:src.height);
+ const Image& ref=src.diffuse;
  if(!ref.valid())return {};
  // Keep the interactive preview inexpensive; export still uses original resolution.
  const float scale=std::min(1.f,1024.f/float(std::max(ref.w,ref.h)));
@@ -43,7 +43,7 @@ BumpPair GenerateBump(const Sources& src,const Settings& cfg){
  preview.bumpX=DecodeDDS(EncodeBC3DDS(raw.bumpX,{raw.bumpX}),err);
  return preview;
 }
-bool ExportBumpPair(const Sources& src,const Settings& cfg,const std::wstring& name,std::string& error){error.clear();const Image& ref=src.diffuse.valid()?src.diffuse:(src.normal.valid()?src.normal:src.height);if(!ref.valid()){error="Load a diffuse or normal map first";return false;}if(ref.w>4096||ref.h>4096){error="Export limited to 4096x4096 in prototype";return false;}
+bool ExportBumpPair(const Sources& src,const Settings& cfg,const std::wstring& name,std::string& error){error.clear();const Image& ref=src.diffuse;if(!ref.valid()){error="Diffuse texture is required";return false;}if(ref.w>4096||ref.h>4096){error="Export limited to 4096x4096 in prototype";return false;}
  std::vector<Image> mips,corrections;uint32_t w=ref.w,h=ref.h;try{for(;;){BumpPair p=oneMip(src,cfg,w,h);if(!p.bump.valid()){error="Failed to generate bump";return false;}mips.push_back(std::move(p.bump));corrections.push_back(std::move(p.bumpX));if(w==1&&h==1)break;w=std::max(1u,w/2);h=std::max(1u,h/2);}auto a=EncodeBC3DDS(mips[0],mips),b=EncodeBC3DDS(corrections[0],corrections);if(a.empty()||b.empty())throw std::runtime_error("BC3 encode failed");std::filesystem::path base(name);std::filesystem::path path1(base.wstring()+L"_bump.dds"),path2(base.wstring()+L"_bump#.dds");auto write=[&](const std::filesystem::path& path,const std::vector<uint8_t>& bytes){std::ofstream out(path,std::ios::binary|std::ios::trunc);if(!out)throw std::runtime_error("Cannot open output DDS file");out.write(reinterpret_cast<const char*>(bytes.data()),std::streamsize(bytes.size()));if(!out)throw std::runtime_error("DDS file write failed");};write(path1,a);write(path2,b);return true;
  }catch(const std::exception& ex){error=ex.what();return false;}}
 Mesh MakeCube(){Mesh m;MeshPart part;struct Face{V3 n,p[4];};const Face faces[]={{{0,0,1},{{-1,-1,1},{1,-1,1},{1,1,1},{-1,1,1}}},{{0,0,-1},{{1,-1,-1},{-1,-1,-1},{-1,1,-1},{1,1,-1}}},{{1,0,0},{{1,-1,1},{1,-1,-1},{1,1,-1},{1,1,1}}},{{-1,0,0},{{-1,-1,-1},{-1,-1,1},{-1,1,1},{-1,1,-1}}},{{0,1,0},{{-1,1,1},{1,1,1},{1,1,-1},{-1,1,-1}}},{{0,-1,0},{{-1,-1,-1},{1,-1,-1},{1,-1,1},{-1,-1,1}}}};
