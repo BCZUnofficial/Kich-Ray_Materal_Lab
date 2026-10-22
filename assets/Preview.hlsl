@@ -8,7 +8,9 @@ cbuffer Preview : register(b0) {
     float4 ambientColor;
     float4 materialTint;
     float4 parameters; // x bump, y normal strength, z gloss preview, w flip Y
-    float4 outline;    // rgb outline color, w extrusion
+    float4 outline;    // rgb outline color, w width in pixels
+    float4 viewport;   // xy inverse viewport size
+    float4 alphaSettings; // x: opaque/mask/blend, y: alpha-test cutoff
 };
 Texture2D DiffuseMap : register(t0);
 Texture2D BumpMap : register(t1);
@@ -29,6 +31,12 @@ Out VSMain(In i){
 }
 float4 PSMain(Out i):SV_Target {
     float4 albedo=DiffuseMap.Sample(LinearWrap,i.uv);float gloss=0.25;float3 N=normalize(i.n);
+    float opacity=1;
+    if(alphaSettings.x>0.5){
+        opacity=albedo.a;
+        clip(opacity-(alphaSettings.x<1.5?max(alphaSettings.y,1.0/255.0):1.0/255.0));
+        if(alphaSettings.x<1.5)opacity=1;
+    }
     if(parameters.x>0.5){
         float4 packed=BumpMap.Sample(LinearWrap,i.uv);float4 corr=BumpErrorMap.Sample(LinearWrap,i.uv);
         float3 tn=float3(packed.a,packed.b,packed.g)+corr.rgb-1.0;
@@ -40,11 +48,28 @@ float4 PSMain(Out i):SV_Target {
     float3 diffuse=ambientColor.rgb*(0.65+0.35*hemi)+lightColor.rgb*nl;float3 H=normalize(L+V);
     float spec=pow(saturate(dot(N,H)),8+gloss*72)*(0.15+0.85*gloss)*nl;
     float3 result=albedo.rgb*materialTint.rgb*diffuse+lightColor.rgb*spec*0.85;
-    return float4(saturate(result),1);
+    return float4(saturate(result),opacity);
 }
-struct OutlineOut {float4 pos:SV_Position;};
-OutlineOut VSOutline(In i){OutlineOut o;float3 p=i.pos+normalize(i.norm)*outline.w;o.pos=mul(float4(p,1),worldViewProjection);return o;}
-float4 PSOutline(OutlineOut i):SV_Target{return float4(outline.rgb,1);}
+struct OutlineOut {float4 pos:SV_Position;float2 uv:TEXCOORD0;};
+OutlineOut VSOutline(In i){
+    OutlineOut o;
+    o.uv=i.uv;
+    o.pos=mul(float4(i.pos,1),worldViewProjection);
+    // Project a direction, then differentiate the perspective divide. This
+    // keeps the silhouette about two pixels wide at every zoom level.
+    float4 n=mul(float4(normalize(i.norm),0),worldViewProjection);
+    float2 direction=n.xy*o.pos.w-o.pos.xy*n.w;
+    float2 pixelDirection=direction/max(viewport.xy,float2(1e-6,1e-6));
+    float lengthSquared=dot(pixelDirection,pixelDirection);
+    if(lengthSquared>1e-10)
+        o.pos.xy+=pixelDirection*rsqrt(lengthSquared)*viewport.xy*(2*outline.w)*o.pos.w;
+    return o;
+}
+float4 PSOutline(OutlineOut i):SV_Target{
+    if(alphaSettings.x>0.5)
+        clip(DiffuseMap.Sample(LinearWrap,i.uv).a-(alphaSettings.x<1.5?max(alphaSettings.y,1.0/255.0):0.05));
+    return float4(outline.rgb,1);
+}
 struct BoneIn {float3 pos:POSITION;float4 color:COLOR;};
 struct BoneOut {float4 pos:SV_Position;float4 color:COLOR;};
 BoneOut VSSkeleton(BoneIn i){BoneOut o;o.pos=mul(float4(i.pos,1),worldViewProjection);o.color=i.color;return o;}

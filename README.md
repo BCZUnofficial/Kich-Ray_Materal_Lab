@@ -2,7 +2,7 @@
 
 Standalone DirectX 11 material and OGF preview tool for **S.T.A.L.K.E.R.: Shadow of Chernobyl 1.0006** and the Kich-Ray engine workstream.
 
-Current development version: **0.8.9**.
+Current development version: **0.9.1**.
 
 ## Features
 
@@ -18,6 +18,9 @@ Current development version: **0.8.9**.
 - Scene mesh list supports selecting and hiding individual mesh parts.
 - Bind skeleton preview for skeletal OGF models.
 - SoC skeletal animation preview for embedded motions and external OMF motion sets.
+- Persistent viewport toolbar with delayed Russian tooltips, independent outline/wireframe toggles, focus and reversible mesh isolation.
+- Free-flight camera (default), optional orbit camera, model/light rotation and brush modes with one shared mode state.
+- Native Windows Common Controls v6 styling, DPI-scaled controls, scrollable sidebar pages and a full-width status line. No external UI package is required.
 - Light orbit controls with persistent azimuth/elevation stored in `MaterialLab.ini` next to the executable.
 - Texture-space material brush: paint relief normals, local gloss, or local height directly on the 3D model through its UVs, with save/loadable `.krnp` presets and Ctrl+Z stroke undo.
 - Export to `export/<model name>/` next to `MaterialLab.exe`.
@@ -25,7 +28,20 @@ Current development version: **0.8.9**.
 
 ## Interface pages
 
-Each top-level tab is hosted in its own child page window. Switching tabs hides the previous page as one window and shows the new page as one window; controls are no longer individually stacked in the same parent surface. This prevents stale controls from one tab being visible underneath another after redraw/resizing.
+Each top-level tab is hosted in its own child page window inside a separate composited sidebar host. Switching tabs explicitly hides both the inactive page and its controls. Decorative group boxes are always below input controls in Z order, and sibling clipping prevents their repaint from covering buttons and sliders. Scrolling rebuilds control positions from their original layout rectangles instead of reusing old screen pixels. The sidebar reserves its own paint surface; tab changes do not toggle redraw or visibility on the main DirectX window.
+
+## Diffuse alpha transparency
+
+Alpha is enabled by default for imported PNG/WIC images and supported DDS formats (including DXT1 cutouts, DXT3 and DXT5). The **Материал → Прозрачность diffuse** section provides:
+
+- **Учитывать альфа-канал**: enable/disable opacity from the diffuse image;
+- **Авто**: binary alpha uses a cutout pass, fractional alpha uses blending;
+- **Отсечение**: a configurable threshold for foliage, fences and other masks;
+- **Смешивание**: smooth transparency for glass and translucent surfaces.
+
+Opaque and cutout surfaces write depth first. Blended surfaces render afterward with straight-alpha blending and depth writes disabled. Transparent mesh parts and their triangles are sorted back to front; intersecting transparent parts may still exhibit the usual limitations of sorted alpha blending.
+
+Selection and brush picking ignore transparent diffuse texels with matching linear-wrap sampling, and selection outlines respect the alpha mask. Opacity comes from **diffuse alpha only**: `_bump` alpha remains the packed normal component, and `_bump#` alpha remains height. Bump export does not alter the original diffuse image.
 
 ## Animation preview
 
@@ -51,16 +67,34 @@ Animation preview intentionally does not reproduce the complete runtime `CBlend`
 
 Animation is isolated to the **Анимация** tab. Leaving that tab stops playback and restores the bind/T-pose. While a motion is actively playing, model editing, brush operations, selection changes and model rotation are blocked; camera/light viewing controls remain available.
 
-## Controls
+## Viewport controls
 
-- **LMB drag** — orbit camera.
-- **RMB drag** — orbit light.
-- **MMB drag up/down** — move camera vertically.
-- **Mouse wheel** — zoom.
-- **R** — toggle model-rotation mode; while enabled, LMB drag rotates the model rather than the camera. This mode is disabled on the Animation page. The camera can move substantially closer to the model for fine brush work.
-- **Выделение** — click mesh parts to select geometry for local material preview changes.
-- **Ctrl+Z** — undo the last completed brush stroke.
-- **Ctrl+S** — confirm/apply the current brush edit session.
+The toolbar stays **under the viewport**, across every editor page. A blue button is active; unavailable tools are dimmed. Hover for about 650 ms to see a full Russian tooltip. The hint line shows the current mouse controls, selected mesh and unapplied brush state.
+
+| Button | Key | Action |
+| --- | --- | --- |
+| FC | 1 / Escape | Free-flight camera, enabled by default |
+| OC | 2 | Orbit camera around its target |
+| CM | 3 / C | Choose a visible mesh with LMB; RMB clears selection |
+| OL | O | Toggle the selection outline independently of the current tool |
+| RL | 4 | Rotate the light with LMB |
+| BR | 5 / B | Paint with LMB and open the Brush page; requires a bump pair |
+| RM | 6 / R | Rotate the model with LMB; R toggles back to flight |
+| FT | F | Frame the selected mesh, or all visible geometry without a selection |
+| IS | I | Isolate the selection; press again to restore previous visibility |
+| WF | V | Toggle wireframe inspection |
+| UN | Ctrl+Z | Undo a complete brush stroke |
+| AP | Ctrl+S | Apply the current brush layer to the working snapshot |
+| RS | Home | Reset the camera and model orientation |
+
+- In **FC**, hold LMB or RMB to look around; **WASD** moves, **Q/E** moves down/up, **Shift** accelerates and **Ctrl** slows movement. The viewport must have keyboard focus. Mouse wheel moves forward/backward.
+- In **OC**, LMB orbits and the wheel changes distance. In **BR/RM/RL**, RMB orbits the camera while LMB operates the active tool.
+- **MMB drag** pans horizontally and vertically in every mode.
+- In **BR**, **[ / ]** or **Ctrl+wheel** changes brush size; **X** inverts the operation.
+- **H** hides the selected mesh; **Shift+H** shows all meshes and exits isolation.
+- Normal page changes preserve the navigation tool. Entering Animation switches to flight and the bind pose; playback locks mesh editing, while camera, light, outline, wireframe and focus remain available.
+- Brush drags are completed safely on capture loss, focus loss, page changes or a tool switch. The final dab is uploaded even when the last live preview was throttled.
+- Shortcuts leave normal text editing alone in the export-name field.
 
 
 ## Mesh selection and brush
@@ -72,7 +106,7 @@ Animation is isolated to the **Анимация** tab. Leaving that tab stops pl
 - hovering a visible mesh gives a light highlight;
 - LMB selects it and shows the thin outline;
 - RMB clears selection;
-- changing tabs turns selection mode off but keeps the current selection fixed;
+- ordinary tab changes preserve the selection tool and current selection; entering Animation returns to flight;
 - while selection exists, other visible mesh parts are rendered without bump/normal shading so material work is isolated to the selected mesh;
 - hidden mesh parts cannot be used as brush, bump-generation or default export targets.
 
@@ -85,7 +119,7 @@ The **Кисть** tab is an independent local material editor. Its strength, ra
 
 - the ray hit is converted to interpolated triangle UV coordinates;
 - a surface ring shows the approximate current UV brush footprint;
-- strokes are interpolated between mouse samples to avoid dotted gaps;
+- strokes are resampled in screen space and every dab is raycast onto the visible model, avoiding straight painted lines across unrelated UV islands; cursor warps are treated as a new dab;
 - **Сила** uses a nonlinear precision curve: the bottom of the slider covers very small values close to zero instead of jumping immediately to a visible height/gloss change;
 - **Резкость края** controls brush hardness/feather independently from the Sharp and Blur operations;
 - the minimum brush radius is clamped to roughly 1.35 editable texels rather than a single pixel;
@@ -118,6 +152,8 @@ The final export therefore remains one pair:
 <name>_bump.dds
 <name>_bump#.dds
 ```
+
+Snapshot writes use a staging file and atomic replacement. Failed Apply operations keep unsaved keys and undo data in memory so the operation can be retried.
 
 The `temp` directory is working data and is not required in the game/mod build. Creating a new slider-generated base for a material begins a new brush stage for that material.
 
@@ -156,6 +192,25 @@ build_vs2022.bat
 ```
 
 The batch file builds **`Release | x64`** and launches the result. x64 is the recommended configuration because OGF geometry, decoded DDS data, brush layers and animation data can exceed the practical 32-bit address-space budget.
+
+## Validation
+
+`.github/workflows/build.yml` builds **Release x64 and Win32** with MSVC, runs the viewport/brush regression tests, then starts the actual application with **D3D11 WARP** and runtime HLSL compilation. The smoke test checks toolbar modes, selection isolation, brush/undo/apply, capture loss, animation locks and minimum-window layout.
+
+To run the Windows smoke test locally after building:
+
+```bat
+bin\Release\x64\MaterialLab.exe --smoke-test
+```
+
+It writes `smoke-tests.txt` next to the executable and exits with 0 on success. Use a test build directory: the test also creates a generated base and brush working snapshot for its checker cube.
+
+Portable camera and brush regressions can also be run without Windows:
+
+```sh
+g++ -std=c++17 -Isrc tests/ViewportToolsTests.cpp src/Core.cpp src/DDS.cpp -o viewport-tests
+./viewport-tests
+```
 
 ## Current limitations
 

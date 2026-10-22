@@ -72,6 +72,11 @@
     <IntDir>$(SolutionDir)obj\$(Configuration)\$(Platform)\</IntDir>
     <TargetName>MaterialLab</TargetName>
   </PropertyGroup>
+  <ItemDefinitionGroup>
+    <Manifest>
+      <AdditionalManifestFiles>$(ProjectDir)assets\MaterialLab.manifest;%(AdditionalManifestFiles)</AdditionalManifestFiles>
+    </Manifest>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>Level4</WarningLevel>
@@ -170,6 +175,9 @@ copy /Y "$(ProjectDir)assets\Preview.hlsl" "$(OutDir)assets\Preview.hlsl" &gt;nu
   <ItemGroup>
     <ClInclude Include="src\Core.h" />
     <ClInclude Include="src\Renderer.h" />
+    <ClInclude Include="src\ViewportTools.h" />
+    <ClInclude Include="src\MaterialAlpha.h" />
+    <ClInclude Include="src\ViewportToolbar.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="assets\Preview.hlsl" />

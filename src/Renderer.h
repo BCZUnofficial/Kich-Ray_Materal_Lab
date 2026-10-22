@@ -14,7 +14,10 @@
 #include <string>
 #include <algorithm>
 #include <vector>
+#include <memory>
 #include "Core.h"
+#include "ViewportTools.h"
+#include "MaterialAlpha.h"
 namespace lab {
 class Renderer {
   using Dev=Microsoft::WRL::ComPtr<ID3D11Device>;
@@ -37,6 +40,11 @@ class Renderer {
     bool selected=false;
     bool skeletal=false;
     bool visible=true;
+    AlphaProfile alpha;
+    std::shared_ptr<GrayImage> opacity;
+    Microsoft::WRL::ComPtr<ID3D11Buffer> sortedIB;
+    DirectX::XMFLOAT4X4 alphaSortView{};
+    bool alphaSortValid=false;
   };
   Dev device_;Ctx context_;
   Microsoft::WRL::ComPtr<IDXGISwapChain> swap_;
@@ -47,26 +55,34 @@ class Renderer {
   Microsoft::WRL::ComPtr<ID3D11PixelShader> ps_,psSkeleton_,psOutline_;
   Microsoft::WRL::ComPtr<ID3D11InputLayout> input_,inputSkeleton_;
   Microsoft::WRL::ComPtr<ID3D11Buffer> cb_,skeletonVB_,brushVB_;
-  Microsoft::WRL::ComPtr<ID3D11RasterizerState> raster_,outlineRaster_;
+  Microsoft::WRL::ComPtr<ID3D11RasterizerState> raster_,outlineRaster_,wireRaster_;
   Microsoft::WRL::ComPtr<ID3D11DepthStencilState> skeletonDepth_;
+  Microsoft::WRL::ComPtr<ID3D11DepthStencilState> alphaDepth_;
+  Microsoft::WRL::ComPtr<ID3D11BlendState> alphaBlend_,depthOnlyBlend_;
   Microsoft::WRL::ComPtr<ID3D11SamplerState> sampler_;
   std::vector<RenderPart> parts_;
   std::vector<Bone> bones_;
   std::vector<Motion> motions_;
   UINT skeletonVertexCount_=0,brushVertexCount_=0,width_=0,height_=0;
   V3 modelCenter_{}; float modelScale_=1.f;
-  float yaw_=0.65f,pitch_=0.25f,dist_=3.8f,cameraY_=0.f,lightYaw_=0.9f,lightPitch_=0.65f;
+  ViewportCamera camera_;
+  float lightYaw_=0.9f,lightPitch_=0.65f;
   float modelYaw_=0.f,modelPitch_=0.f;
   float normalStrength_=1.f,glossStrength_=0.5f;
   float tint_[3]={1.f,1.f,1.f},light_[3]={1.f,0.93f,0.78f},ambient_[3]={0.21f,0.24f,0.29f};
-  bool invertNormalY_=false,bumpOn_=true,skeletonOn_=true;
+  bool invertNormalY_=false,bumpOn_=true,skeletonOn_=true,outlineOn_=true,wireframeOn_=false;
   int selectedPrimary_=-1,hoverPart_=-1;
+  bool alphaEnabled_=true;
+  AlphaPreview alphaPreview_=AlphaPreview::Automatic;
+  float alphaCutoff_=.5f;
+  AlphaMode alphaMode(const RenderPart& part)const{return ResolveAlpha(part.alpha,alphaEnabled_,alphaPreview_);}
+  ID3D11Buffer* sortedAlphaIndices(RenderPart& part,const DirectX::XMMATRIX& modelView);
   bool createViews(UINT w,UINT h,std::wstring& error);
   bool makeTexture(const Image& img,Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>& out,Microsoft::WRL::ComPtr<ID3D11Texture2D>* textureOut=nullptr);
   bool updateTexture(const Image& img,Microsoft::WRL::ComPtr<ID3D11Texture2D>& texture,Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>& view);
   bool uploadBindPose(std::wstring* error=nullptr);
 public:
-  bool Init(HWND hwnd,std::wstring& error);
+  bool Init(HWND hwnd,std::wstring& error,bool software=false);
   bool Resize(UINT w,UINT h,std::wstring& error);
   bool SetMesh(Mesh& mesh,std::wstring& error);
   bool SetPartImages(size_t part,const PartImages& images);
@@ -83,6 +99,10 @@ public:
   void SetColor(int which,COLORREF color);
   COLORREF GetColor(int which) const;
   void OrbitCamera(float dx,float dy);
+  void FlyCameraEnabled(bool on){camera_.fly=on;}
+  void MoveCamera(float right,float up,float forward){camera_.move(right,up,forward);}
+  void PanCamera(float dx,float dy){camera_.pan(dx,dy);}
+  void FrameSelection();
   void RotateModel(float dx,float dy);
   void ResetModelRotation(){modelYaw_=0.f;modelPitch_=0.f;}
   void PanVertical(float dy);
@@ -95,6 +115,11 @@ public:
   void Reset();
   void BumpEnabled(bool on){bumpOn_=on;}
   void SkeletonEnabled(bool on){skeletonOn_=on;}
+  void OutlineEnabled(bool on){outlineOn_=on;}
+  void WireframeEnabled(bool on){wireframeOn_=on;}
+  void AlphaEnabled(bool on){alphaEnabled_=on;}
+  void SetAlphaPreview(AlphaPreview mode){alphaPreview_=mode;}
+  void SetAlphaCutoff(float value){alphaCutoff_=std::clamp(value,0.f,1.f);}
   void SetNormalSettings(float strength,bool invertY){normalStrength_=strength;invertNormalY_=invertY;}
   void SetGlossStrength(float strength){glossStrength_=std::max(0.f,std::min(strength,1.f));}
   void SetPartVisible(size_t part,bool visible);
@@ -112,6 +137,7 @@ public:
   void ClearSelection();
   bool HasSelection()const;
   int SelectedPart()const{return selectedPrimary_;}
-  void Draw();
+  void Draw(bool present=true);
+  bool CaptureFrame(Image& image);
 };
 }

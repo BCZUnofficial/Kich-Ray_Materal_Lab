@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.9.1
+
+### Tab and scrolling fix
+
+- Isolated sidebar pages inside a composited host and explicitly hid inactive controls as well as their pages.
+- Put decorative group boxes below input controls in Z order and enabled sibling clipping.
+- Removed main-window WM_SETREDRAW switching and cached-pixel scrolling. Control positions are now rebuilt from fixed layout rectangles, with horizontal fitting when a scrollbar is present.
+- Extended the native smoke test with 40 page switches and scroll/resize position checks.
+
+### Diffuse alpha
+
+- Enabled diffuse-alpha transparency by default, with automatic, cutout and smooth-blend preview modes and an adjustable cutout threshold.
+- Added an opaque/cutout depth pass followed by back-to-front alpha blending with depth writes disabled; translucent triangles are sorted within each part.
+- Made mesh/brush picking and selection outlines respect diffuse opacity; packed bump alpha channels retain their existing meaning.
+- Added DDS alpha decoding/sampling regressions and GPU readback checks to the native smoke test.
+
+## 0.9.0
+
+### Viewport workspace
+
+- Added the persistent FC / OC / CM / OL / RL / BR / RM toolbar below the viewport, with delayed Russian tooltips, active/disabled states and a contextual hint line.
+- Flight is now the default: WASD/QE, mouse look, Shift acceleration and Ctrl precision. Orbit remains available; middle drag now pans both axes.
+- Added framing, reversible selection isolation, wireframe, undo/apply and reset buttons; added keyboard shortcuts and brush-radius/inversion shortcuts.
+- Centralized mode changes and synchronized the existing sidebar switches. Camera and light tools remain available during animation, while editing tools are locked.
+- Added DPI-scaled Common Controls v6 styling, a dark viewport toolbar, scrollable sidebar pages and full-width status messages. No downloaded UI framework is needed.
+- Selection now picks one mesh without silently selecting a guessed mirror. Outline width is defined in screen pixels to remain readable at different zoom levels.
+
+### Brush correctness
+
+- Resample strokes through screen-space ray hits instead of connecting UV coordinates across unrelated islands. Cursor warps start a separate dab.
+- Capture undo tiles at actual texture boundaries, including non-power-of-two and thin rectangular textures.
+- Complete and upload strokes on mouse capture/focus loss, tool switches and tab changes; right/middle camera drags work while the brush tool is active.
+- Preserve unsaved layers and undo data when Apply fails, mark an undone layer dirty, and replace working snapshots atomically.
+- Save a new generated base before discarding the previous brush layer.
+
+### Validation
+
+- Added portable camera/framing, screen-space stroke and periodic NPOT brush/undo regressions.
+- Added an MSVC x64/Win32 workflow and a real Win32/D3D11 WARP smoke-test mode, including runtime shader compilation.
+
 ## 0.8.9
 
 ### Interface
