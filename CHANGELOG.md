@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.10.0
+
+- Replaced overlapping native tab/control windows with vendored Dear ImGui v1.91.9b, one clipped inspector pane and an offscreen D3D11 viewport with its own toolbar. Added per-monitor DPI handling and independent page scrolling.
+- Split UI, application shell, renderer and material document state. Tool changes cannot regenerate normals; preview settings and generation settings are separate.
+- Added native-resolution material layers (up to 4096²), per-stroke undo/redo, undoable Clear, 64 MiB/64-step history and checksummed `.krlab` material sessions.
+- Preserved untouched imported DDS pairs byte for byte during the current session; stage both exported DDS files and roll back ordinary replacement failures. Filter normal mips as vectors and gloss in its decoded domain.
+- Audited the supplied retail SoC bump pair against the engine shader and measured export round-trip errors. Kept the intentional SoC Z boost, applied once.
+- Corrected DDS linear-size metadata, row pitch, masks and topology validation; hardened OGF/OMF chunk, skeleton and motion parsing, memory limits and failure retention.
+- Made GPU material replacement transactional, fixed bind-pose bounds and local viewport picking, and guarded degenerate shader tangent bases.
+- Added portable document, parser and real ImGui frame/input regressions, sanitizer builds, reference-audit tooling and updated Windows CI.
+
+## 0.9.2
+
+### Brush and normal stability
+
+- Removed brush-mode overrides of normal strength, Y inversion and gloss. Mesh selection no longer disables bump on other parts.
+- Kept brush preview at the normal viewing resolution; preserved original packed channels wherever no edit occurred, including exact preview restoration after undo.
+- Froze the actual displayed bump pair as the brush base instead of resurrecting stale temp layers on first paint.
+- Replaced relief inversion/normal replacement with additive preset detail and removal toward flat normals. Height, gloss and sharpness use synchronized add/remove operations; interface layout is unchanged.
+- Reset coverage/base for every stroke, retained undo through Apply, made Clear undoable and excluded zero-effect strokes from history.
+- Prevented generation sliders from silently discarding painted changes, and kept unrelated material undo when replacing a base.
+- Kept height-derived normal strength independent of preview resolution, removed the steep-normal clamp for unchanged height, corrected doubled BC3 error compensation and made zero normal-generation strength flat.
+- Export now uses imported/current material layers instead of silently regenerating an imported pair from diffuse. Replacing an imported pair clears stale paint data.
+- Added portable brush algorithm regressions and native framebuffer/undo smoke checks. Portable sanitizer tests and Windows cross-build are validated separately from native execution.
+
 ## 0.9.1
 
 ### Tab and scrolling fix

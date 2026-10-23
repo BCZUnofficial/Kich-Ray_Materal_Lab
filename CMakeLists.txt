@@ -1,0 +1,59 @@
+cmake_minimum_required(VERSION 3.16)
+project(MaterialLabChecks VERSION 0.10.0 LANGUAGES CXX)
+
+# Portable checks use production code. Build the Windows application with
+# KichRay_MaterialLab.sln (Visual Studio 2022).
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+option(MATERIALLAB_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+set(MATERIALLAB_REFERENCE_BUMP "" CACHE FILEPATH "Optional original _bump.dds reference")
+set(MATERIALLAB_REFERENCE_BUMPX "" CACHE FILEPATH "Optional original _bump#.dds reference")
+
+# Keep test assertions and Dear ImGui's invariants active in Release.
+if(MSVC)
+    add_compile_options(/utf-8 /UNDEBUG /EHsc)
+    add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN)
+else()
+    add_compile_options(-UNDEBUG)
+endif()
+if(MATERIALLAB_SANITIZERS)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+        add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+        add_link_options(-fsanitize=address,undefined)
+    else()
+        message(FATAL_ERROR "MATERIALLAB_SANITIZERS requires GCC or Clang on a non-Windows host")
+    endif()
+endif()
+
+add_library(material_core STATIC src/Core.cpp src/DDS.cpp src/OGF.cpp src/MaterialDocument.cpp)
+target_include_directories(material_core PUBLIC src)
+add_library(imgui_core STATIC
+    third_party/imgui/imgui.cpp third_party/imgui/imgui_draw.cpp
+    third_party/imgui/imgui_tables.cpp third_party/imgui/imgui_widgets.cpp)
+target_include_directories(imgui_core PUBLIC third_party/imgui)
+add_library(editor_ui STATIC src/EditorUI.cpp)
+target_link_libraries(editor_ui PUBLIC material_core imgui_core)
+
+enable_testing()
+function(materiallab_test target source)
+    add_executable(${target} ${source})
+    target_link_libraries(${target} PRIVATE material_core)
+    add_test(NAME ${target} COMMAND ${target})
+    set_tests_properties(${target} PROPERTIES TIMEOUT 180)
+endfunction()
+materiallab_test(viewport-tests tests/ViewportToolsTests.cpp)
+materiallab_test(brush-tests tests/BrushLayersTests.cpp)
+materiallab_test(parser-tests tests/ParserTests.cpp)
+materiallab_test(document-tests tests/MaterialDocumentTests.cpp)
+materiallab_test(editor-ui-tests tests/EditorUITests.cpp)
+target_link_libraries(editor-ui-tests PRIVATE editor_ui)
+add_executable(reference-audit tools/MaterialReferenceAudit.cpp)
+target_link_libraries(reference-audit PRIVATE material_core)
+if(MATERIALLAB_REFERENCE_BUMP AND MATERIALLAB_REFERENCE_BUMPX)
+    add_test(NAME reference-dds-decode COMMAND parser-tests
+        "${MATERIALLAB_REFERENCE_BUMP}" "${MATERIALLAB_REFERENCE_BUMPX}")
+    add_test(NAME reference-dds-roundtrip COMMAND reference-audit
+        "${MATERIALLAB_REFERENCE_BUMP}" "${MATERIALLAB_REFERENCE_BUMPX}")
+    set_tests_properties(reference-dds-decode reference-dds-roundtrip PROPERTIES TIMEOUT 180)
+endif()

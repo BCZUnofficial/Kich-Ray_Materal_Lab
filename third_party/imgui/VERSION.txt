@@ -1,0 +1,4 @@
+Dear ImGui v1.91.9b
+https://github.com/ocornut/imgui
+Commit: f5befd2d29e66809cd1110a152e375a7f1981f06
+Unmodified source files; MIT license in LICENSE.txt.

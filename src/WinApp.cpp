@@ -5,718 +5,816 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
-#include <windowsx.h>
-#include <cwctype>
-#include <commctrl.h>
-#include <uxtheme.h>
 #include <commdlg.h>
 #include <wincodec.h>
 #include <wrl/client.h>
 #include <filesystem>
-#include <vector>
-#include <string>
 #include <fstream>
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstring>
+#include <memory>
+#include <string>
+#include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
-#include <deque>
-#include <memory>
-#include <cstddef>
-#include <cstring>
+#include <vector>
 #include "Renderer.h"
-#include "Core.h"
-#include "ViewportToolbar.h"
-#pragma comment(lib,"uxtheme.lib")
+#include "MaterialDocument.h"
+#include "EditorUI.h"
+#include "imgui.h"
+#include "imgui_impl_win32.h"
+#include "imgui_impl_dx11.h"
+
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND,UINT,WPARAM,LPARAM);
 
 namespace {
 using Microsoft::WRL::ComPtr;
-constexpr int PANEL=410,TAB_COUNT=6,BRUSH_TAB=4,ANIM_TAB=5,PAGE_TOP=48;
-constexpr UINT_PTR ANIM_TIMER=1,VIEW_TIMER=2;
-int uiDpi=96;
-int ui(int value){return MulDiv(value,uiDpi,96);}
-HBRUSH panelBrush(){static HBRUSH b=CreateSolidBrush(RGB(246,248,251));return b;}
-HBRUSH toolBrush(){static HBRUSH b=CreateSolidBrush(RGB(29,35,46));return b;}
-constexpr uint32_t PREVIEW_MAX=768,BRUSH_PREVIEW_MAX=384,BRUSH_MAX=1024;
-constexpr ULONGLONG BRUSH_PREVIEW_MS=180;
+namespace fs=std::filesystem;
+constexpr uint32_t PreviewSize=768;
+constexpr const wchar_t* AppTitle=L"Kich-Ray Material Lab 0.10.0";
 
-enum IDs{
- TAB_MAIN=100,LOAD_OGF=101,LOAD_DIFF,LOAD_NORMAL,LOAD_GLOSS,LOAD_HEIGHT,LOAD_BUMP,LOAD_BUMPX,
- GENERATE,EXPORT,EXPORT_NAME,USE_TEX_NAME,
- SLIDER_NORMAL,SLIDER_GLOSS,SLIDER_HEIGHT,SLIDER_BLUR,SLIDER_SHARP,INVERT_Y,BUMP_ENABLED,COLOR_TINT,SELECT_MODE,CLEAR_SELECTION,
- SLIDER_LIGHT_AZ,SLIDER_LIGHT_EL,COLOR_LIGHT,COLOR_AMBIENT,RESET,SKELETON_ENABLED,ALPHA_ENABLED,ALPHA_MODE,ALPHA_CUTOFF,
- ANIM_COMBO=200,ANIM_PLAY,ANIM_LOOP,ANIM_TIMELINE,ANIM_SPEED,
- MESH_LIST=250,MESH_SHOW_ALL,MESH_HIDE_SELECTED,
- BRUSH_MODE=300,BRUSH_RADIUS,BRUSH_STRENGTH,BRUSH_HARDNESS,PRESET_LOAD,PRESET_SAVE,BRUSH_CLEAR,BRUSH_APPLY,BRUSH_RADIUS_TEXT,BRUSH_STRENGTH_TEXT,BRUSH_HARDNESS_TEXT,BRUSH_INVERT,
- BRUSH_TARGET_RELIEF,BRUSH_TARGET_HEIGHT_ADD,BRUSH_TARGET_HEIGHT_SUB,BRUSH_TARGET_GLOSS_ADD,BRUSH_TARGET_GLOSS_SUB,BRUSH_TARGET_SHARP,BRUSH_TARGET_BLUR,
- TOOL_FLY=400,TOOL_ORBIT,TOOL_CHOOSE,TOOL_OUTLINE,TOOL_LIGHT,TOOL_BRUSH,TOOL_MODEL,
- TOOL_FRAME,TOOL_ISOLATE,TOOL_WIRE,TOOL_UNDO,TOOL_APPLY,TOOL_RESET,
- STATUS=500
-};
-
-struct PartMaterial{
- std::filesystem::path diffuse,bump,bumpX;
- std::wstring key;
- bool hasDiffuse=false,hasBump=false;
-};
-enum class BrushTarget{Relief=0,HeightAdd=1,HeightSub=2,GlossAdd=3,GlossSub=4,Sharp=5,Blur=6};
-
-constexpr uint32_t UNDO_TILE=64;
-constexpr size_t UNDO_MAX_BYTES=12u*1024u*1024u;
-struct BrushUndoTile{uint32_t tx=0,ty=0,w=0,h=0;BrushTarget target=BrushTarget::Relief;std::vector<lab::Pixel> normal;std::vector<uint8_t> scalar;};
-struct BrushUndoStep{std::wstring key;int part=-1;BrushTarget target=BrushTarget::Relief;std::vector<BrushUndoTile> tiles;size_t bytes()const{size_t n=0;for(const auto& t:tiles)n+=t.normal.size()*sizeof(lab::Pixel)+t.scalar.size();return n;}};
-
-std::vector<uint8_t> readFile(const std::wstring& path){std::vector<uint8_t> out;std::ifstream f(std::filesystem::path(path),std::ios::binary|std::ios::ate);if(!f)return out;auto end=f.tellg();if(end<0||end>std::streamoff(256*1024*1024))return out;out.resize(size_t(end));f.seekg(0);if(!out.empty())f.read(reinterpret_cast<char*>(out.data()),std::streamsize(out.size()));if(!f)return {};return out;}
-std::wstring pick(HWND hwnd,const wchar_t* filter,const wchar_t* extension){wchar_t file[32768]={};OPENFILENAMEW of={};of.lStructSize=sizeof(of);of.hwndOwner=hwnd;of.lpstrFilter=filter;of.lpstrFile=file;of.nMaxFile=32768;of.lpstrDefExt=extension;of.Flags=OFN_EXPLORER|OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST;if(GetOpenFileNameW(&of))return file;return {};}
-std::wstring savePick(HWND hwnd,const wchar_t* filter,const wchar_t* extension){wchar_t file[32768]={};OPENFILENAMEW of={};of.lStructSize=sizeof(of);of.hwndOwner=hwnd;of.lpstrFilter=filter;of.lpstrFile=file;of.nMaxFile=32768;of.lpstrDefExt=extension;of.Flags=OFN_EXPLORER|OFN_PATHMUSTEXIST|OFN_OVERWRITEPROMPT;if(GetSaveFileNameW(&of))return file;return {};}
-lab::Image loadWIC(const std::wstring& path,std::wstring& error){lab::Image out;ComPtr<IWICImagingFactory> factory;HRESULT hr=CoCreateInstance(CLSID_WICImagingFactory,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(factory.GetAddressOf()));if(FAILED(hr)){error=L"WIC";return out;}ComPtr<IWICBitmapDecoder> decoder;hr=factory->CreateDecoderFromFilename(path.c_str(),nullptr,GENERIC_READ,WICDecodeMetadataCacheOnDemand,decoder.GetAddressOf());if(FAILED(hr)){error=L"Decode";return out;}ComPtr<IWICBitmapFrameDecode> frame;hr=decoder->GetFrame(0,frame.GetAddressOf());if(FAILED(hr))return out;UINT w=0,h=0;frame->GetSize(&w,&h);if(!w||!h||w>8192||h>8192||size_t(w)*h>64u*1024u*1024u){error=L"Size";return out;}ComPtr<IWICFormatConverter> converter;hr=factory->CreateFormatConverter(converter.GetAddressOf());if(FAILED(hr))return out;hr=converter->Initialize(frame.Get(),GUID_WICPixelFormat32bppRGBA,WICBitmapDitherTypeNone,nullptr,0.0,WICBitmapPaletteTypeCustom);if(FAILED(hr)){error=L"RGBA";return out;}out.w=w;out.h=h;out.pixels.resize(size_t(w)*h);static_assert(sizeof(lab::Pixel)==4,"RGBA8");hr=converter->CopyPixels(nullptr,w*4,UINT(out.pixels.size()*4),reinterpret_cast<BYTE*>(out.pixels.data()));if(FAILED(hr)){error=L"Pixels";return {};}return out;}
-lab::Image loadImage(const std::wstring& path,std::wstring& error){std::wstring ext=std::filesystem::path(path).extension().wstring();std::transform(ext.begin(),ext.end(),ext.begin(),towlower);if(ext==L".dds"){auto data=readFile(path);std::string reason;auto im=lab::DecodeDDS(data,reason);if(!im.valid())error=std::wstring(reason.begin(),reason.end());return im;}return loadWIC(path,error);}
-std::wstring lower(std::wstring s){std::transform(s.begin(),s.end(),s.begin(),towlower);return s;}
-std::wstring widenPath(const std::string& s){if(s.empty())return {};int n=MultiByteToWideChar(CP_ACP,0,s.data(),int(s.size()),nullptr,0);if(n<=0)return std::wstring(s.begin(),s.end());std::wstring out(size_t(n),L'\0');MultiByteToWideChar(CP_ACP,0,s.data(),int(s.size()),out.data(),n);return out;}
-bool findTexturesRoot(const std::filesystem::path& ogf,std::filesystem::path& root){std::filesystem::path p=ogf.parent_path();while(!p.empty()){if(lower(p.filename().wstring())==L"meshes"){root=p.parent_path()/L"textures";return true;}auto parent=p.parent_path();if(parent==p)break;p=parent;}p=ogf.parent_path();while(!p.empty()){std::filesystem::path candidate=p/L"textures";std::error_code ec;if(std::filesystem::is_directory(candidate,ec)){root=candidate;return true;}auto parent=p.parent_path();if(parent==p)break;p=parent;}return false;}
-bool resolveOGFMaterialPaths(const std::filesystem::path& texturesRoot,const std::string& ogfTexture,std::filesystem::path& diffuse,std::filesystem::path& bump,std::filesystem::path& bumpX){std::wstring raw=widenPath(ogfTexture);std::replace(raw.begin(),raw.end(),L'/',L'\\');while(!raw.empty()&&(raw.front()==L'\\'||raw.front()==L'/'))raw.erase(raw.begin());std::wstring low=lower(raw);const std::wstring alias=L"$game_textures$\\",folder=L"textures\\";if(low.rfind(alias,0)==0)raw=raw.substr(alias.size());else if(low.rfind(folder,0)==0)raw=raw.substr(folder.size());std::filesystem::path rel(raw);if(rel.is_absolute())return false;diffuse=texturesRoot/rel;if(diffuse.extension().empty())diffuse+=L".dds";std::wstring stem=diffuse.stem().wstring();bump=diffuse.parent_path()/(stem+L"_bump.dds");bumpX=diffuse.parent_path()/(stem+L"_bump#.dds");return true;}
-std::filesystem::path exeDir(){wchar_t path[32768]={};DWORD n=GetModuleFileNameW(nullptr,path,32768);if(!n||n>=32768)return std::filesystem::current_path();return std::filesystem::path(path).parent_path();}
-std::wstring cleanName(std::wstring s){for(auto& c:s)if(c==L'<'||c==L'>'||c==L':'||c==L'"'||c==L'/'||c==L'\\'||c==L'|'||c==L'?'||c==L'*')c=L'_';while(!s.empty()&&(s.back()==L'.'||s.back()==L' '))s.pop_back();return s;}
-std::wstring textureStem(const std::string& ref){std::wstring w=widenPath(ref);std::replace(w.begin(),w.end(),L'/',L'\\');std::filesystem::path p(w);return cleanName(p.stem().wstring());}
-std::filesystem::path prefsPath(){return exeDir()/L"MaterialLab.ini";}
-std::wstring pathKey(const std::filesystem::path& p){std::error_code ec;auto q=std::filesystem::weakly_canonical(p,ec);if(ec)q=p.lexically_normal();return lower(q.wstring());}
-uint64_t fnv1a64(const std::wstring& s){uint64_t h=1469598103934665603ull;for(wchar_t c:s){uint32_t v=uint32_t(c);for(int i=0;i<4;++i){h^=uint8_t(v&0xffu);h*=1099511628211ull;v>>=8;}}return h;}
-
-enum class ViewMode{Fly,Orbit,Choose,Light,Brush,Model};
-const lab::ViewTool VIEW_TOOLS[]={
- {TOOL_FLY,L"FC",L"Fly Camera — полёт камеры (1). ЛКМ/ПКМ: осмотр; WASD: движение; Q/E: вниз/вверх. Shift: быстрее, Ctrl: точнее.",true},
- {TOOL_ORBIT,L"OC",L"Orbit Camera — орбитальная камера (2). ЛКМ: обойти модель; колесо: приближение; СКМ: панорама.",true},
- {TOOL_CHOOSE,L"CM",L"Choose Mesh — выбор меша (3 / C). ЛКМ: выбрать видимую часть; ПКМ: снять выделение.",true},
- {0,L"",L""},
- {TOOL_OUTLINE,L"OL",L"Outline — контур выбранного меша (O). Включается независимо от режима управления.",true},
- {TOOL_LIGHT,L"RL",L"Rotate Light — вращение света (4). ЛКМ: азимут/высота; ПКМ: камера.",true},
- {TOOL_BRUSH,L"BR",L"Brush — рисование материала (5 / B). ЛКМ: штрих; ПКМ: камера; [ / ] или Ctrl+колесо: размер; X: инверсия. Сначала нужен bump.",true},
- {TOOL_MODEL,L"RM",L"Rotate Model — вращение модели (6 / R). ЛКМ: поворот; ПКМ: камера. В анимации недоступно.",true},
- {0,L"",L""},
- {TOOL_FRAME,L"FT",L"Frame Target — приблизить выбранную геометрию (F). Без выделения: вместить все видимые меши."},
- {TOOL_ISOLATE,L"IS",L"Isolate Selection — оставить только выбранную геометрию (I). Повторное нажатие восстанавливает прежнюю видимость.",true},
- {TOOL_WIRE,L"WF",L"Wireframe — проверить треугольники модели (V). Повторное нажатие возвращает материал.",true},
- {0,L"",L""},
- {TOOL_UNDO,L"UN",L"Undo — отменить последний штрих (Ctrl+Z)."},
- {TOOL_APPLY,L"AP",L"Apply — применить слой кисти (Ctrl+S). Финальная пара DDS сохраняется кнопкой «Экспорт»."},
- {TOOL_RESET,L"RS",L"Reset View — вернуть начальную камеру и ориентацию модели (Home)."}
-};
-struct PageControl{HWND window=nullptr;RECT bounds{};bool decoration=false;};
-struct PageScroll{int contentHeight=0,offset=0;bool layingOut=false;std::vector<PageControl> items;};
-void scrollPage(HWND hwnd,PageScroll& page,int requested){
- if(page.layingOut)return;page.layingOut=true;
- RECT r{};GetClientRect(hwnd,&r);page.offset=std::clamp(requested,0,std::max(0,page.contentHeight-int(r.bottom)));
- SCROLLINFO si={sizeof(si),SIF_RANGE|SIF_PAGE|SIF_POS};si.nMin=0;si.nMax=std::max(0,page.contentHeight-1);si.nPage=UINT(std::max(1L,r.bottom));si.nPos=page.offset;
- SetScrollInfo(hwnd,SB_VERT,&si,TRUE);GetClientRect(hwnd,&r);
- auto horizontal=[&](LONG x){return MulDiv(int(x),int(r.right),ui(PANEL));};
- // Rebuild positions from immutable layout rectangles. Scrolling cached pixels
- // with SW_SCROLLCHILDREN corrupts partially clipped controls and group boxes.
- HDWP batch=BeginDeferWindowPos(int(page.items.size()));
- for(const auto& item:page.items){if(!batch)break;const RECT& b=item.bounds;
-  batch=DeferWindowPos(batch,item.window,nullptr,horizontal(b.left),b.top-page.offset,horizontal(b.right)-horizontal(b.left),b.bottom-b.top,SWP_NOZORDER|SWP_NOACTIVATE|SWP_NOREDRAW);
- }
- const bool placed=batch&&EndDeferWindowPos(batch);
- if(!placed)for(const auto& item:page.items){const RECT& b=item.bounds;SetWindowPos(item.window,nullptr,horizontal(b.left),b.top-page.offset,horizontal(b.right)-horizontal(b.left),b.bottom-b.top,SWP_NOZORDER|SWP_NOACTIVATE|SWP_NOREDRAW);}
- page.layingOut=false;
- RedrawWindow(hwnd,nullptr,nullptr,RDW_INVALIDATE|RDW_ERASE|RDW_ALLCHILDREN);
+std::string utf8(const std::wstring& text) {
+    if(text.empty())return {};
+    int size=WideCharToMultiByte(CP_UTF8,0,text.data(),int(text.size()),nullptr,0,nullptr,nullptr);
+    std::string result(size_t(size),'\0');
+    WideCharToMultiByte(CP_UTF8,0,text.data(),int(text.size()),result.data(),size,nullptr,nullptr);
+    return result;
 }
-LRESULT CALLBACK materialPageProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
- auto* page=reinterpret_cast<PageScroll*>(GetWindowLongPtrW(hwnd,GWLP_USERDATA));
- if(msg==WM_NCCREATE){page=reinterpret_cast<PageScroll*>(reinterpret_cast<CREATESTRUCTW*>(lp)->lpCreateParams);SetWindowLongPtrW(hwnd,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(page));}
- switch(msg){
-  case WM_ERASEBKGND:{RECT r{};GetClientRect(hwnd,&r);FillRect(reinterpret_cast<HDC>(wp),&r,panelBrush());return 1;}
-  case WM_PAINT:{PAINTSTRUCT ps;BeginPaint(hwnd,&ps);FillRect(ps.hdc,&ps.rcPaint,panelBrush());EndPaint(hwnd,&ps);return 0;}
-  case WM_SIZE:if(page)scrollPage(hwnd,*page,page->offset);return 0;
-  case WM_MOUSEWHEEL:if(page)scrollPage(hwnd,*page,page->offset-GET_WHEEL_DELTA_WPARAM(wp)*ui(48)/WHEEL_DELTA);return 0;
-  case WM_VSCROLL:if(page){int pos=page->offset;RECT r{};GetClientRect(hwnd,&r);switch(LOWORD(wp)){
-   case SB_LINEUP:pos-=ui(24);break;case SB_LINEDOWN:pos+=ui(24);break;
-   case SB_PAGEUP:pos-=r.bottom;break;case SB_PAGEDOWN:pos+=r.bottom;break;
-   case SB_THUMBTRACK:case SB_THUMBPOSITION:{SCROLLINFO si={sizeof(si),SIF_TRACKPOS};GetScrollInfo(hwnd,SB_VERT,&si);pos=si.nTrackPos;break;}
-   case SB_TOP:pos=0;break;case SB_BOTTOM:pos=page->contentHeight;break;
-  }scrollPage(hwnd,*page,pos);}return 0;
-  case WM_CTLCOLORSTATIC:case WM_CTLCOLORBTN:case WM_COMMAND:case WM_NOTIFY:case WM_HSCROLL:case WM_DRAWITEM:case WM_MEASUREITEM:
-   return SendMessageW(GetParent(hwnd),msg,wp,lp);
- }
- return DefWindowProcW(hwnd,msg,wp,lp);
+std::wstring wide(const std::string& text,UINT page=CP_UTF8) {
+    if(text.empty())return {};
+    int size=MultiByteToWideChar(page,0,text.data(),int(text.size()),nullptr,0);
+    std::wstring result(size_t(size),L'\0');
+    MultiByteToWideChar(page,0,text.data(),int(text.size()),result.data(),size);
+    return result;
 }
-
-struct BumpTargetDialogState{
- std::vector<size_t> ids;
- std::vector<std::wstring> labels;
- std::vector<size_t> result;
- int preferred=-1;
- HWND list=nullptr;
- bool done=false,accepted=false;
+std::wstring lower(std::wstring value) {
+    std::transform(value.begin(),value.end(),value.begin(),towlower);return value;
+}
+std::wstring safeName(std::wstring value) {
+    for(auto& c:value)if(c<32||wcschr(L"<>:\"/\\|?*",c))c=L'_';
+    while(!value.empty()&&(value.back()==L'.'||value.back()==L' '))value.pop_back();
+    if(value.empty()||value==L"."||value==L"..")value=L"material";
+    return value;
+}
+fs::path executableDirectory() {
+    std::vector<wchar_t> path(32768);
+    DWORD length=GetModuleFileNameW(nullptr,path.data(),DWORD(path.size()));
+    return length&&length<path.size()?fs::path(path.data()).parent_path():fs::current_path();
+}
+std::vector<uint8_t> readBytes(const fs::path& path) {
+    std::ifstream input(path,std::ios::binary|std::ios::ate);
+    if(!input)return {};
+    auto size=input.tellg();
+    if(size<=0||size>std::streamoff(512u*1024u*1024u))return {};
+    std::vector<uint8_t> bytes(static_cast<size_t>(size));
+    input.seekg(0);input.read(reinterpret_cast<char*>(bytes.data()),size);
+    return input?bytes:std::vector<uint8_t>{};
+}
+std::wstring chooseFile(HWND owner,const wchar_t* filter,const wchar_t* extension,bool save=false,const fs::path& initial={}) {
+    std::array<wchar_t,32768> path{};
+    if(!initial.empty())wcsncpy_s(path.data(),path.size(),initial.c_str(),_TRUNCATE);
+    OPENFILENAMEW options{};options.lStructSize=sizeof(options);options.hwndOwner=owner;
+    options.lpstrFilter=filter;options.lpstrFile=path.data();options.nMaxFile=DWORD(path.size());
+    options.lpstrDefExt=extension;options.Flags=OFN_EXPLORER|OFN_PATHMUSTEXIST|OFN_NOCHANGEDIR;
+    options.Flags|=save?OFN_OVERWRITEPROMPT:OFN_FILEMUSTEXIST;
+    bool selected=save?GetSaveFileNameW(&options)!=FALSE:GetOpenFileNameW(&options)!=FALSE;
+    return selected?std::wstring(path.data()):std::wstring{};
+}
+lab::Image loadImage(const fs::path& path,std::string& error) {
+    error.clear();
+    if(lower(path.extension().wstring())==L".dds")return lab::DecodeDDS(readBytes(path),error);
+    ComPtr<IWICImagingFactory> factory;ComPtr<IWICBitmapDecoder> decoder;
+    ComPtr<IWICBitmapFrameDecode> frame;ComPtr<IWICFormatConverter> converter;
+    HRESULT hr=CoCreateInstance(CLSID_WICImagingFactory,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(factory.GetAddressOf()));
+    if(SUCCEEDED(hr))hr=factory->CreateDecoderFromFilename(path.c_str(),nullptr,GENERIC_READ,WICDecodeMetadataCacheOnLoad,decoder.GetAddressOf());
+    if(SUCCEEDED(hr))hr=decoder->GetFrame(0,frame.GetAddressOf());
+    UINT w=0,h=0;if(SUCCEEDED(hr))hr=frame->GetSize(&w,&h);
+    if(FAILED(hr)||!w||!h||w>4096||h>4096){error="Не удалось прочитать изображение (максимум 4096×4096).";return {};}
+    hr=factory->CreateFormatConverter(converter.GetAddressOf());
+    if(SUCCEEDED(hr))hr=converter->Initialize(frame.Get(),GUID_WICPixelFormat32bppRGBA,WICBitmapDitherTypeNone,nullptr,0,WICBitmapPaletteTypeCustom);
+    lab::Image image;image.w=w;image.h=h;image.pixels.resize(size_t(w)*h);
+    if(SUCCEEDED(hr))hr=converter->CopyPixels(nullptr,w*4,UINT(image.pixels.size()*4),reinterpret_cast<BYTE*>(image.pixels.data()));
+    if(FAILED(hr)){error="Ошибка преобразования изображения в RGBA.";return {};}
+    return image;
+}
+fs::path textureRoot(const fs::path& model) {
+    for(fs::path p=model.parent_path();!p.empty();) {
+        if(lower(p.filename().wstring())==L"meshes")return p.parent_path()/L"textures";
+        std::error_code error;if(fs::is_directory(p/L"textures",error))return p/L"textures";
+        fs::path next=p.parent_path();if(next==p)break;p=next;
+    }
+    return {};
+}
+fs::path relativeAsset(std::string source) {
+    std::wstring text=wide(source,CP_ACP);std::replace(text.begin(),text.end(),L'/',L'\\');
+    auto normalized=lower(text);
+    for(const auto& prefix:{std::wstring(L"$game_textures$\\"),std::wstring(L"textures\\")})
+        if(normalized.rfind(prefix,0)==0){text.erase(0,prefix.size());break;}
+    fs::path result(text);
+    if(result.is_absolute()||result.has_root_name())return {};
+    for(const auto& component:result)if(component==L"..")return {};
+    return result;
+}
+std::wstring materialIdentity(const fs::path& file) {
+    std::error_code error;auto result=fs::weakly_canonical(file,error);
+    return lower((error?file.lexically_normal():result).wstring());
+}
+void loadExternalMotions(const fs::path& model,lab::Mesh& mesh) {
+    if(!mesh.motions.empty())return;
+    std::vector<fs::path> references;
+    for(const auto& ref:mesh.motionRefs){auto file=relativeAsset(ref);if(file.empty())continue;if(file.extension().empty())file+=L".omf";references.push_back(file);}
+    if(references.empty())references.push_back(model.stem().wstring()+L".omf");
+    for(const auto& ref:references)for(const auto& base:{model.parent_path(),model.parent_path().parent_path()}) {
+        for(const auto& file:{base/ref,base/ref.filename()}) {
+            auto bytes=readBytes(file);if(bytes.empty())continue;
+            std::string error;if(lab::LoadOGFMotions(bytes,mesh,error))return;
+        }
+    }
+}
+COLORREF colorRef(const float* color) {
+    return RGB(int(std::clamp(color[0],0.f,1.f)*255+.5f),int(std::clamp(color[1],0.f,1.f)*255+.5f),int(std::clamp(color[2],0.f,1.f)*255+.5f));
+}
+RECT monitorWorkArea(HWND window) {
+    MONITORINFO info{};info.cbSize=sizeof(info);
+    if(GetMonitorInfoW(MonitorFromWindow(window,MONITOR_DEFAULTTOPRIMARY),&info))return info.rcWork;
+    return RECT{0,0,GetSystemMetrics(SM_CXSCREEN),GetSystemMetrics(SM_CYSCREEN)};
+}
+struct Material {
+    std::wstring key;
+    std::string label="material";
+    lab::Sources sources;
+    std::array<fs::path,6> paths;
+    lab::BumpPair loadedPair;
+    std::unique_ptr<lab::MaterialDocument> document;
+    std::vector<uint8_t> originalDDS,originalDDSX;
+    fs::path sessionPath;
+    bool hasBump()const{return document?document->Valid():loadedPair.bump.valid()&&loadedPair.bumpX.valid();}
 };
-LRESULT CALLBACK bumpTargetProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
- auto* st=reinterpret_cast<BumpTargetDialogState*>(GetWindowLongPtrW(hwnd,GWLP_USERDATA));
- if(msg==WM_NCCREATE){st=reinterpret_cast<BumpTargetDialogState*>(reinterpret_cast<CREATESTRUCTW*>(lp)->lpCreateParams);SetWindowLongPtrW(hwnd,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(st));}
- if(!st)return DefWindowProcW(hwnd,msg,wp,lp);
- switch(msg){
-  case WM_CREATE:{
-   HFONT font=reinterpret_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
-   st->list=CreateWindowExW(WS_EX_CLIENTEDGE,WC_LISTVIEWW,L"",WS_CHILD|WS_VISIBLE|LVS_REPORT|LVS_NOCOLUMNHEADER|LVS_SHOWSELALWAYS,12,12,430,240,hwnd,reinterpret_cast<HMENU>(1000),GetModuleHandleW(nullptr),nullptr);
-   SendMessageW(st->list,WM_SETFONT,reinterpret_cast<WPARAM>(font),TRUE);ListView_SetExtendedListViewStyle(st->list,LVS_EX_CHECKBOXES|LVS_EX_FULLROWSELECT|LVS_EX_DOUBLEBUFFER);LVCOLUMNW col={};col.mask=LVCF_WIDTH;col.cx=400;ListView_InsertColumn(st->list,0,&col);
-   for(size_t i=0;i<st->ids.size();++i){LVITEMW item={};item.mask=LVIF_TEXT;item.iItem=int(i);item.pszText=st->labels[i].data();ListView_InsertItem(st->list,&item);const bool checked=st->preferred>=0?int(st->ids[i])==st->preferred:true;ListView_SetCheckState(st->list,int(i),checked?TRUE:FALSE);}
-   auto mk=[&](int id,const wchar_t* txt,int x,int w){HWND b=CreateWindowExW(0,L"BUTTON",txt,WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON,x,264,w,30,hwnd,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);SendMessageW(b,WM_SETFONT,reinterpret_cast<WPARAM>(font),TRUE);};
-   mk(1001,L"Все",12,100);mk(IDOK,L"ОК",250,90);mk(IDCANCEL,L"Отмена",350,90);return 0;
-  }
-  case WM_COMMAND:{const int id=LOWORD(wp);if(id==1001){for(int i=0;i<ListView_GetItemCount(st->list);++i)ListView_SetCheckState(st->list,i,TRUE);return 0;}if(id==IDOK){st->result.clear();for(int i=0;i<ListView_GetItemCount(st->list);++i)if(ListView_GetCheckState(st->list,i))st->result.push_back(st->ids[size_t(i)]);st->accepted=true;st->done=true;DestroyWindow(hwnd);return 0;}if(id==IDCANCEL){st->accepted=false;st->done=true;DestroyWindow(hwnd);return 0;}break;}
-  case WM_CLOSE:st->accepted=false;st->done=true;DestroyWindow(hwnd);return 0;
- }
- return DefWindowProcW(hwnd,msg,wp,lp);
-}
-bool chooseBumpTargets(HWND owner,const std::vector<size_t>& ids,const std::vector<std::wstring>& labels,int preferred,std::vector<size_t>& result){
- result.clear();if(ids.empty())return false;if(ids.size()==1){result=ids;return true;}
- static bool registered=false;if(!registered){WNDCLASSEXW wc={sizeof(wc)};wc.hInstance=GetModuleHandleW(nullptr);wc.lpfnWndProc=bumpTargetProc;wc.lpszClassName=L"KichRayBumpTargetDialog";wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);wc.hbrBackground=reinterpret_cast<HBRUSH>(COLOR_BTNFACE+1);if(!RegisterClassExW(&wc)&&GetLastError()!=ERROR_CLASS_ALREADY_EXISTS)return false;registered=true;}
- BumpTargetDialogState st;st.ids=ids;st.labels=labels;st.preferred=preferred;RECT orc{};GetWindowRect(owner,&orc);const int w=466,h=336,x=int(orc.left)+std::max(0,(int(orc.right-orc.left)-w)/2),y=int(orc.top)+std::max(0,(int(orc.bottom-orc.top)-h)/2);
- HWND dlg=CreateWindowExW(WS_EX_DLGMODALFRAME|WS_EX_CONTROLPARENT,L"KichRayBumpTargetDialog",L"Создать bump для мешей",WS_POPUP|WS_CAPTION|WS_SYSMENU,x,y,w,h,owner,nullptr,GetModuleHandleW(nullptr),&st);if(!dlg)return false;
- EnableWindow(owner,FALSE);ShowWindow(dlg,SW_SHOW);UpdateWindow(dlg);MSG msg;while(!st.done&&GetMessageW(&msg,nullptr,0,0)>0){if(!IsDialogMessageW(dlg,&msg)){TranslateMessage(&msg);DispatchMessageW(&msg);}}EnableWindow(owner,TRUE);SetForegroundWindow(owner);if(st.accepted)result=std::move(st.result);return st.accepted&&!result.empty();
-}
+struct MeshRow {std::string label;std::shared_ptr<Material> material;};
+enum class Drag {None,Orbit,Pan,Light,Model,Brush};
 
 class App {
- HWND window_=nullptr,preview_=nullptr,status_=nullptr,tab_=nullptr,pageHost_=nullptr,pages_[TAB_COUNT]={},controls_[640]={};HFONT font_=nullptr;lab::ViewportToolbar toolbar_;PageScroll pageScroll_[TAB_COUNT];
- ViewMode viewMode_=ViewMode::Fly;bool outline_=true,wireframe_=false;std::vector<bool> isolatedVisibility_;
- POINT brushScreen_{};bool brushScreenValid_=false;ULONGLONG viewLastTick_=0,hoverLastTick_=0;
- bool ready_=false,useImported_=false,autoModelMaterials_=false,selectionMode_=false,lDown_=false,rDown_=false,mDown_=false,animationTab_=false,animPlaying_=false,generatedBumpMode_=false;
- bool meshListUpdating_=false,brushMode_=false,brushDown_=false,brushDirty_=false,manualBumpAvailable_=false,modelRotateMode_=false;POINT last_{};
- std::vector<HWND> tabItems_[TAB_COUNT];lab::Sources sources_;lab::Image importedBump_,importedBumpX_;lab::Settings settings_;lab::Renderer render_;lab::Mesh currentMesh_;std::filesystem::path modelPath_,manualTexturePath_;
- std::vector<PartMaterial> materials_;std::unordered_map<std::wstring,std::shared_ptr<lab::Image>> paintedNormals_;std::unordered_map<std::wstring,std::shared_ptr<lab::GrayImage>> paintedGloss_,paintedHeight_;std::unordered_set<std::wstring> generatedBumpKeys_;
- lab::Image brushPreset_=lab::MakeDefaultNormalPreset();lab::Image brushDiffuse_,brushBaseNormal_;lab::GrayImage brushCoverage_,brushBaseScalar_;std::wstring brushDiffuseKey_,brushCoverageKey_;BrushTarget brushTarget_=BrushTarget::Relief;float brushRadiusUv_=0.03f,brushStrength_=0.35f,brushHardness_=0.65f;bool brushInvert_=false;ULONGLONG lastBrushPreview_=0;
- std::deque<BrushUndoStep> brushUndo_;BrushUndoStep currentUndo_;std::unordered_set<uint64_t> currentUndoTiles_;std::unordered_set<std::wstring> brushDirtyKeys_;size_t brushUndoBytes_=0;
- size_t animIndex_=0;float animTime_=0.f,animSpeed_=1.f;ULONGLONG animLastTick_=0;
+    HWND window_=nullptr;
+    lab::Renderer renderer_;
+    lab::EditorUIState ui_;
+    std::vector<MeshRow> meshes_;
+    fs::path modelPath_;
+    lab::Image preset_=lab::MakeDefaultNormalPreset();
+    Drag drag_=Drag::None;
+    int dragButton_=-1;
+    bool running_=true,imguiReady_=false,minimized_=false,viewportFocus_=false;
+    bool deviceLost_=false,recoveryAttempted_=false;
+    int exitCode_=0;
+    float dpiScale_=1.f,animationTime_=0.f;
+    POINT lastBrush_{};bool lastBrushValid_=false;
+    std::shared_ptr<Material> strokeMaterial_;
+    std::vector<bool> isolation_;
+    ULONGLONG lastTick_=0,lastBrushUpload_=0;
 
- void status(const std::wstring& s){if(status_)SetWindowTextW(status_,s.c_str());syncTools();}
- float brushStrengthFromSlider(int value)const{const float t=std::clamp(value/1000.f,0.f,1.f);return t*t*t;}
- HWND control(int tab,int id,const wchar_t* klass,const wchar_t* text,int x,int y,int w,int h,DWORD style=0){HWND parent=window_;int localY=y;if(tab>=0&&tab<TAB_COUNT&&pages_[tab]){parent=pages_[tab];localY=std::max(0,y-PAGE_TOP);}HWND c=CreateWindowExW(0,klass,text,WS_CHILD|WS_VISIBLE|WS_CLIPSIBLINGS|style,ui(x),ui(localY),ui(w),ui(h),parent,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);if(c){const bool decoration=lstrcmpiW(klass,L"BUTTON")==0&&(style&BS_TYPEMASK)==BS_GROUPBOX;SetWindowPos(c,decoration?HWND_BOTTOM:HWND_TOP,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);if(id>0&&id<640)controls_[id]=c;if(tab>=0&&tab<TAB_COUNT){tabItems_[tab].push_back(c);pageScroll_[tab].items.push_back({c,{ui(x),ui(localY),ui(x+w),ui(localY+h)},decoration});RECT bounds{};GetWindowRect(c,&bounds);pageScroll_[tab].contentHeight=std::max(pageScroll_[tab].contentHeight,ui(localY+16)+int(bounds.bottom-bounds.top));}SendMessageW(c,WM_SETFONT,reinterpret_cast<WPARAM>(font_),TRUE);if(lstrcmpiW(klass,WC_LISTVIEWW)==0)SetWindowTheme(c,L"Explorer",nullptr);}return c;}
- void label(int tab,const wchar_t* txt,int y){control(tab,0,L"STATIC",txt,12,y,PANEL-36,20,SS_LEFT);}
- void button(int tab,int id,const wchar_t* text,int y,int h=31){control(tab,id,L"BUTTON",text,12,y,PANEL-24,h,BS_PUSHBUTTON|WS_TABSTOP);}
- void group(int tab,const wchar_t* text,int y,int h){control(tab,0,L"BUTTON",text,6,y,PANEL-12,h,BS_GROUPBOX);}
- HWND slider(int tab,int id,int y,int lo,int hi,int value){HWND h=control(tab,id,TRACKBAR_CLASSW,L"",12,y,PANEL-24,32,TBS_NOTICKS|WS_TABSTOP);SendMessageW(h,TBM_SETRANGEMIN,FALSE,lo);SendMessageW(h,TBM_SETRANGEMAX,TRUE,hi);SendMessageW(h,TBM_SETPOS,TRUE,value);return h;}
- bool animationPageActive()const{return animationTab_&&tab_&&TabCtrl_GetCurSel(tab_)==ANIM_TAB;}
- bool editingLocked()const{return animPlaying_;}
- void showTab(int selected){
-  const int count=tab_?TabCtrl_GetItemCount(tab_):0;if(selected<0||selected>=count)selected=0;
-  if(tab_)TabCtrl_SetCurSel(tab_,selected);
-  HWND focus=GetFocus();
-  for(int t=0;t<TAB_COUNT;++t){if(t==selected||!pages_[t])continue;
-   if(focus&&(focus==pages_[t]||IsChild(pages_[t],focus)))SetFocus(tab_);
-   // Hide the controls as well as their page. A stale repaint or focus change
-   // must never expose controls belonging to a different tab.
-   ShowWindow(pages_[t],SW_HIDE);EnableWindow(pages_[t],FALSE);
-   for(HWND control:tabItems_[t])ShowWindow(control,SW_HIDE);
-  }
-  if(pages_[selected]){
-   for(const auto& item:pageScroll_[selected].items)SetWindowPos(item.window,item.decoration?HWND_BOTTOM:HWND_TOP,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE|SWP_SHOWWINDOW);
-   EnableWindow(pages_[selected],TRUE);
-   scrollPage(pages_[selected],pageScroll_[selected],pageScroll_[selected].offset);
-   SetWindowPos(pages_[selected],HWND_TOP,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE|SWP_SHOWWINDOW);
-   RedrawWindow(pages_[selected],nullptr,nullptr,RDW_INVALIDATE|RDW_ERASE|RDW_ALLCHILDREN|RDW_UPDATENOW);
-  }
-  if(pageHost_)RedrawWindow(pageHost_,nullptr,nullptr,RDW_INVALIDATE|RDW_ERASE|RDW_ALLCHILDREN);
- }
- void layout(){
-  if(!window_||!preview_)return;RECT r{};GetClientRect(window_,&r);
-  const int w=std::max(1L,r.right),h=std::max(1L,r.bottom),panel=ui(PANEL);
-  const int contentH=std::max(1,h-ui(32)),viewH=std::max(1,contentH-ui(lab::ViewportToolbar::Height));
-  const int pageHeight=std::max(1,contentH-ui(PAGE_TOP));
-  if(pageHost_)MoveWindow(pageHost_,0,ui(PAGE_TOP),panel,pageHeight,TRUE);
-  for(int t=0;t<TAB_COUNT;++t)if(pages_[t])MoveWindow(pages_[t],0,0,panel,pageHeight,IsWindowVisible(pages_[t]));
-  MoveWindow(preview_,panel,0,std::max(1,w-panel),viewH,TRUE);
-  toolbar_.layout(panel,viewH,std::max(1,w-panel));
-  if(status_)MoveWindow(status_,ui(12),contentH+ui(7),std::max(1,w-ui(24)),ui(22),TRUE);
-  InvalidateRect(window_,nullptr,TRUE);
- }
- void syncTools(){
-  if(!toolbar_.window())return;
-  const int modes[]={TOOL_FLY,TOOL_ORBIT,TOOL_CHOOSE,TOOL_LIGHT,TOOL_BRUSH,TOOL_MODEL};
-  for(int i=0;i<6;++i)toolbar_.check(modes[i],int(viewMode_)==i);
-  toolbar_.check(TOOL_OUTLINE,outline_);toolbar_.check(TOOL_WIRE,wireframe_);toolbar_.check(TOOL_ISOLATE,!isolatedVisibility_.empty());
-  toolbar_.enable(TOOL_CHOOSE,!editingLocked());toolbar_.enable(TOOL_BRUSH,!editingLocked()&&anyEditableBump());
-  toolbar_.enable(TOOL_MODEL,!editingLocked()&&!animationPageActive());
-  toolbar_.enable(TOOL_ISOLATE,!editingLocked()&&(render_.HasSelection()||!isolatedVisibility_.empty()));
-  toolbar_.enable(TOOL_UNDO,!editingLocked()&&!brushUndo_.empty());toolbar_.enable(TOOL_APPLY,!editingLocked()&&brushDirty_);
-  toolbar_.enable(TOOL_RESET,!editingLocked());
-  if(controls_[SELECT_MODE])SendMessageW(controls_[SELECT_MODE],BM_SETCHECK,selectionMode_?BST_CHECKED:BST_UNCHECKED,0);
-  if(controls_[BRUSH_MODE])SendMessageW(controls_[BRUSH_MODE],BM_SETCHECK,brushMode_?BST_CHECKED:BST_UNCHECKED,0);
-  const wchar_t* hints[]={L"FC · Полёт  |  WASD / QE · Shift быстрее  |  Мышь с ЛКМ/ПКМ: осмотр",
-   L"OC · Орбита  |  ЛКМ: камера  |  СКМ: панорама  |  Колесо: масштаб",
-   L"CM · Выбор меша  |  ЛКМ: выбрать  |  ПКМ: снять  |  F: приблизить",
-   L"RL · Свет  |  ЛКМ: вращение света  |  ПКМ: камера  |  СКМ: панорама",
-   L"BR · Кисть  |  ЛКМ: штрих  |  ПКМ: камера  |  [ ]: размер  |  X: инверсия",
-   L"RM · Модель  |  ЛКМ: вращение модели  |  ПКМ: камера  |  Home: сброс"};
-  std::wstring hint=hints[int(viewMode_)];if(render_.SelectedPart()>=0)hint+=L"  · Mesh "+std::to_wstring(render_.SelectedPart()+1);
-  if(brushDirty_)hint+=L"  · * слой не применён";toolbar_.text(hint.c_str());
- }
- void endInteraction(bool release=true){
-  const bool lightMoved=(lDown_&&viewMode_==ViewMode::Light);
-  if(brushDown_){const int part=currentUndo_.part;brushDown_=false;finishBrushStroke();if(part>=0)updateBrushPreview(size_t(part));}
-  lDown_=rDown_=mDown_=false;brushScreenValid_=false;
-  if(release&&GetCapture()==preview_)ReleaseCapture();
-  if(lightMoved)syncLightFromRenderer();
- }
- void setMode(ViewMode mode){
-  if(editingLocked()&&(mode==ViewMode::Choose||mode==ViewMode::Brush||mode==ViewMode::Model)){syncTools();return;}
-  if(mode==ViewMode::Model&&animationPageActive()){status(L"Вращение модели недоступно во вкладке анимации");return;}
-  if(mode==ViewMode::Brush&&!anyEditableBump()){status(L"Кисть недоступна: сначала загрузите или создайте bump");return;}
-  endInteraction();viewMode_=mode;selectionMode_=mode==ViewMode::Choose;brushMode_=mode==ViewMode::Brush;modelRotateMode_=mode==ViewMode::Model;
-  render_.FlyCameraEnabled(mode==ViewMode::Fly);render_.ClearHover();render_.ClearBrushCursor();
-  render_.SetNormalSettings(brushMode_?1.f:settings_.normalStrength,brushMode_?false:settings_.invertY);
-  render_.SetGlossStrength(brushMode_?.5f:settings_.gloss);
-  if(brushMode_&&TabCtrl_GetCurSel(tab_)!=BRUSH_TAB){returnToBindPose();TabCtrl_SetCurSel(tab_,BRUSH_TAB);showTab(BRUSH_TAB);}
-  syncTools();InvalidateRect(preview_,nullptr,FALSE);
- }
- void activateTab(int selected){
-  endInteraction();
-  if(selected!=ANIM_TAB)returnToBindPose();else{setMode(ViewMode::Fly);returnToBindPose();}
-  showTab(selected);syncTools();InvalidateRect(preview_,nullptr,FALSE);
- }
- void tickView(){
-  const ULONGLONG now=GetTickCount64();const float dt=std::min(.05f,float(now-viewLastTick_)/1000.f);viewLastTick_=now;
-  if(!ready_||viewMode_!=ViewMode::Fly||GetFocus()!=preview_||GetForegroundWindow()!=window_)return;
-  auto down=[](int key){return (GetAsyncKeyState(key)&0x8000)!=0;};
-  float x=float(down('D'))-float(down('A')),y=float(down('E'))-float(down('Q')),z=float(down('W'))-float(down('S'));
-  const float length=std::sqrt(x*x+y*y+z*z);if(length==0)return;
-  const float amount=dt*1.4f*(down(VK_SHIFT)?4.f:1.f)*(down(VK_CONTROL)?.2f:1.f)/length;
-  render_.MoveCamera(x*amount,y*amount,z*amount);InvalidateRect(preview_,nullptr,FALSE);
- }
- void restoreIsolation(){
-  if(isolatedVisibility_.empty())return;meshListUpdating_=true;
-  for(size_t i=0;i<isolatedVisibility_.size()&&i<render_.PartCount();++i){render_.SetPartVisible(i,isolatedVisibility_[i]);ListView_SetCheckState(controls_[MESH_LIST],int(i),isolatedVisibility_[i]);}
-  meshListUpdating_=false;isolatedVisibility_.clear();syncTools();
- }
- void toggleIsolation(){
-  endInteraction();if(!isolatedVisibility_.empty())restoreIsolation();else{
-   if(!render_.HasSelection())return;meshListUpdating_=true;
-   for(size_t i=0;i<render_.PartCount();++i){isolatedVisibility_.push_back(render_.PartVisible(i));const bool visible=render_.PartSelected(i);render_.SetPartVisible(i,visible);ListView_SetCheckState(controls_[MESH_LIST],int(i),visible);}
-   meshListUpdating_=false;
-  }refreshBrushAvailability();syncTools();InvalidateRect(preview_,nullptr,FALSE);
- }
- void adjustBrushRadius(int delta){
-  if(!brushMode_||brushDown_)return;const int value=int(SendMessageW(controls_[BRUSH_RADIUS],TBM_GETPOS,0,0));
-  SendMessageW(controls_[BRUSH_RADIUS],TBM_SETPOS,TRUE,std::clamp(value+delta,1,200));movedSlider(BRUSH_RADIUS);
- }
- void saveLight(){if(!controls_[SLIDER_LIGHT_AZ]||!controls_[SLIDER_LIGHT_EL])return;wchar_t a[32],e[32];swprintf_s(a,L"%d",int(SendMessageW(controls_[SLIDER_LIGHT_AZ],TBM_GETPOS,0,0)));swprintf_s(e,L"%d",int(SendMessageW(controls_[SLIDER_LIGHT_EL],TBM_GETPOS,0,0)));auto p=prefsPath();WritePrivateProfileStringW(L"Scene",L"LightAzimuth",a,p.c_str());WritePrivateProfileStringW(L"Scene",L"LightElevation",e,p.c_str());}
- void loadLight(){auto p=prefsPath();int az=GetPrivateProfileIntW(L"Scene",L"LightAzimuth",52,p.c_str());int el=GetPrivateProfileIntW(L"Scene",L"LightElevation",37,p.c_str());az=std::max(0,std::min(360,az));el=std::max(-80,std::min(80,el));SendMessageW(controls_[SLIDER_LIGHT_AZ],TBM_SETPOS,TRUE,az);SendMessageW(controls_[SLIDER_LIGHT_EL],TBM_SETPOS,TRUE,el);render_.SetLightOrbitDegrees(float(az),float(el));}
- void syncLightFromRenderer(){int az=int(std::lround(render_.LightAzimuthDegrees()));int el=int(std::lround(render_.LightElevationDegrees()));SendMessageW(controls_[SLIDER_LIGHT_AZ],TBM_SETPOS,TRUE,az);SendMessageW(controls_[SLIDER_LIGHT_EL],TBM_SETPOS,TRUE,el);saveLight();}
-
- std::filesystem::path tempModelDir()const{std::wstring label=!modelPath_.empty()?cleanName(modelPath_.stem().wstring()):(!manualTexturePath_.empty()?cleanName(manualTexturePath_.stem().wstring()):L"manual");if(label.empty())label=L"material";const std::wstring identity=!modelPath_.empty()?pathKey(modelPath_):(!manualTexturePath_.empty()?pathKey(manualTexturePath_):L"manual");wchar_t hash[24]={};swprintf_s(hash,L"_%016llx",static_cast<unsigned long long>(fnv1a64(identity)));return exeDir()/L"temp"/(label+hash);}
- std::filesystem::path tempLayerPath(const std::wstring& key,const wchar_t* stage)const{wchar_t hash[24]={};swprintf_s(hash,L"%016llx",static_cast<unsigned long long>(fnv1a64(key)));return tempModelDir()/(std::wstring(hash)+L"_"+stage+L".krlt");}
- bool saveTempLayers(const std::wstring& key,const wchar_t* stage,const lab::Image& normal,const lab::GrayImage& gloss,const lab::GrayImage& height){if(!normal.valid()||!gloss.valid()||!height.valid()||normal.w!=gloss.w||normal.h!=gloss.h||normal.w!=height.w||normal.h!=height.h)return false;std::error_code ec;std::filesystem::create_directories(tempModelDir(),ec);if(ec)return false;const auto final=tempLayerPath(key,stage);auto staging=final;staging+=L".writing";std::ofstream out(staging,std::ios::binary|std::ios::trunc);if(!out)return false;const char magic[4]={'K','R','L','T'};const uint32_t version=1;out.write(magic,4);out.write(reinterpret_cast<const char*>(&version),4);out.write(reinterpret_cast<const char*>(&normal.w),4);out.write(reinterpret_cast<const char*>(&normal.h),4);out.write(reinterpret_cast<const char*>(normal.pixels.data()),std::streamsize(normal.pixels.size()*sizeof(lab::Pixel)));out.write(reinterpret_cast<const char*>(gloss.pixels.data()),std::streamsize(gloss.pixels.size()));out.write(reinterpret_cast<const char*>(height.pixels.data()),std::streamsize(height.pixels.size()));out.flush();const bool written=bool(out);out.close();if(!written||!out){std::filesystem::remove(staging,ec);return false;}if(!MoveFileExW(staging.c_str(),final.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)){std::filesystem::remove(staging,ec);return false;}return true;}
- bool loadTempLayers(const std::wstring& key,const wchar_t* stage,lab::Image& normal,lab::GrayImage& gloss,lab::GrayImage& height)const{normal={};gloss={};height={};std::ifstream in(tempLayerPath(key,stage),std::ios::binary);if(!in)return false;char magic[4]{};uint32_t version=0,w=0,h=0;in.read(magic,4);in.read(reinterpret_cast<char*>(&version),4);in.read(reinterpret_cast<char*>(&w),4);in.read(reinterpret_cast<char*>(&h),4);if(!in||std::memcmp(magic,"KRLT",4)!=0||version!=1||!w||!h||w>4096||h>4096||size_t(w)*h>16777216u)return false;normal.w=w;normal.h=h;normal.pixels.resize(size_t(w)*h);gloss.w=w;gloss.h=h;gloss.pixels.resize(size_t(w)*h);height.w=w;height.h=h;height.pixels.resize(size_t(w)*h);in.read(reinterpret_cast<char*>(normal.pixels.data()),std::streamsize(normal.pixels.size()*sizeof(lab::Pixel)));in.read(reinterpret_cast<char*>(gloss.pixels.data()),std::streamsize(gloss.pixels.size()));in.read(reinterpret_cast<char*>(height.pixels.data()),std::streamsize(height.pixels.size()));if(!in){normal={};gloss={};height={};return false;}return true;}
- bool saveBaseFromPair(const std::wstring& key,const lab::BumpPair& pair){if(!pair.bump.valid()||!pair.bumpX.valid())return false;lab::Image n=lab::UnpackNormalMap(pair.bump,pair.bumpX);lab::GrayImage g=lab::UnpackGlossGray(pair.bump),h=lab::UnpackHeightGray(pair.bumpX);return saveTempLayers(key,L"base",n,g,h);}
- void clearBrushForKey(const std::wstring& key){paintedNormals_.erase(key);paintedGloss_.erase(key);paintedHeight_.erase(key);brushDirtyKeys_.erase(key);std::error_code ec;std::filesystem::remove(tempLayerPath(key,L"brush"),ec);resetBrushCoverage();brushUndo_.clear();currentUndo_={};currentUndoTiles_.clear();brushUndoBytes_=0;brushDirty_=!brushDirtyKeys_.empty();}
-
- void resetBrushCoverage(){brushCoverage_={};brushCoverageKey_.clear();brushBaseNormal_={};brushBaseScalar_={};}
- bool brushNormalTarget()const{return brushTarget_==BrushTarget::Relief||brushTarget_==BrushTarget::Sharp||brushTarget_==BrushTarget::Blur;}
- bool brushGlossTarget()const{return brushTarget_==BrushTarget::GlossAdd||brushTarget_==BrushTarget::GlossSub;}
- const wchar_t* brushTargetName()const{switch(brushTarget_){case BrushTarget::Relief:return L"Рельеф";case BrushTarget::HeightAdd:return L"Высота +";case BrushTarget::HeightSub:return L"Впадина";case BrushTarget::GlossAdd:return L"Блеск +";case BrushTarget::GlossSub:return L"Блеск -";case BrushTarget::Sharp:return L"Sharp";case BrushTarget::Blur:return L"Blur";}return L"Кисть";}
- BrushTarget effectiveBrushTarget()const{if(!brushInvert_)return brushTarget_;switch(brushTarget_){case BrushTarget::HeightAdd:return BrushTarget::HeightSub;case BrushTarget::HeightSub:return BrushTarget::HeightAdd;case BrushTarget::GlossAdd:return BrushTarget::GlossSub;case BrushTarget::GlossSub:return BrushTarget::GlossAdd;case BrushTarget::Sharp:return BrushTarget::Blur;case BrushTarget::Blur:return BrushTarget::Sharp;default:return brushTarget_;}}
- void setBrushTarget(BrushTarget target,int controlId){brushTarget_=target;resetBrushCoverage();const int ids[]={BRUSH_TARGET_RELIEF,BRUSH_TARGET_HEIGHT_ADD,BRUSH_TARGET_HEIGHT_SUB,BRUSH_TARGET_GLOSS_ADD,BRUSH_TARGET_GLOSS_SUB,BRUSH_TARGET_SHARP,BRUSH_TARGET_BLUR};for(int id:ids)if(controls_[id])SendMessageW(controls_[id],BM_SETCHECK,id==controlId?BST_CHECKED:BST_UNCHECKED,0);status(std::wstring(L"Кисть: ")+brushTargetName());}
- void ensureBrushBase(const std::wstring& key,const lab::Image& normal,const lab::GrayImage& gloss,const lab::GrayImage& height){if(brushCoverageKey_!=key){resetBrushCoverage();brushCoverageKey_=key;}if(brushNormalTarget()){if(!brushBaseNormal_.valid()||brushBaseNormal_.w!=normal.w||brushBaseNormal_.h!=normal.h)brushBaseNormal_=normal;}else{const lab::GrayImage& src=brushGlossTarget()?gloss:height;if(!brushBaseScalar_.valid()||brushBaseScalar_.w!=src.w||brushBaseScalar_.h!=src.h)brushBaseScalar_=src;}}
- bool hasEditableBump(size_t part)const{
-  if(materials_.empty())return sources_.diffuse.valid()&&(manualBumpAvailable_||(useImported_&&importedBump_.valid()&&importedBumpX_.valid()));
-  if(part>=materials_.size()||!render_.PartVisible(part))return false;const std::wstring key=materialKey(part);return materials_[part].hasBump||generatedBumpKeys_.find(key)!=generatedBumpKeys_.end();
- }
- bool anyEditableBump()const{if(materials_.empty())return hasEditableBump(0);if(render_.HasSelection()){for(size_t i=0;i<materials_.size();++i)if(render_.PartSelected(i)&&hasEditableBump(i))return true;return false;}for(size_t i=0;i<materials_.size();++i)if(hasEditableBump(i))return true;return false;}
- void refreshBrushAvailability(){if(!controls_[BRUSH_MODE])return;const bool ok=anyEditableBump()&&!editingLocked();EnableWindow(controls_[BRUSH_MODE],ok?TRUE:FALSE);if(!ok&&brushMode_)setMode(ViewMode::Fly);syncTools();}
- std::wstring materialKey(size_t part)const{if(part<materials_.size()&&!materials_[part].key.empty())return materials_[part].key;if(!manualTexturePath_.empty())return pathKey(manualTexturePath_);return L"__manual__";}
- bool loadPartDiffuse(size_t part,lab::Image& out,bool preview=false){out={};if(!materials_.empty()&&(part>=materials_.size()||!render_.PartVisible(part)))return false;if(part<materials_.size()&&materials_[part].hasDiffuse){std::wstring e;out=loadImage(materials_[part].diffuse.wstring(),e);if(!out.valid()){status(e);return false;}if(preview&&std::max(out.w,out.h)>PREVIEW_MAX)out=lab::ResizeImageMax(out,PREVIEW_MAX);return out.valid();}if(sources_.diffuse.valid()){out=sources_.diffuse;if(preview&&std::max(out.w,out.h)>PREVIEW_MAX)out=lab::ResizeImageMax(out,PREVIEW_MAX);return true;}return false;}
- bool ensurePaintLayers(size_t part,bool create,std::shared_ptr<lab::Image>& normal,std::shared_ptr<lab::GrayImage>& gloss,std::shared_ptr<lab::GrayImage>& height){
-  if(!hasEditableBump(part))return false;const std::wstring key=materialKey(part);auto ni=paintedNormals_.find(key);auto gi=paintedGloss_.find(key);auto hi=paintedHeight_.find(key);if(ni!=paintedNormals_.end()&&gi!=paintedGloss_.end()&&hi!=paintedHeight_.end()){normal=ni->second;gloss=gi->second;height=hi->second;return true;}if(!create)return false;
-  lab::Image baseNormal;lab::GrayImage baseGloss,baseHeight;
-  // A committed brush snapshot is already the full composite. Otherwise use
-  // the frozen slider-generated base. Neither path is re-run through Sobel.
-  if(loadTempLayers(key,L"brush",baseNormal,baseGloss,baseHeight)){
-   // loaded exact composite from temp
-  }else if(loadTempLayers(key,L"base",baseNormal,baseGloss,baseHeight)){
-   // loaded exact slider-generated base from temp
-  }else if(part<materials_.size()&&materials_[part].hasDiffuse){
-   if(brushDiffuseKey_!=key||!brushDiffuse_.valid()){std::wstring e;brushDiffuse_=loadImage(materials_[part].diffuse.wstring(),e);if(brushDiffuse_.valid()&&std::max(brushDiffuse_.w,brushDiffuse_.h)>BRUSH_MAX)brushDiffuse_=lab::ResizeImageMax(brushDiffuse_,BRUSH_MAX);brushDiffuseKey_=key;if(!brushDiffuse_.valid()){status(e);return false;}}
-   if(materials_[part].hasBump){std::wstring e1,e2;auto b=loadImage(materials_[part].bump.wstring(),e1);if(b.valid()&&std::max(b.w,b.h)>BRUSH_MAX)b=lab::ResizeImageMax(b,BRUSH_MAX);auto bx=loadImage(materials_[part].bumpX.wstring(),e2);if(bx.valid()&&std::max(bx.w,bx.h)>BRUSH_MAX)bx=lab::ResizeImageMax(bx,BRUSH_MAX);if(b.valid()&&bx.valid()){baseNormal=lab::UnpackNormalMap(b,bx);baseGloss=lab::UnpackGlossGray(b);baseHeight=lab::UnpackHeightGray(bx);}}
-   if(!baseNormal.valid())return false;
-  }else if(sources_.diffuse.valid()){
-   if(importedBump_.valid()&&importedBumpX_.valid()){lab::Image b=lab::ResizeImageMax(importedBump_,BRUSH_MAX),bx=lab::ResizeImageMax(importedBumpX_,BRUSH_MAX);baseNormal=lab::UnpackNormalMap(b,bx);baseGloss=lab::UnpackGlossGray(b);baseHeight=lab::UnpackHeightGray(bx);}
-   if(!baseNormal.valid())return false;
-  }
-  if(!baseNormal.valid())return false;
-  if(!baseGloss.valid()||baseGloss.w!=baseNormal.w||baseGloss.h!=baseNormal.h){baseGloss.w=baseNormal.w;baseGloss.h=baseNormal.h;const uint8_t g=uint8_t(std::clamp(settings_.gloss,0.f,1.f)*255.f+0.5f);baseGloss.pixels.assign(size_t(baseGloss.w)*baseGloss.h,g);}
-  if(!baseHeight.valid()||baseHeight.w!=baseNormal.w||baseHeight.h!=baseNormal.h){baseHeight.w=baseNormal.w;baseHeight.h=baseNormal.h;baseHeight.pixels.assign(size_t(baseHeight.w)*baseHeight.h,128);}
-  if(!std::filesystem::exists(tempLayerPath(key,L"base")))saveTempLayers(key,L"base",baseNormal,baseGloss,baseHeight);
-  normal=std::make_shared<lab::Image>(std::move(baseNormal));gloss=std::make_shared<lab::GrayImage>(std::move(baseGloss));height=std::make_shared<lab::GrayImage>(std::move(baseHeight));paintedNormals_[key]=normal;paintedGloss_[key]=gloss;paintedHeight_[key]=height;return true;
- }
- bool buildPartSources(size_t part,lab::Sources& src,bool preview,std::shared_ptr<lab::Image>& paintNormal,std::shared_ptr<lab::GrayImage>& paintGloss,std::shared_ptr<lab::GrayImage>& paintHeight){src={};paintNormal={};paintGloss={};paintHeight={};if(!loadPartDiffuse(part,src.diffuse,preview))return false;ensurePaintLayers(part,false,paintNormal,paintGloss,paintHeight);if(!paintNormal&&sources_.normal.valid())src.normal=preview?lab::ResizeImageMax(sources_.normal,PREVIEW_MAX):sources_.normal;if(!paintGloss&&sources_.gloss.valid())src.gloss=preview?lab::ResizeImageMax(sources_.gloss,PREVIEW_MAX):sources_.gloss;if(!paintHeight&&sources_.height.valid())src.height=preview?lab::ResizeImageMax(sources_.height,PREVIEW_MAX):sources_.height;return true;}
- lab::BumpPair generateForPart(size_t part){lab::Sources src;std::shared_ptr<lab::Image> pn;std::shared_ptr<lab::GrayImage> pg,ph;if(!buildPartSources(part,src,true,pn,pg,ph))return {};if(pn&&pg&&ph)return lab::PackBumpLayersPreview(*pn,*pg,*ph,PREVIEW_MAX);return lab::GenerateBumpPreview(src,settings_);}
- lab::BumpPair generateSliderBase(size_t part){lab::Sources src;lab::Image diffuse;if(!loadPartDiffuse(part,diffuse,false))return {};src.diffuse=lab::ResizeImageMax(diffuse,BRUSH_MAX);if(sources_.normal.valid())src.normal=lab::ResizeImageMax(sources_.normal,BRUSH_MAX);if(sources_.gloss.valid())src.gloss=lab::ResizeImageMax(sources_.gloss,BRUSH_MAX);if(sources_.height.valid())src.height=lab::ResizeImageMax(sources_.height,BRUSH_MAX);return lab::GenerateBumpPreview(src,settings_);}
- void applyBumpToMaterial(size_t part,const lab::BumpPair& b){if(!b.bump.valid())return;const std::wstring key=materialKey(part);for(size_t i=0;i<render_.PartCount();++i)if(materialKey(i)==key)render_.SetPartBumpImages(i,b.bump,b.bumpX,true);}
-
- lab::BumpPair manualBump(){
-  if(!sources_.diffuse.valid())return {};const std::wstring key=materialKey(0);auto ni=paintedNormals_.find(key);auto gi=paintedGloss_.find(key);auto hi=paintedHeight_.find(key);
-  if(ni!=paintedNormals_.end()&&gi!=paintedGloss_.end()&&hi!=paintedHeight_.end()&&ni->second&&gi->second&&hi->second)return lab::PackBumpLayersPreview(*ni->second,*gi->second,*hi->second,PREVIEW_MAX);
-  if(useImported_&&importedBump_.valid()&&importedBumpX_.valid())return {lab::ResizeImageMax(importedBump_,PREVIEW_MAX),lab::ResizeImageMax(importedBumpX_,PREVIEW_MAX)};lab::Sources tmp;tmp.diffuse=lab::ResizeImageMax(sources_.diffuse,PREVIEW_MAX);if(sources_.normal.valid())tmp.normal=lab::ResizeImageMax(sources_.normal,PREVIEW_MAX);if(sources_.gloss.valid())tmp.gloss=lab::ResizeImageMax(sources_.gloss,PREVIEW_MAX);if(sources_.height.valid())tmp.height=lab::ResizeImageMax(sources_.height,PREVIEW_MAX);return lab::GenerateBumpPreview(tmp,settings_);
- }
- void updateManualPreview(bool replaceDiffuse=false){if(!ready_)return;lab::BumpPair b=manualBump();if(!b.bump.valid()){status(L"Diffuse отсутствует");return;}if(replaceDiffuse)render_.SetImages(lab::ResizeImageMax(sources_.diffuse,PREVIEW_MAX),b.bump,b.bumpX);else render_.SetBumpImages(b.bump,b.bumpX,true);render_.SetNormalSettings(settings_.normalStrength,settings_.invertY);render_.SetGlossStrength(std::max(settings_.gloss,0.9f));generatedBumpMode_=!useImported_;autoModelMaterials_=false;InvalidateRect(preview_,nullptr,FALSE);}
- void loadSlot(int id){auto filename=pick(window_,L"Image (*.dds;*.png;*.jpg;*.bmp;*.tif)\0*.dds;*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff\0All files\0*.*\0",L"dds");if(filename.empty())return;std::wstring error;auto im=loadImage(filename,error);if(!im.valid()){MessageBoxW(window_,error.c_str(),L"Image",MB_ICONERROR);return;}if(id==LOAD_DIFF){sources_.diffuse=std::move(im);manualTexturePath_=filename;manualBumpAvailable_=false;}else if(id==LOAD_NORMAL){sources_.normal=std::move(im);manualBumpAvailable_=false;}else if(id==LOAD_GLOSS){sources_.gloss=std::move(im);manualBumpAvailable_=false;}else if(id==LOAD_HEIGHT){sources_.height=std::move(im);manualBumpAvailable_=false;}else if(id==LOAD_BUMP)importedBump_=std::move(im);else if(id==LOAD_BUMPX)importedBumpX_=std::move(im);if(id==LOAD_DIFF||id==LOAD_NORMAL||id==LOAD_GLOSS||id==LOAD_HEIGHT){paintedNormals_.clear();paintedGloss_.clear();paintedHeight_.clear();resetBrushCoverage();brushUndo_.clear();currentUndo_={};currentUndoTiles_.clear();brushUndoBytes_=0;brushDirtyKeys_.clear();brushDirty_=false;brushDiffuse_={};brushDiffuseKey_.clear();}if(id==LOAD_BUMP||id==LOAD_BUMPX){useImported_=importedBump_.valid()&&importedBumpX_.valid();manualBumpAvailable_=useImported_;if(useImported_)generatedBumpMode_=false;if(!useImported_){status(L"Нужна пара bump/bump#");return;}updateManualPreview(false);}else{useImported_=false;if(sources_.diffuse.valid())updateManualPreview(id==LOAD_DIFF);}refreshBrushAvailability();status(std::filesystem::path(filename).filename().wstring());}
-
- bool tryLoadOMF(const std::filesystem::path& file,lab::Mesh& mesh,std::wstring& loaded){std::error_code ec;if(!std::filesystem::is_regular_file(file,ec))return false;auto bytes=readFile(file.wstring());if(bytes.empty())return false;std::string reason;if(!lab::LoadOGFMotions(bytes,mesh,reason))return false;loaded=file.wstring();return true;}
- void loadExternalMotions(const std::filesystem::path& ogf,lab::Mesh& mesh,std::wstring& loaded){if(!mesh.motions.empty())return;std::vector<std::filesystem::path> refs;for(const auto& r:mesh.motionRefs){std::wstring w=widenPath(r);std::replace(w.begin(),w.end(),L'/',L'\\');std::filesystem::path p(w);if(p.extension().empty())p+=L".omf";refs.push_back(p);}if(refs.empty())refs.push_back(std::filesystem::path(ogf.stem().wstring()+L".omf"));const auto here=ogf.parent_path(),up=here.parent_path();for(const auto& ref:refs){std::vector<std::filesystem::path> candidates={here/ref,here/ref.filename(),up/ref,up/ref.filename()};for(const auto& c:candidates)if(tryLoadOMF(c,mesh,loaded))return;}}
- void setAnimationTab(bool show){if(show==animationTab_)return;if(show){TCITEMW ti={};ti.mask=TCIF_TEXT;ti.pszText=const_cast<LPWSTR>(L"Аним.");TabCtrl_InsertItem(tab_,ANIM_TAB,&ti);animationTab_=true;}else{if(animationPageActive())returnToBindPose();else stopAnimation();if(TabCtrl_GetCurSel(tab_)==ANIM_TAB){TabCtrl_SetCurSel(tab_,0);showTab(0);}TabCtrl_DeleteItem(tab_,ANIM_TAB);animationTab_=false;if(pages_[ANIM_TAB])ShowWindow(pages_[ANIM_TAB],SW_HIDE);}}
- void stopAnimation(){animPlaying_=false;syncTools();KillTimer(window_,ANIM_TIMER);if(controls_[ANIM_PLAY])SetWindowTextW(controls_[ANIM_PLAY],L"Старт");refreshBrushAvailability();}
- void returnToBindPose(){stopAnimation();animTime_=0.f;if(controls_[ANIM_TIMELINE])SendMessageW(controls_[ANIM_TIMELINE],TBM_SETPOS,TRUE,0);render_.SetBindPose();InvalidateRect(preview_,nullptr,FALSE);}
- void configureAnimation(size_t index,bool resetTime){if(!animationPageActive())return;const lab::Motion* m=render_.MotionAt(index);if(!m)return;animIndex_=index;if(resetTime)animTime_=0.f;SendMessageW(controls_[ANIM_TIMELINE],TBM_SETRANGEMIN,FALSE,0);SendMessageW(controls_[ANIM_TIMELINE],TBM_SETRANGEMAX,TRUE,int(std::max<uint32_t>(1,m->frames)-1));SendMessageW(controls_[ANIM_TIMELINE],TBM_SETPOS,TRUE,int(std::min<float>(m->frames?float(m->frames-1):0.f,animTime_*m->fps)));std::wstring err;if(!render_.SetAnimationPose(index,animTime_,SendMessageW(controls_[ANIM_LOOP],BM_GETCHECK,0,0)==BST_CHECKED,err)&&!err.empty())status(err);InvalidateRect(preview_,nullptr,FALSE);}
- void populateAnimations(){SendMessageW(controls_[ANIM_COMBO],CB_RESETCONTENT,0,0);setAnimationTab(render_.MotionCount()>0);if(!render_.MotionCount())return;for(size_t i=0;i<render_.MotionCount();++i){const auto* m=render_.MotionAt(i);std::wstring n=m?widenPath(m->name):L"motion";SendMessageW(controls_[ANIM_COMBO],CB_ADDSTRING,0,reinterpret_cast<LPARAM>(n.c_str()));}SendMessageW(controls_[ANIM_COMBO],CB_SETCURSEL,0,0);SendMessageW(controls_[ANIM_LOOP],BM_SETCHECK,BST_CHECKED,0);SendMessageW(controls_[ANIM_SPEED],TBM_SETPOS,TRUE,100);animSpeed_=1.f;animIndex_=0;animTime_=0.f;stopAnimation();const auto* m=render_.MotionAt(0);if(m){SendMessageW(controls_[ANIM_TIMELINE],TBM_SETRANGEMIN,FALSE,0);SendMessageW(controls_[ANIM_TIMELINE],TBM_SETRANGEMAX,TRUE,int(std::max<uint32_t>(1,m->frames)-1));SendMessageW(controls_[ANIM_TIMELINE],TBM_SETPOS,TRUE,0);}render_.SetBindPose();InvalidateRect(preview_,nullptr,FALSE);}
- void toggleAnimation(){if(!render_.MotionCount()||!animationPageActive())return;animPlaying_=!animPlaying_;SetWindowTextW(controls_[ANIM_PLAY],animPlaying_?L"Пауза":L"Старт");if(animPlaying_){setMode(ViewMode::Fly);refreshBrushAvailability();animLastTick_=GetTickCount64();SetTimer(window_,ANIM_TIMER,16,nullptr);status(L"Анимация: редактирование заблокировано");}else{KillTimer(window_,ANIM_TIMER);refreshBrushAvailability();}syncTools();}
- void tickAnimation(){if(!animPlaying_)return;if(!animationPageActive()){returnToBindPose();return;}const auto* m=render_.MotionAt(animIndex_);if(!m)return;ULONGLONG now=GetTickCount64();float dt=float(now-animLastTick_)/1000.f;animLastTick_=now;dt=std::min(dt,.1f);bool loop=SendMessageW(controls_[ANIM_LOOP],BM_GETCHECK,0,0)==BST_CHECKED;animTime_+=dt*animSpeed_*std::max(.01f,m->speed);float duration=m->duration();if(duration>0.f&&animTime_>=duration){if(loop)animTime_=std::fmod(animTime_,duration);else{animTime_=std::max(0.f,duration-1.f/m->fps);stopAnimation();}}configureAnimation(animIndex_,false);}
-
- void generateBump(bool quiet=false,bool persistBase=true){
-  useImported_=false;
-  if(sources_.diffuse.valid()&&materials_.empty()){
-   const std::wstring key=materialKey(0);lab::BumpPair base=generateSliderBase(0);if(!base.bump.valid()){if(!quiet)status(L"Diffuse отсутствует");return;}if(persistBase){if(!saveBaseFromPair(key,base)){status(L"Не удалось сохранить base: прежняя кисть сохранена");return;}clearBrushForKey(key);}lab::BumpPair display{lab::ResizeImageMax(base.bump,PREVIEW_MAX),lab::ResizeImageMax(base.bumpX,PREVIEW_MAX)};render_.SetBumpImages(display.bump,display.bumpX,true);render_.SetGlossStrength(.5f);generatedBumpMode_=true;manualBumpAvailable_=true;autoModelMaterials_=false;refreshBrushAvailability();if(!quiet)status(persistBase?L"Bump создан; база сохранена в temp":L"Bump preview");InvalidateRect(preview_,nullptr,FALSE);return;
-  }
-  if(materials_.empty()){if(!quiet)status(L"Diffuse отсутствует");return;}
-  std::vector<size_t> candidates;for(size_t i=0;i<materials_.size();++i)if(render_.PartVisible(i)&&materials_[i].hasDiffuse)candidates.push_back(i);if(candidates.empty()){if(!quiet)status(L"Нет доступных мешей с diffuse");return;}
-  std::vector<size_t> targets;const int selected=render_.SelectedPart();
-  if(!quiet&&candidates.size()>1){std::vector<std::wstring> labels;labels.reserve(candidates.size());for(size_t part:candidates){std::wstring name=L"Mesh "+std::to_wstring(part+1);if(part<currentMesh_.parts.size()&&!currentMesh_.parts[part].texture.empty())name+=L"   "+widenPath(currentMesh_.parts[part].texture);labels.push_back(std::move(name));}if(!chooseBumpTargets(window_,candidates,labels,selected,targets)){status(L"Создание bump отменено");return;}}
-  else if(selected>=0&&size_t(selected)<materials_.size()&&render_.PartVisible(size_t(selected))&&materials_[size_t(selected)].hasDiffuse)targets.push_back(size_t(selected));
-  else targets=candidates;
-  std::unordered_map<std::wstring,bool> done;size_t count=0;for(size_t part:targets){if(part>=materials_.size()||!render_.PartVisible(part)||!materials_[part].hasDiffuse)continue;const auto key=materialKey(part);if(done[key])continue;done[key]=true;lab::BumpPair base=generateSliderBase(part);if(!base.bump.valid())continue;if(persistBase){if(!saveBaseFromPair(key,base))continue;clearBrushForKey(key);}lab::BumpPair display{lab::ResizeImageMax(base.bump,PREVIEW_MAX),lab::ResizeImageMax(base.bumpX,PREVIEW_MAX)};applyBumpToMaterial(part,display);generatedBumpKeys_.insert(key);++count;}
-  if(count){generatedBumpMode_=true;render_.SetGlossStrength(.5f);refreshBrushAvailability();if(!quiet)status(persistBase?(L"Bump создан: "+std::to_wstring(count)+L" | база сохранена в temp"):(L"Bump preview: "+std::to_wstring(count)));InvalidateRect(preview_,nullptr,FALSE);}else if(!quiet)status(L"Diffuse отсутствует");
- }
- void populateMeshList(){HWND list=controls_[MESH_LIST];if(!list)return;meshListUpdating_=true;ListView_DeleteAllItems(list);for(size_t i=0;i<render_.PartCount();++i){std::wstring name=L"Mesh "+std::to_wstring(i+1);if(i<currentMesh_.parts.size()&&!currentMesh_.parts[i].texture.empty())name+=L"  "+widenPath(currentMesh_.parts[i].texture);LVITEMW item={};item.mask=LVIF_TEXT;item.iItem=int(i);item.pszText=name.data();ListView_InsertItem(list,&item);ListView_SetCheckState(list,int(i),TRUE);}meshListUpdating_=false;}
- void syncMeshListSelection(int part){HWND list=controls_[MESH_LIST];if(!list||part<0)return;meshListUpdating_=true;ListView_SetItemState(list,-1,0,LVIS_SELECTED|LVIS_FOCUSED);ListView_SetItemState(list,part,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);ListView_EnsureVisible(list,part,FALSE);meshListUpdating_=false;}
-
- void openOGF(){auto filename=pick(window_,L"S.T.A.L.K.E.R. OGF (*.ogf)\0*.ogf\0All files\0*.*\0",L"ogf");if(filename.empty())return;auto bytes=readFile(filename);std::string reason;lab::Mesh m;if(!lab::LoadOGFMesh(bytes,m,reason)){std::wstring why(reason.begin(),reason.end());MessageBoxW(window_,why.c_str(),L"OGF",MB_ICONWARNING);status(why);return;}bytes.clear();bytes.shrink_to_fit();std::wstring omfLoaded;loadExternalMotions(std::filesystem::path(filename),m,omfLoaded);std::wstring err;if(!render_.SetMesh(m,err)){MessageBoxW(window_,err.c_str(),L"OGF",MB_ICONERROR);return;}
-  isolatedVisibility_.clear();setMode(ViewMode::Fly);currentMesh_=std::move(m);for(auto& p:currentMesh_.parts){p.vertices.clear();p.vertices.shrink_to_fit();p.indices.clear();p.indices.shrink_to_fit();}currentMesh_.bones.clear();currentMesh_.bones.shrink_to_fit();currentMesh_.motions.clear();currentMesh_.motions.shrink_to_fit();currentMesh_.motionRefs.clear();currentMesh_.motionRefs.shrink_to_fit();
-  modelPath_=filename;manualTexturePath_.clear();render_.ResetView();render_.ClearSelection();sources_=lab::Sources{};materials_.assign(currentMesh_.parts.size(),PartMaterial{});paintedNormals_.clear();paintedGloss_.clear();paintedHeight_.clear();generatedBumpKeys_.clear();resetBrushCoverage();brushUndo_.clear();currentUndo_={};currentUndoTiles_.clear();brushUndoBytes_=0;brushDirtyKeys_.clear();brushDirty_=false;brushDiffuse_={};brushDiffuseKey_.clear();importedBump_={};importedBumpX_={};useImported_=false;generatedBumpMode_=false;manualBumpAvailable_=false;autoModelMaterials_=true;render_.SetNormalSettings(settings_.normalStrength,settings_.invertY);render_.SetGlossStrength(settings_.gloss);
-  std::filesystem::path texturesRoot;bool hasRoot=findTexturesRoot(std::filesystem::path(filename),texturesRoot);size_t texOk=0,bumpOk=0;std::unordered_map<std::wstring,size_t> gpuOwner;
-  for(size_t i=0;i<currentMesh_.parts.size();++i){auto& mat=materials_[i];const auto& part=currentMesh_.parts[i];std::filesystem::path d,b,bx;if(!part.texture.empty()&&hasRoot&&resolveOGFMaterialPaths(texturesRoot,part.texture,d,b,bx)){mat.diffuse=d;mat.bump=b;mat.bumpX=bx;mat.hasDiffuse=std::filesystem::exists(d);mat.hasBump=mat.hasDiffuse&&std::filesystem::exists(b)&&std::filesystem::exists(bx);mat.key=mat.hasDiffuse?pathKey(d):(L"missing:"+lower(widenPath(part.texture)));}else mat.key=L"part:"+std::to_wstring(i);
-   const std::wstring gpuKey=mat.key+(mat.hasBump?L"|b":L"|n");auto own=gpuOwner.find(gpuKey);if(own!=gpuOwner.end()){render_.CopyPartMaterial(i,own->second);if(mat.hasDiffuse)++texOk;if(mat.hasBump)++bumpOk;continue;}
-   lab::PartImages display;if(mat.hasDiffuse){std::wstring e;auto full=loadImage(mat.diffuse.wstring(),e);if(full.valid()){display.diffuse=lab::ResizeImageMax(full,PREVIEW_MAX);++texOk;}}
-   if(!display.diffuse.valid())display.diffuse=lab::DefaultChecker(128);if(mat.hasBump){std::wstring e1,e2;auto bi=loadImage(mat.bump.wstring(),e1);if(bi.valid())bi=lab::ResizeImageMax(bi,PREVIEW_MAX);auto bxi=loadImage(mat.bumpX.wstring(),e2);if(bxi.valid())bxi=lab::ResizeImageMax(bxi,PREVIEW_MAX);if(bi.valid()&&bxi.valid()){display.bump=std::move(bi);display.bumpX=std::move(bxi);display.hasBump=true;++bumpOk;}}render_.SetPartImages(i,display);gpuOwner[gpuKey]=i;
-  }
-  bool skeleton=render_.HasSkeleton();SendMessageW(controls_[SKELETON_ENABLED],BM_SETCHECK,skeleton?BST_CHECKED:BST_UNCHECKED,0);EnableWindow(controls_[SKELETON_ENABLED],skeleton);render_.SkeletonEnabled(skeleton);populateMeshList();populateAnimations();refreshBrushAvailability();std::wstring s=L"OGF: "+std::to_wstring(currentMesh_.parts.size())+L" | Tex: "+std::to_wstring(texOk)+L" | Bump: "+std::to_wstring(bumpOk)+L" | Anim: "+std::to_wstring(render_.MotionCount());if(!omfLoaded.empty())s+=L" | OMF";status(s);InvalidateRect(preview_,nullptr,FALSE);}
-
- void chooseColor(int which){static COLORREF saved[16]={};CHOOSECOLORW cc={};cc.lStructSize=sizeof(cc);cc.hwndOwner=window_;cc.rgbResult=render_.GetColor(which);cc.lpCustColors=saved;cc.Flags=CC_RGBINIT|CC_FULLOPEN;if(ChooseColorW(&cc)){render_.SetColor(which,cc.rgbResult);InvalidateRect(preview_,nullptr,FALSE);}}
- std::wstring selectedTextureName()const{if(!manualTexturePath_.empty())return cleanName(manualTexturePath_.stem().wstring());int selected=render_.SelectedPart();if(selected>=0&&size_t(selected)<currentMesh_.parts.size()&&render_.PartVisible(size_t(selected))){auto n=textureStem(currentMesh_.parts[size_t(selected)].texture);if(!n.empty())return n;}for(size_t i=0;i<currentMesh_.parts.size();++i){if(!render_.PartVisible(i))continue;auto n=textureStem(currentMesh_.parts[i].texture);if(!n.empty())return n;}return {};}
- std::wstring customName()const{wchar_t text[512]={};if(controls_[EXPORT_NAME])GetWindowTextW(controls_[EXPORT_NAME],text,512);return cleanName(text);}
- bool exportPartSources(size_t part,lab::Sources& src,std::shared_ptr<lab::Image>& paintNormal,std::shared_ptr<lab::GrayImage>& paintGloss,std::shared_ptr<lab::GrayImage>& paintHeight){return buildPartSources(part,src,false,paintNormal,paintGloss,paintHeight);}
- void exportDDS(){
-  bool useTexture=controls_[USE_TEX_NAME]&&SendMessageW(controls_[USE_TEX_NAME],BM_GETCHECK,0,0)==BST_CHECKED;std::wstring stem;if(useTexture)stem=selectedTextureName();if(stem.empty())stem=customName();if(stem.empty()&&!modelPath_.empty())stem=cleanName(modelPath_.stem().wstring());if(stem.empty())stem=L"material";std::wstring modelFolder=!modelPath_.empty()?cleanName(modelPath_.stem().wstring()):stem;if(modelFolder.empty())modelFolder=L"material";std::filesystem::path folder=exeDir()/L"export"/modelFolder;std::error_code ec;std::filesystem::create_directories(folder,ec);if(ec){std::wstring ws=L"Не удалось создать "+folder.wstring();MessageBoxW(window_,ws.c_str(),L"Export",MB_ICONERROR);status(ws);return;}
-  std::filesystem::path base=folder/stem;std::string err;bool ok=false;
-  if(materials_.empty()){
-   if(!sources_.diffuse.valid()){status(L"Diffuse отсутствует");return;}const std::wstring key=materialKey(0);auto ni=paintedNormals_.find(key);auto gi=paintedGloss_.find(key);auto hi=paintedHeight_.find(key);if(ni!=paintedNormals_.end()&&gi!=paintedGloss_.end()&&hi!=paintedHeight_.end()&&ni->second&&gi->second&&hi->second){lab::Image bn;lab::GrayImage bg,bh;const lab::GrayImage* baseHeight=loadTempLayers(key,L"base",bn,bg,bh)?&bh:nullptr;ok=lab::ExportBumpLayers(*ni->second,*gi->second,*hi->second,sources_.diffuse.w,sources_.diffuse.h,base.wstring(),err,baseHeight);}else ok=lab::ExportBumpPair(sources_,settings_,base.wstring(),err);
-  }else{
-   lab::Sources src;std::shared_ptr<lab::Image> pn;std::shared_ptr<lab::GrayImage> pg,ph;int part=render_.SelectedPart();if(part<0||!render_.PartVisible(size_t(part))){part=-1;for(size_t i=0;i<materials_.size();++i)if(render_.PartVisible(i)&&materials_[i].hasDiffuse){part=int(i);break;}}if(part<0||!exportPartSources(size_t(part),src,pn,pg,ph)){status(L"Нет доступного меша для экспорта");return;}if(pn&&pg&&ph){lab::Image bn;lab::GrayImage bg,bh;const std::wstring key=materialKey(size_t(part));const lab::GrayImage* baseHeight=loadTempLayers(key,L"base",bn,bg,bh)?&bh:nullptr;ok=lab::ExportBumpLayers(*pn,*pg,*ph,src.diffuse.w,src.diffuse.h,base.wstring(),err,baseHeight);}else ok=lab::ExportBumpPair(src,settings_,base.wstring(),err);
-  }
-  if(!ok){std::wstring ws(err.begin(),err.end());MessageBoxW(window_,ws.c_str(),L"Export",MB_ICONERROR);status(ws);return;}status((folder/(stem+L"_bump.dds")).wstring()+L" | base + brush");
- }
- void resetScene(){render_.Reset();SendMessageW(controls_[SLIDER_LIGHT_AZ],TBM_SETPOS,TRUE,52);SendMessageW(controls_[SLIDER_LIGHT_EL],TBM_SETPOS,TRUE,37);saveLight();InvalidateRect(preview_,nullptr,FALSE);status(L"Сброс");}
- void clearSelection(){endInteraction();restoreIsolation();render_.ClearSelection();render_.ClearHover();if(controls_[MESH_LIST]){meshListUpdating_=true;ListView_SetItemState(controls_[MESH_LIST],-1,0,LVIS_SELECTED|LVIS_FOCUSED);meshListUpdating_=false;}refreshBrushAvailability();InvalidateRect(preview_,nullptr,FALSE);status(L"Выделение снято");}
- void showAllMeshes(){endInteraction();isolatedVisibility_.clear();meshListUpdating_=true;for(size_t i=0;i<render_.PartCount();++i){render_.SetPartVisible(i,true);ListView_SetCheckState(controls_[MESH_LIST],int(i),TRUE);}meshListUpdating_=false;refreshBrushAvailability();InvalidateRect(preview_,nullptr,FALSE);}
- void hideSelectedMesh(){endInteraction();restoreIsolation();int p=render_.SelectedPart();if(p<0)return;render_.SetPartVisible(size_t(p),false);meshListUpdating_=true;ListView_SetCheckState(controls_[MESH_LIST],p,FALSE);ListView_SetItemState(controls_[MESH_LIST],p,0,LVIS_SELECTED|LVIS_FOCUSED);meshListUpdating_=false;refreshBrushAvailability();InvalidateRect(preview_,nullptr,FALSE);}
-
- void beginBrushStroke(){currentUndo_={};currentUndoTiles_.clear();}
- void finishBrushStroke(){if(currentUndo_.tiles.empty()){currentUndo_={};currentUndoTiles_.clear();return;}const size_t bytes=currentUndo_.bytes();brushUndo_.push_back(std::move(currentUndo_));brushUndoBytes_+=bytes;currentUndo_={};currentUndoTiles_.clear();while((brushUndoBytes_>UNDO_MAX_BYTES||brushUndo_.size()>16)&&brushUndo_.size()>1){brushUndoBytes_-=brushUndo_.front().bytes();brushUndo_.pop_front();}}
- void captureUndoTiles(const std::wstring& key,int part,BrushTarget target,const lab::Image& normal,const lab::GrayImage& gloss,const lab::GrayImage& height,float u,float v,float radiusPixels){
-  if(!normal.valid()||!gloss.valid()||!height.valid()||normal.w!=gloss.w||normal.h!=gloss.h||normal.w!=height.w||normal.h!=height.h)return;if(currentUndo_.key.empty()){currentUndo_.key=key;currentUndo_.part=part;currentUndo_.target=target;}else if(currentUndo_.key!=key||currentUndo_.target!=target){finishBrushStroke();currentUndo_.key=key;currentUndo_.part=part;currentUndo_.target=target;}
-  const int w=int(normal.w),h=int(normal.h),cx=int(std::floor((u-std::floor(u))*w)),cy=int(std::floor((v-std::floor(v))*h)),r=int(std::ceil(radiusPixels));const auto tilesX=lab::WrappedBrushTiles(cx,r,w,int(UNDO_TILE)),tilesY=lab::WrappedBrushTiles(cy,r,h,int(UNDO_TILE));
-  for(int tileY:tilesY)for(int tileX:tilesX){const uint32_t tx=uint32_t(tileX),ty=uint32_t(tileY);const uint64_t id=(uint64_t(ty)<<32)|tx;if(!currentUndoTiles_.insert(id).second)continue;BrushUndoTile t;t.tx=tx;t.ty=ty;t.w=std::min<uint32_t>(UNDO_TILE,normal.w-tx*UNDO_TILE);t.h=std::min<uint32_t>(UNDO_TILE,normal.h-ty*UNDO_TILE);t.target=target;const bool normalTarget=target==BrushTarget::Relief||target==BrushTarget::Sharp||target==BrushTarget::Blur;if(normalTarget)t.normal.resize(size_t(t.w)*t.h);else t.scalar.resize(size_t(t.w)*t.h);for(uint32_t y=0;y<t.h;++y){const size_t src=size_t(ty*UNDO_TILE+y)*normal.w+tx*UNDO_TILE;if(normalTarget)std::copy_n(normal.pixels.begin()+std::ptrdiff_t(src),t.w,t.normal.begin()+std::ptrdiff_t(size_t(y)*t.w));else if(target==BrushTarget::GlossAdd||target==BrushTarget::GlossSub)std::copy_n(gloss.pixels.begin()+std::ptrdiff_t(src),t.w,t.scalar.begin()+std::ptrdiff_t(size_t(y)*t.w));else std::copy_n(height.pixels.begin()+std::ptrdiff_t(src),t.w,t.scalar.begin()+std::ptrdiff_t(size_t(y)*t.w));}currentUndo_.tiles.push_back(std::move(t));}
- }
- void undoBrush(){if(!currentUndo_.tiles.empty())finishBrushStroke();if(brushUndo_.empty()){status(L"Нет действий кисти");return;}BrushUndoStep step=std::move(brushUndo_.back());brushUndo_.pop_back();brushUndoBytes_-=std::min(brushUndoBytes_,step.bytes());auto ni=paintedNormals_.find(step.key);auto gi=paintedGloss_.find(step.key);auto hi=paintedHeight_.find(step.key);if(ni==paintedNormals_.end()||gi==paintedGloss_.end()||hi==paintedHeight_.end()||!ni->second||!gi->second||!hi->second){status(L"Undo недоступен");return;}lab::Image& n=*ni->second;lab::GrayImage& g=*gi->second;lab::GrayImage& h=*hi->second;for(const auto& t:step.tiles)for(uint32_t y=0;y<t.h;++y){const size_t dst=size_t(t.ty*UNDO_TILE+y)*n.w+t.tx*UNDO_TILE;if(t.target==BrushTarget::Relief||t.target==BrushTarget::Sharp||t.target==BrushTarget::Blur)std::copy_n(t.normal.begin()+std::ptrdiff_t(size_t(y)*t.w),t.w,n.pixels.begin()+std::ptrdiff_t(dst));else if(t.target==BrushTarget::GlossAdd||t.target==BrushTarget::GlossSub)std::copy_n(t.scalar.begin()+std::ptrdiff_t(size_t(y)*t.w),t.w,g.pixels.begin()+std::ptrdiff_t(dst));else std::copy_n(t.scalar.begin()+std::ptrdiff_t(size_t(y)*t.w),t.w,h.pixels.begin()+std::ptrdiff_t(dst));}int part=step.part;if(part<0||size_t(part)>=render_.PartCount()||materialKey(size_t(part))!=step.key){part=-1;for(size_t i=0;i<render_.PartCount();++i)if(materialKey(i)==step.key){part=int(i);break;}}if(part>=0)updateBrushPreview(size_t(part),false);resetBrushCoverage();brushDirtyKeys_.insert(step.key);brushDirty_=true;status(L"Кисть: отменено");}
- void commitBrushChanges(){
-  endInteraction();if(!currentUndo_.tiles.empty())finishBrushStroke();
-  size_t saved=0;std::unordered_set<std::wstring> failed;
-  for(const auto& key:brushDirtyKeys_){
-   auto ni=paintedNormals_.find(key);auto gi=paintedGloss_.find(key);auto hi=paintedHeight_.find(key);
-   const bool ok=ni!=paintedNormals_.end()&&gi!=paintedGloss_.end()&&hi!=paintedHeight_.end()&&ni->second&&gi->second&&hi->second&&saveTempLayers(key,L"brush",*ni->second,*gi->second,*hi->second);
-   if(!ok){failed.insert(key);continue;}++saved;
-   for(size_t i=0;i<render_.PartCount();++i)if(materialKey(i)==key){updateBrushPreview(i,true);break;}
-  }
-  brushDirtyKeys_=std::move(failed);brushDirty_=!brushDirtyKeys_.empty();
-  for(auto it=brushUndo_.begin();it!=brushUndo_.end();){if(brushDirtyKeys_.count(it->key)==0)it=brushUndo_.erase(it);else ++it;}
-  brushUndoBytes_=0;for(const auto& step:brushUndo_)brushUndoBytes_+=step.bytes();
-  currentUndo_={};currentUndoTiles_.clear();resetBrushCoverage();
-  if(brushDirty_)status(L"Не удалось сохранить слоёв: "+std::to_wstring(brushDirtyKeys_.size())+L". Правки и отмена сохранены в памяти; повторите Ctrl+S.");
-  else status(L"Кисть: изменения применены | temp: "+std::to_wstring(saved));
- }
- void updateBrushCursor(int x,int y){if(!brushMode_){render_.ClearBrushCursor();return;}lab::Renderer::PickHit hit;if(!render_.PickUV(x,y,hit)||!hasEditableBump(size_t(hit.part))||(render_.HasSelection()&&!render_.PartSelected(size_t(hit.part)))){render_.ClearBrushCursor();return;}float ru=brushRadiusUv_,rv=brushRadiusUv_;std::shared_ptr<lab::Image> pn;std::shared_ptr<lab::GrayImage> pg,ph;if(ensurePaintLayers(size_t(hit.part),false,pn,pg,ph)&&pn&&pn->valid()){const float px=std::max(1.35f,brushRadiusUv_*float(std::max(pn->w,pn->h)));ru=px/float(pn->w);rv=px/float(pn->h);}render_.SetBrushCursor(hit,ru,rv);}
- void loadBrushPreset(){auto file=pick(window_,L"Normal preset (*.krnp;*.dds;*.png;*.jpg;*.bmp)\0*.krnp;*.dds;*.png;*.jpg;*.jpeg;*.bmp\0All files\0*.*\0",L"krnp");if(file.empty())return;std::wstring ext=lower(std::filesystem::path(file).extension().wstring());if(ext==L".krnp"){std::string e;lab::Image p;float legacyGloss=.45f;if(!lab::LoadNormalPreset(file,p,legacyGloss,e)){std::wstring w(e.begin(),e.end());MessageBoxW(window_,w.c_str(),L"Preset",MB_ICONERROR);return;}brushPreset_=std::move(p);}else{std::wstring e;auto p=loadImage(file,e);if(!p.valid()){MessageBoxW(window_,e.c_str(),L"Preset",MB_ICONERROR);return;}brushPreset_=std::move(p);}resetBrushCoverage();status(std::filesystem::path(file).filename().wstring());}
- void saveBrushPreset(){auto file=savePick(window_,L"KichRay normal preset (*.krnp)\0*.krnp\0",L"krnp");if(file.empty())return;std::string e;if(!lab::SaveNormalPreset(brushPreset_,.45f,file,e)){std::wstring w(e.begin(),e.end());MessageBoxW(window_,w.c_str(),L"Preset",MB_ICONERROR);return;}status(std::filesystem::path(file).filename().wstring());}
- void updateBrushPreview(size_t part,bool finalQuality=false){std::shared_ptr<lab::Image> pn;std::shared_ptr<lab::GrayImage> pg,ph;if(!hasEditableBump(part)||!ensurePaintLayers(part,false,pn,pg,ph)||!pn||!pg||!ph)return;const uint32_t limit=finalQuality?PREVIEW_MAX:BRUSH_PREVIEW_MAX;lab::Image baseN;lab::GrayImage baseG,baseH;const std::wstring key=materialKey(part);const lab::GrayImage* baseHeight=loadTempLayers(key,L"base",baseN,baseG,baseH)?&baseH:nullptr;lab::BumpPair b=lab::PackBumpLayersPreview(*pn,*pg,*ph,limit,baseHeight);if(b.bump.valid()){applyBumpToMaterial(part,b);generatedBumpMode_=true;render_.SetNormalSettings(1.f,false);render_.SetGlossStrength(.5f);InvalidateRect(preview_,nullptr,FALSE);}}
- void paintStrokeTo(int x,int y,bool forcePreview=false){
-  const POINT from=brushScreenValid_?brushScreen_:POINT{x,y};
-  lab::SampleBrushStroke(from.x,from.y,x,y,brushScreenValid_,[&](int px,int py){paintAt(px,py);});
-  brushScreen_={x,y};brushScreenValid_=true;
-  const ULONGLONG now=GetTickCount64();
-  if(currentUndo_.part>=0&&(forcePreview||now-lastBrushPreview_>=BRUSH_PREVIEW_MS)){lastBrushPreview_=now;updateBrushPreview(size_t(currentUndo_.part));}
-  if(brushDirty_)status(std::wstring(L"Кисть: ")+brushTargetName()+L" | Ctrl+Z: отмена | Ctrl+S: применить");
- }
- void paintAt(int x,int y){
-  lab::Renderer::PickHit hit;if(!render_.PickUV(x,y,hit)){render_.ClearBrushCursor();return;}const size_t part=size_t(hit.part);if(part>=render_.PartCount())return;if(render_.HasSelection()&&!render_.PartSelected(part)){render_.ClearBrushCursor();status(L"Кисть работает только с выделенным мешем");return;}if(!hasEditableBump(part)){render_.ClearBrushCursor();status(L"Кисть недоступна: сначала загрузите или создайте bump");return;}if(!render_.HasSelection()){render_.SelectPart(hit.part,false);syncMeshListSelection(hit.part);refreshBrushAvailability();}
-  std::shared_ptr<lab::Image> normal;std::shared_ptr<lab::GrayImage> gloss,height;if(!ensurePaintLayers(part,true,normal,gloss,height)||!normal||!gloss||!height)return;
-  const float radius=std::max(1.35f,brushRadiusUv_*float(std::max(normal->w,normal->h))),radiusU=radius/float(normal->w),radiusV=radius/float(normal->h);render_.SetBrushCursor(hit,radiusU,radiusV);const std::wstring key=materialKey(part);ensureBrushBase(key,*normal,*gloss,*height);const BrushTarget op=effectiveBrushTarget();const float force=std::clamp(brushStrength_,0.f,1.f);
-  auto stamp=[&](float u,float v){captureUndoTiles(key,hit.part,op,*normal,*gloss,*height,u,v,radius);switch(op){case BrushTarget::Relief:lab::StampNormalStrengthLayer(*normal,brushBaseNormal_,brushCoverage_,brushPreset_,u,v,radius,force,brushInvert_,brushHardness_);break;case BrushTarget::HeightAdd:lab::StampScalarDeltaLayer(*height,brushBaseScalar_,brushCoverage_,brushPreset_,u,v,radius,force,brushHardness_);break;case BrushTarget::HeightSub:lab::StampScalarDeltaLayer(*height,brushBaseScalar_,brushCoverage_,brushPreset_,u,v,radius,-force,brushHardness_);break;case BrushTarget::GlossAdd:lab::StampScalarDeltaLayer(*gloss,brushBaseScalar_,brushCoverage_,brushPreset_,u,v,radius,force,brushHardness_);break;case BrushTarget::GlossSub:lab::StampScalarDeltaLayer(*gloss,brushBaseScalar_,brushCoverage_,brushPreset_,u,v,radius,-force,brushHardness_);break;case BrushTarget::Sharp:lab::StampNormalFilterLayer(*normal,brushBaseNormal_,brushCoverage_,brushPreset_,u,v,radius,force,true,brushHardness_);break;case BrushTarget::Blur:lab::StampNormalFilterLayer(*normal,brushBaseNormal_,brushCoverage_,brushPreset_,u,v,radius,force,false,brushHardness_);break;}};
-  stamp(hit.u,hit.v);
-  brushDirty_=true;brushDirtyKeys_.insert(key);
- }
- void clearBrushLayer(){int p=render_.SelectedPart();if(p<0)return;const std::wstring key=materialKey(size_t(p));paintedNormals_.erase(key);paintedGloss_.erase(key);paintedHeight_.erase(key);resetBrushCoverage();brushUndo_.clear();currentUndo_={};currentUndoTiles_.clear();brushUndoBytes_=0;brushDirtyKeys_.erase(key);brushDirty_=!brushDirtyKeys_.empty();brushDiffuse_={};brushDiffuseKey_.clear();std::error_code ec;std::filesystem::remove(tempLayerPath(key,L"brush"),ec);lab::Image n;lab::GrayImage g,h;if(loadTempLayers(key,L"base",n,g,h)){lab::BumpPair b=lab::PackBumpLayersPreview(n,g,h,PREVIEW_MAX);if(b.bump.valid())applyBumpToMaterial(size_t(p),b);}else if(size_t(p)<materials_.size()&&materials_[size_t(p)].hasBump){std::wstring e1,e2;auto b=loadImage(materials_[size_t(p)].bump.wstring(),e1),bx=loadImage(materials_[size_t(p)].bumpX.wstring(),e2);if(b.valid()&&bx.valid()){b=lab::ResizeImageMax(b,PREVIEW_MAX);bx=lab::ResizeImageMax(bx,PREVIEW_MAX);for(size_t i=0;i<materials_.size();++i)if(materialKey(i)==key)render_.SetPartBumpImages(i,b,bx,true);}}else if(materials_.empty()&&useImported_&&importedBump_.valid()&&importedBumpX_.valid()){render_.SetBumpImages(lab::ResizeImageMax(importedBump_,PREVIEW_MAX),lab::ResizeImageMax(importedBumpX_,PREVIEW_MAX),true);}InvalidateRect(preview_,nullptr,FALSE);status(L"Кисть очищена; восстановлена base");}
-
-
- void click(int id){
-  const bool animationControl=id==ANIM_PLAY||id==ANIM_LOOP||id==COLOR_LIGHT||id==COLOR_AMBIENT||id==ALPHA_ENABLED||id==TOOL_FLY||id==TOOL_ORBIT||id==TOOL_OUTLINE||id==TOOL_LIGHT||id==TOOL_FRAME||id==TOOL_WIRE;
-  if(editingLocked()&&!animationControl){status(L"Редактирование заблокировано во время анимации");return;}
-  if(id>=TOOL_FLY&&id<=TOOL_RESET){
-   switch(id){
-    case TOOL_FLY:setMode(ViewMode::Fly);break;case TOOL_ORBIT:setMode(ViewMode::Orbit);break;
-    case TOOL_CHOOSE:setMode(ViewMode::Choose);break;case TOOL_LIGHT:setMode(ViewMode::Light);break;
-    case TOOL_BRUSH:setMode(ViewMode::Brush);break;case TOOL_MODEL:setMode(viewMode_==ViewMode::Model?ViewMode::Fly:ViewMode::Model);break;
-    case TOOL_OUTLINE:outline_=!outline_;render_.OutlineEnabled(outline_);break;
-    case TOOL_WIRE:wireframe_=!wireframe_;render_.WireframeEnabled(wireframe_);break;
-    case TOOL_FRAME:endInteraction();render_.FrameSelection();break;case TOOL_ISOLATE:toggleIsolation();break;
-    case TOOL_UNDO:endInteraction();undoBrush();break;case TOOL_APPLY:endInteraction();commitBrushChanges();break;
-    case TOOL_RESET:endInteraction();render_.ResetView();break;
-   }syncTools();SetFocus(preview_);InvalidateRect(preview_,nullptr,FALSE);return;
-  }
-  switch(id){
-   case LOAD_DIFF:case LOAD_NORMAL:case LOAD_GLOSS:case LOAD_HEIGHT:case LOAD_BUMP:case LOAD_BUMPX:loadSlot(id);break;
-   case LOAD_OGF:openOGF();break;case GENERATE:generateBump(false);break;case EXPORT:exportDDS();break;case RESET:resetScene();break;case CLEAR_SELECTION:clearSelection();break;
-   case COLOR_TINT:chooseColor(0);break;case COLOR_LIGHT:chooseColor(1);break;case COLOR_AMBIENT:chooseColor(2);break;
-   case INVERT_Y:settings_.invertY=SendMessageW(controls_[INVERT_Y],BM_GETCHECK,0,0)==BST_CHECKED;if(!brushMode_)render_.SetNormalSettings(settings_.normalStrength,settings_.invertY);InvalidateRect(preview_,nullptr,FALSE);break;
-   case ALPHA_ENABLED:updateAlphaSettings();break;
-   case BUMP_ENABLED:render_.BumpEnabled(SendMessageW(controls_[BUMP_ENABLED],BM_GETCHECK,0,0)==BST_CHECKED);InvalidateRect(preview_,nullptr,FALSE);break;
-   case SKELETON_ENABLED:render_.SkeletonEnabled(SendMessageW(controls_[SKELETON_ENABLED],BM_GETCHECK,0,0)==BST_CHECKED);InvalidateRect(preview_,nullptr,FALSE);break;
-   case SELECT_MODE:setMode(SendMessageW(controls_[SELECT_MODE],BM_GETCHECK,0,0)==BST_CHECKED?ViewMode::Choose:ViewMode::Fly);break;
-   case ANIM_PLAY:toggleAnimation();break;case MESH_SHOW_ALL:showAllMeshes();break;case MESH_HIDE_SELECTED:hideSelectedMesh();break;
-   case BRUSH_MODE:setMode(SendMessageW(controls_[BRUSH_MODE],BM_GETCHECK,0,0)==BST_CHECKED?ViewMode::Brush:ViewMode::Fly);break;
-   case BRUSH_TARGET_RELIEF:setBrushTarget(BrushTarget::Relief,BRUSH_TARGET_RELIEF);break;
-   case BRUSH_TARGET_HEIGHT_ADD:setBrushTarget(BrushTarget::HeightAdd,BRUSH_TARGET_HEIGHT_ADD);break;
-   case BRUSH_TARGET_HEIGHT_SUB:setBrushTarget(BrushTarget::HeightSub,BRUSH_TARGET_HEIGHT_SUB);break;
-   case BRUSH_TARGET_GLOSS_ADD:setBrushTarget(BrushTarget::GlossAdd,BRUSH_TARGET_GLOSS_ADD);break;
-   case BRUSH_TARGET_GLOSS_SUB:setBrushTarget(BrushTarget::GlossSub,BRUSH_TARGET_GLOSS_SUB);break;
-   case BRUSH_TARGET_SHARP:setBrushTarget(BrushTarget::Sharp,BRUSH_TARGET_SHARP);break;
-   case BRUSH_TARGET_BLUR:setBrushTarget(BrushTarget::Blur,BRUSH_TARGET_BLUR);break;
-   case BRUSH_INVERT:brushInvert_=SendMessageW(controls_[BRUSH_INVERT],BM_GETCHECK,0,0)==BST_CHECKED;resetBrushCoverage();status(std::wstring(L"Кисть: ")+brushTargetName()+(brushInvert_?L" [инверсия]":L""));break;
-   case PRESET_LOAD:loadBrushPreset();break;case PRESET_SAVE:saveBrushPreset();break;case BRUSH_CLEAR:clearBrushLayer();break;case BRUSH_APPLY:commitBrushChanges();break;
-  }
- }
- void updateAlphaSettings(){
-  const bool enabled=SendMessageW(controls_[ALPHA_ENABLED],BM_GETCHECK,0,0)==BST_CHECKED;
-  const int mode=std::clamp(int(SendMessageW(controls_[ALPHA_MODE],CB_GETCURSEL,0,0)),0,2);
-  render_.AlphaEnabled(enabled);render_.SetAlphaPreview(lab::AlphaPreview(mode));render_.SetAlphaCutoff(float(SendMessageW(controls_[ALPHA_CUTOFF],TBM_GETPOS,0,0))/255.f);
-  EnableWindow(controls_[ALPHA_MODE],enabled);EnableWindow(controls_[ALPHA_CUTOFF],enabled&&mode!=2);
-  render_.ClearHover();render_.ClearBrushCursor();InvalidateRect(preview_,nullptr,FALSE);
- }
- void movedSlider(int id,bool persistBase=false){
-  if(id==SLIDER_NORMAL){settings_.normalStrength=SendMessageW(controls_[id],TBM_GETPOS,0,0)/100.f;if(!brushMode_)render_.SetNormalSettings(settings_.normalStrength,settings_.invertY);InvalidateRect(preview_,nullptr,FALSE);}
-  else if(id==SLIDER_GLOSS){settings_.gloss=SendMessageW(controls_[id],TBM_GETPOS,0,0)/200.f;if(generatedBumpMode_&&!brushMode_)generateBump(true,persistBase);else if(!brushMode_){render_.SetGlossStrength(settings_.gloss);InvalidateRect(preview_,nullptr,FALSE);}}
-  else if(id==SLIDER_HEIGHT){settings_.height=SendMessageW(controls_[id],TBM_GETPOS,0,0)/200.f;if(generatedBumpMode_&&!brushMode_)generateBump(true,persistBase);}
-  else if(id==SLIDER_BLUR){settings_.blur=SendMessageW(controls_[id],TBM_GETPOS,0,0)/100.f;if(generatedBumpMode_&&!brushMode_)generateBump(true,persistBase);}
-  else if(id==SLIDER_SHARP){settings_.sharpness=SendMessageW(controls_[id],TBM_GETPOS,0,0)/100.f;if(generatedBumpMode_&&!brushMode_)generateBump(true,persistBase);}
-  else if(id==ALPHA_CUTOFF){updateAlphaSettings();}
-  else if(id==SLIDER_LIGHT_AZ||id==SLIDER_LIGHT_EL){float az=float(SendMessageW(controls_[SLIDER_LIGHT_AZ],TBM_GETPOS,0,0));float el=float(SendMessageW(controls_[SLIDER_LIGHT_EL],TBM_GETPOS,0,0));render_.SetLightOrbitDegrees(az,el);saveLight();InvalidateRect(preview_,nullptr,FALSE);}
-  else if(id==ANIM_TIMELINE){const auto* m=render_.MotionAt(animIndex_);if(m){stopAnimation();animTime_=float(SendMessageW(controls_[ANIM_TIMELINE],TBM_GETPOS,0,0))/m->fps;configureAnimation(animIndex_,false);}}
-  else if(id==ANIM_SPEED){animSpeed_=SendMessageW(controls_[ANIM_SPEED],TBM_GETPOS,0,0)/100.f;}
-  else if(id==BRUSH_RADIUS){resetBrushCoverage();const int value=int(SendMessageW(controls_[BRUSH_RADIUS],TBM_GETPOS,0,0));brushRadiusUv_=value/1000.f;wchar_t text[64];swprintf_s(text,L"Размер: %.1f%%",value/10.f);SetWindowTextW(controls_[BRUSH_RADIUS_TEXT],text);POINT p{};GetCursorPos(&p);ScreenToClient(preview_,&p);updateBrushCursor(p.x,p.y);InvalidateRect(preview_,nullptr,FALSE);}
-  else if(id==BRUSH_STRENGTH){resetBrushCoverage();const int value=int(SendMessageW(controls_[BRUSH_STRENGTH],TBM_GETPOS,0,0));brushStrength_=brushStrengthFromSlider(value);wchar_t text[64];const float pct=brushStrength_*100.f;if(pct<1.f)swprintf_s(text,L"Сила: %.3f%%",pct);else swprintf_s(text,L"Сила: %.1f%%",pct);SetWindowTextW(controls_[BRUSH_STRENGTH_TEXT],text);}
-  else if(id==BRUSH_HARDNESS){resetBrushCoverage();const int value=int(SendMessageW(controls_[BRUSH_HARDNESS],TBM_GETPOS,0,0));brushHardness_=value/100.f;wchar_t text[64];swprintf_s(text,L"Резкость края: %d%%",value);SetWindowTextW(controls_[BRUSH_HARDNESS_TEXT],text);}
- }
-
+    void status(std::string message){ui_.status=std::move(message);}
+    void fail(const std::string& message){status(message);MessageBoxW(window_,wide(message).c_str(),AppTitle,MB_OK|MB_ICONERROR);}
+    int selectedPart()const {
+        int part=renderer_.SelectedPart();
+        if(part>=0&&size_t(part)<meshes_.size())return part;
+        for(size_t i=0;i<meshes_.size();++i)if(renderer_.PartVisible(i))return int(i);
+        return -1;
+    }
+    std::shared_ptr<Material> selectedMaterial()const {
+        int part=selectedPart();return part>=0?meshes_[size_t(part)].material:nullptr;
+    }
+    bool ensureDocument(const std::shared_ptr<Material>& material) {
+        if(!material)return false;if(material->document)return material->document->Valid();
+        if(!material->hasBump())return false;
+        auto document=std::make_unique<lab::MaterialDocument>();std::string error;
+        if(!document->Load(material->loadedPair,error)){fail(error);return false;}
+        material->document=std::move(document);material->loadedPair={};return true;
+    }
+    lab::BumpPair materialPreview(const std::shared_ptr<Material>& material)const {
+        if(material->document)return material->document->Preview(PreviewSize);
+        return {lab::ResizeImageMax(material->loadedPair.bump,PreviewSize),lab::ResizeImageMax(material->loadedPair.bumpX,PreviewSize)};
+    }
+    bool upload(const std::shared_ptr<Material>& material,bool diffuse=false) {
+        if(!material)return false;
+        lab::BumpPair pair=materialPreview(material);
+        lab::PartImages images;
+        if(diffuse){images.diffuse=material->sources.diffuse.valid()?lab::ResizeImageMax(material->sources.diffuse,PreviewSize):lab::DefaultChecker(128);images.bump=pair.bump;images.bumpX=pair.bumpX;images.hasBump=material->hasBump();}
+        bool success=true;
+        for(size_t i=0;i<meshes_.size();++i)if(meshes_[i].material==material)
+            success=(diffuse?renderer_.SetPartImages(i,images):renderer_.SetPartBumpImages(i,pair.bump,pair.bumpX,material->hasBump()))&&success;
+        if(!success)status("Не удалось обновить материал на видеокарте.");
+        return success;
+    }
+    bool uploadReplacement(const std::shared_ptr<Material>& material,const lab::BumpPair& replacement) {
+        // Retain CPU ownership until every mesh sharing this material accepts the pair.
+        const auto previous=materialPreview(material);
+        for(size_t i=0;i<meshes_.size();++i)if(meshes_[i].material==material)
+            if(!renderer_.SetPartBumpImages(i,replacement.bump,replacement.bumpX,true)) {
+                bool restored=true;
+                for(size_t j=0;j<meshes_.size();++j)if(meshes_[j].material==material)
+                    restored=renderer_.SetPartBumpImages(j,previous.bump,previous.bumpX,material->hasBump())&&restored;
+                fail(restored?"Видеокарта не приняла новую bump-пару. Предыдущий материал сохранён.":"Ошибка Direct3D. Документ сохранён, но сцену нужно открыть заново.");
+                return false;
+            }
+        return true;
+    }
+    bool saveSession(const std::shared_ptr<Material>& material,bool choosePath=false) {
+        endInteraction();if(!ensureDocument(material)){status("Нет материала для сохранения.");return false;}
+        fs::path path=material->sessionPath;
+        if(path.empty()||choosePath){auto name=chooseFile(window_,L"Material Lab session (*.krlab)\0*.krlab\0",L"krlab",true,safeName(wide(material->label))+L".krlab");if(name.empty())return false;path=name;}
+        std::string error;if(!material->document->Save(path,error)){fail(error);return false;}
+        material->sessionPath=path;status("Сеанс сохранён: "+utf8(path.filename().wstring()));return true;
+    }
+    bool confirmDiscard(const std::shared_ptr<Material>& material) {
+        if(!material||!material->document||!material->document->IsDirty())return true;
+        const std::wstring text=L"В материале «"+wide(material->label)+L"» есть несохранённые изменения. Сохранить сеанс?";
+        int answer=MessageBoxW(window_,text.c_str(),AppTitle,MB_YESNOCANCEL|MB_ICONQUESTION);
+        return answer==IDNO||(answer==IDYES&&saveSession(material));
+    }
+    bool confirmAll() {
+        endInteraction();std::unordered_set<Material*> seen;
+        for(const auto& mesh:meshes_)if(seen.insert(mesh.material.get()).second&&!confirmDiscard(mesh.material))return false;
+        return true;
+    }
+    void synchronizeUI() {
+        ui_.meshes.clear();
+        for(size_t i=0;i<meshes_.size();++i){auto& mesh=meshes_[i];ui_.meshes.push_back({mesh.label,renderer_.PartVisible(i),renderer_.PartSelected(i),mesh.material->sources.diffuse.valid(),mesh.material->hasBump()});}
+        const auto material=selectedMaterial();
+        ui_.canBrush=material&&material->hasBump();ui_.canUndo=material&&material->document&&material->document->CanUndo();ui_.canRedo=material&&material->document&&material->document->CanRedo();
+        ui_.hasEdits=material&&material->document&&material->document->HasEdits();
+        ui_.sourceNames={};ui_.documentInfo.clear();
+        if(material){for(size_t i=0;i<6;++i)ui_.sourceNames[i]=utf8(material->paths[i].filename().wstring());if(material->document)ui_.documentInfo=std::to_string(material->document->Width())+" × "+std::to_string(material->document->HeightPixels())+" · Undo: "+std::to_string(material->document->UndoCount())+(material->document->IsDirty()?" · не сохранено":"");}
+        ui_.editingLocked=ui_.animationPlaying;ui_.isolated=!isolation_.empty();ui_.hasSkeleton=renderer_.HasSkeleton();
+    }
+    void applyPreviewSettings() {
+        renderer_.BumpEnabled(ui_.bump);renderer_.SetNormalSettings(ui_.previewNormal,ui_.invertNormalY);
+        renderer_.SetGlossStrength(ui_.previewGloss);renderer_.SetColor(0,colorRef(ui_.tint));
+    }
+    void applyAlphaSettings() {
+        renderer_.AlphaEnabled(ui_.alpha);renderer_.SetAlphaPreview(lab::AlphaPreview(std::clamp(ui_.alphaMode,0,2)));renderer_.SetAlphaCutoff(ui_.alphaCutoff);
+    }
+    void applyLightSettings(bool save=true) {
+        renderer_.SetLightOrbitDegrees(ui_.lightAzimuth,ui_.lightElevation);renderer_.SetColor(1,colorRef(ui_.lightColor));renderer_.SetColor(2,colorRef(ui_.ambient));
+        if(save){const auto ini=executableDirectory()/L"MaterialLab.ini";auto az=std::to_wstring(int(ui_.lightAzimuth)),el=std::to_wstring(int(ui_.lightElevation));WritePrivateProfileStringW(L"Scene",L"LightAzimuth",az.c_str(),ini.c_str());WritePrivateProfileStringW(L"Scene",L"LightElevation",el.c_str(),ini.c_str());}
+    }
+    void setMode(lab::EditorMode mode) {
+        if(ui_.editingLocked&&(mode==lab::EditorMode::Brush||mode==lab::EditorMode::Choose||mode==lab::EditorMode::Model))return;
+        if(mode==lab::EditorMode::Model&&ui_.tab==lab::EditorTab::Animation)return;
+        if(mode==lab::EditorMode::Brush&&(!selectedMaterial()||!selectedMaterial()->hasBump())){status("Сначала загрузите или создайте bump-пару.");return;}
+        endInteraction();ui_.mode=mode;renderer_.FlyCameraEnabled(mode==lab::EditorMode::Fly);renderer_.ClearHover();renderer_.ClearBrushCursor();
+        if(mode==lab::EditorMode::Brush){stopAnimation(true);ui_.tab=lab::EditorTab::Brush;ui_.forceTab=true;}
+    }
+    void restoreIsolation() {
+        for(size_t i=0;i<isolation_.size()&&i<meshes_.size();++i)renderer_.SetPartVisible(i,isolation_[i]);isolation_.clear();
+    }
+    void toggleIsolation() {
+        endInteraction();if(!isolation_.empty()){restoreIsolation();return;}if(!renderer_.HasSelection())return;
+        for(size_t i=0;i<meshes_.size();++i){isolation_.push_back(renderer_.PartVisible(i));renderer_.SetPartVisible(i,renderer_.PartSelected(i));}
+    }
+    void stopAnimation(bool bindPose) {
+        ui_.animationPlaying=false;ui_.editingLocked=false;
+        if(bindPose) {
+            animationTime_=0;ui_.animationFrame=0;std::wstring error;
+            if(!renderer_.SetBindPose(&error)){status(utf8(error));ui_.editingLocked=true;deviceLost_=true;exitCode_=1;}
+        }
+    }
+    void refreshAnimations() {
+        stopAnimation(true);ui_.animations.clear();ui_.animationIndex=0;
+        for(size_t i=0;i<renderer_.MotionCount();++i)ui_.animations.push_back(utf8(wide(renderer_.MotionAt(i)->name,CP_ACP)));
+        ui_.animationFrames=renderer_.MotionCount()?int(renderer_.MotionAt(0)->frames):1;
+    }
+    void setAnimationPose() {
+        const auto* motion=renderer_.MotionAt(size_t(std::max(0,ui_.animationIndex)));if(!motion)return;
+        std::wstring error;
+        if(!renderer_.SetAnimationPose(size_t(ui_.animationIndex),animationTime_,ui_.animationLoop,error)){stopAnimation(false);status(utf8(error));}
+        ui_.animationFrames=int(motion->frames);ui_.animationFrame=std::clamp(int(animationTime_*motion->fps),0,std::max(0,ui_.animationFrames-1));
+    }
+    bool newCube(bool confirm=true) {
+        if(confirm&&!confirmAll())return false;
+        lab::Mesh mesh=lab::MakeCube();std::wstring error;
+        if(!renderer_.SetMesh(mesh,error)){fail(utf8(error));return false;}
+        auto material=std::make_shared<Material>();material->key=L"manual";
+        meshes_={{"Куб · material",material}};modelPath_.clear();isolation_.clear();
+        ui_.modelName="Тестовый куб";upload(material,true);renderer_.SelectPart(0);
+        refreshAnimations();setMode(lab::EditorMode::Fly);renderer_.ResetView();
+        status("Тестовый куб. Загрузите diffuse или готовую bump-пару.");return true;
+    }
+    void openModel() {
+        endInteraction();const auto file=chooseFile(window_,L"X-Ray mesh (*.ogf)\0*.ogf\0",L"ogf");if(file.empty())return;
+        lab::Mesh mesh;std::string error;
+        if(!lab::LoadOGFMesh(readBytes(file),mesh,error)){fail(error);return;}
+        loadExternalMotions(file,mesh);
+        std::vector<MeshRow> rows;std::unordered_map<std::wstring,std::shared_ptr<Material>> materials;
+        const fs::path root=textureRoot(file);size_t missing=0;
+        for(const auto& part:mesh.parts)if(part.valid()) {
+            fs::path relative=relativeAsset(part.texture);if(relative.extension().empty()&&!relative.empty())relative+=L".dds";
+            fs::path diffuse=relative.empty()?fs::path{}:(root.empty()?fs::path(file).parent_path():root)/relative;
+            const std::wstring key=diffuse.empty()?L"missing:"+std::to_wstring(rows.size()):materialIdentity(diffuse);
+            auto found=materials.find(key);std::shared_ptr<Material> material;
+            if(found!=materials.end())material=found->second;
+            else {
+                material=std::make_shared<Material>();material->key=key;material->label=relative.empty()?"material_"+std::to_string(rows.size()+1):utf8(relative.stem().wstring());
+                if(!diffuse.empty()) {
+                    material->sources.diffuse=loadImage(diffuse,error);material->paths[0]=diffuse;
+                    if(!material->sources.diffuse.valid())++missing;
+                    fs::path base=diffuse;base.replace_extension();
+                    fs::path bump=base.wstring()+L"_bump.dds",bumpX=base.wstring()+L"_bump#.dds";
+                    std::error_code ec;
+                    if(fs::exists(bump,ec)&&fs::exists(bumpX,ec)) {
+                        auto a=readBytes(bump),b=readBytes(bumpX);auto image=lab::DecodeDDS(a,error),imageX=lab::DecodeDDS(b,error);
+                        if(image.valid()&&imageX.valid()&&image.w==imageX.w&&image.h==imageX.h&&image.w<=4096&&image.h<=4096){material->loadedPair={std::move(image),std::move(imageX)};material->originalDDS=std::move(a);material->originalDDSX=std::move(b);material->paths[4]=bump;material->paths[5]=bumpX;}
+                    }
+                }
+                materials[key]=material;
+            }
+            rows.push_back({std::to_string(rows.size()+1)+" · "+material->label,material});
+        }
+        if(!confirmAll())return;
+        std::wstring renderError;if(!renderer_.SetMesh(mesh,renderError)){fail(utf8(renderError));return;}
+        meshes_=std::move(rows);modelPath_=file;isolation_.clear();
+        bool uploaded=true;for(const auto& entry:materials)uploaded=upload(entry.second,true)&&uploaded;
+        if(!meshes_.empty())renderer_.SelectPart(0);
+        ui_.modelName=utf8(modelPath_.filename().wstring());refreshAnimations();setMode(lab::EditorMode::Fly);renderer_.ResetView();
+        status(uploaded?"Модель загружена: "+std::to_string(meshes_.size())+" мешей"+(missing?". Не найден diffuse: "+std::to_string(missing):"."):"Модель открыта, но видеокарта не приняла часть текстур.");
+    }
+    void loadBump(bool correction) {
+        endInteraction();auto material=selectedMaterial();if(!material)return;
+        const auto file=chooseFile(window_,L"Текстуры (*.dds;*.png;*.bmp)\0*.dds;*.png;*.bmp\0Все файлы\0*.*\0",L"dds");if(file.empty())return;
+        fs::path primary=file,partner;std::wstring stem=primary.stem().wstring();
+        if(correction&&stem.size()>=6&&lower(stem.substr(stem.size()-6))==L"_bump#")partner=primary.parent_path()/(stem.substr(0,stem.size()-1)+primary.extension().wstring());
+        if(!correction&&stem.size()>=5&&lower(stem.substr(stem.size()-5))==L"_bump")partner=primary.parent_path()/(stem+L"#"+primary.extension().wstring());
+        std::error_code ec;if(partner.empty()||!fs::exists(partner,ec)) {
+            auto second=chooseFile(window_,correction?L"Основной bump\0*.dds;*.png;*.bmp\0":L"Дополнительный bump#\0*.dds;*.png;*.bmp\0",L"dds");
+            if(second.empty())return;partner=second;
+        }
+        const fs::path bump=correction?partner:primary,bumpX=correction?primary:partner;
+        std::string error;lab::BumpPair pair{loadImage(bump,error),{}};
+        if(!pair.bump.valid()){fail(error);return;}pair.bumpX=loadImage(bumpX,error);
+        if(!pair.bumpX.valid()){fail(error);return;}
+        if(pair.bump.w!=pair.bumpX.w||pair.bump.h!=pair.bumpX.h||pair.bump.w>4096||pair.bump.h>4096){fail("Обе части bump-пары должны иметь одинаковый размер до 4096×4096.");return;}
+        if(!confirmDiscard(material))return;
+        lab::BumpPair preview{lab::ResizeImageMax(pair.bump,PreviewSize),lab::ResizeImageMax(pair.bumpX,PreviewSize)};
+        if(!uploadReplacement(material,preview))return;
+        material->document.reset();material->loadedPair=std::move(pair);material->sessionPath.clear();
+        material->paths[4]=bump;material->paths[5]=bumpX;
+        material->originalDDS=lower(bump.extension().wstring())==L".dds"?readBytes(bump):std::vector<uint8_t>{};
+        material->originalDDSX=lower(bumpX.extension().wstring())==L".dds"?readBytes(bumpX):std::vector<uint8_t>{};
+        if(material->paths[0].empty()){auto name=bump.stem().wstring();if(name.size()>5&&lower(name.substr(name.size()-5))==L"_bump")name.resize(name.size()-5);material->label=utf8(name);}
+        status("Bump-пара загружена без пересчёта нормалей.");
+    }
+    void loadSource(lab::EditorAction action) {
+        if(action==lab::EditorAction::LoadBump||action==lab::EditorAction::LoadBumpX){loadBump(action==lab::EditorAction::LoadBumpX);return;}
+        endInteraction();auto material=selectedMaterial();if(!material)return;
+        const auto file=chooseFile(window_,L"Изображения\0*.dds;*.png;*.jpg;*.jpeg;*.bmp;*.tif\0Все файлы\0*.*\0",L"dds");if(file.empty())return;
+        std::string error;auto image=loadImage(file,error);if(!image.valid()){fail(error);return;}
+        if(image.w>4096||image.h>4096){fail("Максимальный размер источника — 4096×4096.");return;}
+        const int index=int(action)-int(lab::EditorAction::LoadDiffuse);
+        if(index<0||index>3)return;
+        lab::Image* sources[]={&material->sources.diffuse,&material->sources.normal,&material->sources.gloss,&material->sources.height};
+        auto previous=std::move(*sources[index]);*sources[index]=std::move(image);
+        if(index==0&&!upload(material,true)){*sources[index]=std::move(previous);upload(material,true);return;}
+        material->paths[size_t(index)]=file;
+        if(index==0)material->label=utf8(fs::path(file).stem().wstring());
+        status("Источник загружен. Для пересчёта bump нажмите «Создать bump».");
+    }
+    void generateSelected() {
+        endInteraction();std::vector<std::shared_ptr<Material>> targets;std::unordered_set<Material*> seen;
+        for(size_t i=0;i<meshes_.size()&&i<ui_.generateTargets.size();++i)if(ui_.generateTargets[i]&&renderer_.PartVisible(i)&&meshes_[i].material->sources.diffuse.valid()&&seen.insert(meshes_[i].material.get()).second)targets.push_back(meshes_[i].material);
+        if(targets.empty()){status("Не выбран материал с diffuse.");return;}
+        for(const auto& material:targets)if(!confirmDiscard(material))return;
+        // Build all replacements before committing any material.
+        std::vector<std::unique_ptr<lab::MaterialDocument>> documents;
+        for(const auto& material:targets) {
+            auto pair=lab::GenerateBumpPreview(material->sources,ui_.generation,0);
+            auto document=std::make_unique<lab::MaterialDocument>();std::string error;
+            if(!document->Load(pair,error,true)){fail(error);return;}documents.push_back(std::move(document));
+        }
+        for(size_t i=0;i<targets.size();++i)if(!uploadReplacement(targets[i],documents[i]->Preview(PreviewSize))) {
+            for(size_t j=0;j<i;++j)upload(targets[j]);return;
+        }
+        for(size_t i=0;i<targets.size();++i){auto& material=targets[i];material->document=std::move(documents[i]);material->loadedPair={};material->originalDDS.clear();material->originalDDSX.clear();material->sessionPath.clear();material->paths[4].clear();material->paths[5].clear();}
+        status("Новая база создана. Настройки генерации применены один раз; мазки можно отменять.");
+    }
+    void openSession() {
+        endInteraction();auto material=selectedMaterial();if(!material)return;
+        auto file=chooseFile(window_,L"Material Lab session (*.krlab)\0*.krlab\0",L"krlab");if(file.empty())return;
+        auto document=std::make_unique<lab::MaterialDocument>();std::string error;
+        if(!document->Open(file,error)){fail(error);return;}if(!confirmDiscard(material))return;
+        if(!uploadReplacement(material,document->Preview(PreviewSize)))return;
+        material->document=std::move(document);material->loadedPair={};material->originalDDS.clear();material->originalDDSX.clear();material->sessionPath=file;material->paths[4].clear();material->paths[5].clear();
+        status("Сеанс открыт; исходные каналы и слои восстановлены.");
+    }
+    void exportPair() {
+        endInteraction();auto material=selectedMaterial();if(!material||!material->hasBump()){status("Сначала загрузите или создайте bump-пару.");return;}
+        std::wstring name=ui_.useTextureName?wide(material->label):wide(ui_.exportName.data());
+        auto file=chooseFile(window_,L"X-Ray bump DDS pair\0*.dds\0",L"dds",true,safeName(name)+L"_bump.dds");if(file.empty())return;
+        fs::path base=file;base.replace_extension();auto stem=base.filename().wstring(),normalized=lower(stem);
+        if(normalized.size()>=6&&normalized.substr(normalized.size()-6)==L"_bump#")stem.resize(stem.size()-6);
+        else if(normalized.size()>=5&&normalized.substr(normalized.size()-5)==L"_bump")stem.resize(stem.size()-5);
+        base=base.parent_path()/safeName(stem);std::string error;bool success=false;
+        if(!material->originalDDS.empty()&&!material->originalDDSX.empty()&&(!material->document||!material->document->HasEdits()))success=lab::WriteBumpPairDDSBytesAtomic(base.wstring(),material->originalDDS,material->originalDDSX,error);
+        else if(ensureDocument(material))success=lab::ExportPackedBumpPair(material->document->Preview(0),base.wstring(),error);
+        if(!success){fail(error.empty()?"Не удалось экспортировать материал.":error);return;}
+        status("Экспортированы "+utf8(base.filename().wstring())+"_bump.dds и _bump#.dds. Сеанс сохраняется отдельно.");
+    }
+    void loadPreset() {
+        endInteraction();auto file=chooseFile(window_,L"Кисти и изображения\0*.krnp;*.dds;*.png;*.bmp;*.tif\0Все файлы\0*.*\0",L"krnp");if(file.empty())return;
+        std::string error;lab::Image preset;
+        if(lower(fs::path(file).extension().wstring())==L".krnp"){if(!lab::LoadNormalPreset(file,preset,error)){fail(error);return;}}
+        else preset=loadImage(file,error);
+        if(!preset.valid()){fail(error);return;}preset_=std::move(preset);ui_.presetName=utf8(fs::path(file).filename().wstring());
+    }
+    void savePreset() {
+        auto file=chooseFile(window_,L"Normal preset (*.krnp)\0*.krnp\0",L"krnp",true,L"brush.krnp");if(file.empty())return;
+        std::string error;if(!lab::SaveNormalPreset(preset_,file,error))fail(error);else status("Пресет сохранён.");
+    }
+    void endInteraction() {
+        if(strokeMaterial_&&strokeMaterial_->document){const bool changed=strokeMaterial_->document->EndStroke();if(changed&&!deviceLost_)upload(strokeMaterial_);}
+        if(drag_==Drag::Light&&!deviceLost_)applyLightSettings();
+        strokeMaterial_.reset();lastBrushValid_=false;drag_=Drag::None;dragButton_=-1;
+        if(!deviceLost_)renderer_.ClearBrushCursor();
+    }
+    void finishPointerInteraction() {
+        // Win32 can release capture before the next ImGui frame delivers its
+        // mouse-up. Include that final point instead of dropping the stroke tail.
+        if(drag_==Drag::Brush&&strokeMaterial_) {
+            POINT mouse{};
+            if(GetCursorPos(&mouse)&&ScreenToClient(window_,&mouse)&&
+               mouse.x>=ui_.viewportRect.x&&mouse.y>=ui_.viewportRect.y&&
+               mouse.x<ui_.viewportRect.x+ui_.viewportRect.w&&mouse.y<ui_.viewportRect.y+ui_.viewportRect.h) {
+                const POINT point=scenePoint(ImVec2(float(mouse.x),float(mouse.y)));
+                stampAt(point.x,point.y);
+            }
+        }
+        endInteraction();
+    }
+    bool beginStroke(int x,int y) {
+        if(ui_.editingLocked)return false;
+        lab::Renderer::PickHit hit;if(!renderer_.PickUV(x,y,hit)||hit.part<0||size_t(hit.part)>=meshes_.size())return false;
+        // A stroke has one document owner. Crossing another material never edits it.
+        auto material=meshes_[size_t(hit.part)].material;
+        if(!material->hasBump()||!ensureDocument(material))return false;
+        renderer_.SelectPart(hit.part);lab::BrushSettings settings;
+        settings.radiusPixels=std::max(1.f,ui_.brushRadiusPercent*.01f*std::max(material->document->Width(),material->document->HeightPixels()));
+        settings.strength=ui_.brushStrengthPercent*.01f;settings.hardness=ui_.brushHardnessPercent*.01f;
+        const auto operation=lab::BrushOperation(std::clamp(ui_.brushChannel,0,3)*2+(ui_.brushRemove?1:0));
+        if(!material->document->BeginStroke(operation,settings))return false;
+        strokeMaterial_=material;lastBrushValid_=false;lastBrushUpload_=GetTickCount64();return true;
+    }
+    void stampAt(int x,int y) {
+        if(!strokeMaterial_||!strokeMaterial_->document)return;
+        lab::SampleBrushStroke(lastBrush_.x,lastBrush_.y,x,y,lastBrushValid_,[&](int px,int py){
+            lab::Renderer::PickHit hit;
+            if(!renderer_.PickUV(px,py,hit)||hit.part<0||size_t(hit.part)>=meshes_.size()||meshes_[size_t(hit.part)].material!=strokeMaterial_)return;
+            strokeMaterial_->document->Stamp(hit.u,hit.v,preset_);
+        });
+        lastBrush_={x,y};lastBrushValid_=true;
+        if(GetTickCount64()-lastBrushUpload_>=100){upload(strokeMaterial_);lastBrushUpload_=GetTickCount64();}
+    }
+    void editHistory(lab::EditorAction action) {
+        if(ui_.editingLocked)return;endInteraction();auto material=selectedMaterial();if(!ensureDocument(material))return;
+        bool changed=action==lab::EditorAction::Undo?material->document->Undo():action==lab::EditorAction::Redo?material->document->Redo():material->document->Clear();
+        if(changed)upload(material);
+    }
+    void action(lab::EditorAction kind,int value=0) {
+        using A=lab::EditorAction;
+        if(ui_.editingLocked&&(kind==A::Isolate||kind==A::Visibility||kind==A::ShowAll||kind==A::HideSelected||kind==A::ClearSelection))return;
+        switch(kind) {
+        case A::OpenModel:openModel();break;
+        case A::NewCube:newCube();break;
+        case A::LoadDiffuse:case A::LoadNormal:case A::LoadGloss:case A::LoadHeight:case A::LoadBump:case A::LoadBumpX:loadSource(kind);break;
+        case A::RequestGenerate:
+            endInteraction();ui_.generateTargets.assign(meshes_.size(),false);
+            for(size_t i=0;i<meshes_.size();++i)ui_.generateTargets[i]=renderer_.PartSelected(i)&&meshes_[i].material->sources.diffuse.valid();
+            ui_.requestGeneratePopup=true;break;
+        case A::GenerateSelected:generateSelected();break;
+        case A::Export:exportPair();break;
+        case A::SaveSession:saveSession(selectedMaterial());break;
+        case A::OpenSession:openSession();break;
+        case A::LoadPreset:loadPreset();break;
+        case A::SavePreset:savePreset();break;
+        case A::Undo:case A::Redo:case A::ClearBrush:editHistory(kind);break;
+        case A::SetMode:setMode(lab::EditorMode(value));break;
+        case A::Outline:ui_.outline=!ui_.outline;renderer_.OutlineEnabled(ui_.outline);break;
+        case A::Wireframe:ui_.wireframe=!ui_.wireframe;renderer_.WireframeEnabled(ui_.wireframe);break;
+        case A::Frame:renderer_.FrameSelection();break;
+        case A::Isolate:toggleIsolation();break;
+        case A::ResetView:endInteraction();renderer_.ResetView();renderer_.ResetModelRotation();break;
+        case A::SelectPart:
+            if(!ui_.editingLocked&&value>=0&&size_t(value)<meshes_.size()){endInteraction();renderer_.SelectPart(value);}break;
+        case A::Visibility:
+            if(value>=0&&size_t(value)<meshes_.size()&&size_t(value)<ui_.meshes.size()){endInteraction();const bool visible=ui_.meshes[size_t(value)].visible;restoreIsolation();renderer_.SetPartVisible(size_t(value),visible);}break;
+        case A::ShowAll:endInteraction();restoreIsolation();for(size_t i=0;i<meshes_.size();++i)renderer_.SetPartVisible(i,true);break;
+        case A::HideSelected:
+            endInteraction();restoreIsolation();for(size_t i=0;i<meshes_.size();++i)if(renderer_.PartSelected(i))renderer_.SetPartVisible(i,false);break;
+        case A::ClearSelection:endInteraction();renderer_.ClearSelection();break;
+        case A::PreviewSettings:applyPreviewSettings();break;
+        case A::LightSettings:applyLightSettings();break;
+        case A::AlphaSettings:applyAlphaSettings();break;
+        case A::Skeleton:renderer_.SkeletonEnabled(ui_.skeleton);break;
+        case A::AnimationSelect:endInteraction();stopAnimation(false);animationTime_=0;setAnimationPose();break;
+        case A::AnimationPlay:
+            if(renderer_.MotionCount()) {endInteraction();setMode(lab::EditorMode::Fly);ui_.animationPlaying=!ui_.animationPlaying;ui_.editingLocked=ui_.animationPlaying;setAnimationPose();}break;
+        case A::AnimationSeek:
+            endInteraction();if(auto* motion=renderer_.MotionAt(size_t(std::max(0,ui_.animationIndex)))){animationTime_=float(ui_.animationFrame)/std::max(1.f,motion->fps);setAnimationPose();}break;
+        case A::AnimationSettings:setAnimationPose();break;
+        }
+    }
+    POINT scenePoint(ImVec2 mouse)const {
+        return {LONG(std::floor((mouse.x-ui_.viewportRect.x)*renderer_.SceneWidth()/std::max(1.f,ui_.viewportRect.w))),
+                LONG(std::floor((mouse.y-ui_.viewportRect.y)*renderer_.SceneHeight()/std::max(1.f,ui_.viewportRect.h)))};
+    }
+    void keyboard(float delta) {
+        ImGuiIO& io=ImGui::GetIO();if(io.WantTextInput||GetForegroundWindow()!=window_)return;
+        if(io.KeyCtrl) {
+            if(ImGui::IsKeyPressed(ImGuiKey_Z,false))action(io.KeyShift?lab::EditorAction::Redo:lab::EditorAction::Undo);
+            if(ImGui::IsKeyPressed(ImGuiKey_Y,false))action(lab::EditorAction::Redo);
+            if(ImGui::IsKeyPressed(ImGuiKey_S,false))action(lab::EditorAction::SaveSession);
+        }
+        if(!viewportFocus_)return;
+        auto pressed=[](ImGuiKey key){return ImGui::IsKeyPressed(key,false);};
+        if(!io.KeyCtrl) {
+            if(pressed(ImGuiKey_1)||pressed(ImGuiKey_Escape))setMode(lab::EditorMode::Fly);
+            if(pressed(ImGuiKey_2))setMode(lab::EditorMode::Orbit);
+            if(pressed(ImGuiKey_3)||pressed(ImGuiKey_C))setMode(lab::EditorMode::Choose);
+            if(pressed(ImGuiKey_4))setMode(lab::EditorMode::Light);
+            if(pressed(ImGuiKey_5)||pressed(ImGuiKey_B))setMode(lab::EditorMode::Brush);
+            if(pressed(ImGuiKey_6)||pressed(ImGuiKey_R))setMode(lab::EditorMode::Model);
+            if(pressed(ImGuiKey_F))action(lab::EditorAction::Frame);
+            if(pressed(ImGuiKey_I))action(lab::EditorAction::Isolate);
+            if(pressed(ImGuiKey_O))action(lab::EditorAction::Outline);
+            if(pressed(ImGuiKey_V))action(lab::EditorAction::Wireframe);
+            if(pressed(ImGuiKey_H))action(io.KeyShift?lab::EditorAction::ShowAll:lab::EditorAction::HideSelected);
+            if(pressed(ImGuiKey_Home))action(lab::EditorAction::ResetView);
+            if(pressed(ImGuiKey_X)){endInteraction();ui_.brushRemove=!ui_.brushRemove;}
+            if(pressed(ImGuiKey_LeftBracket)){endInteraction();ui_.brushRadiusPercent=std::max(.2f,ui_.brushRadiusPercent-.5f);}
+            if(pressed(ImGuiKey_RightBracket)){endInteraction();ui_.brushRadiusPercent=std::min(30.f,ui_.brushRadiusPercent+.5f);}
+        }
+        if(ui_.mode==lab::EditorMode::Fly) {
+            auto down=[](ImGuiKey key){return ImGui::IsKeyDown(key)?1.f:0.f;};
+            const float speed=delta*(io.KeyShift?6.f:io.KeyCtrl?.6f:2.f);
+            // Ctrl+S saves and must not simultaneously move the camera.
+            renderer_.MoveCamera((down(ImGuiKey_D)-down(ImGuiKey_A))*speed,(down(ImGuiKey_E)-down(ImGuiKey_Q))*speed,(down(ImGuiKey_W)-(io.KeyCtrl?0.f:down(ImGuiKey_S)))*speed);
+        }
+    }
+    void viewportInput(float delta) {
+        ImGuiIO& io=ImGui::GetIO();const POINT point=scenePoint(io.MousePos);
+        if(ImGui::IsMouseClicked(0)||ImGui::IsMouseClicked(1)||ImGui::IsMouseClicked(2))viewportFocus_=ui_.viewportHovered;
+        keyboard(delta);
+        if(GetForegroundWindow()!=window_){endInteraction();renderer_.ClearHover();renderer_.ClearBrushCursor();return;}
+        if(drag_!=Drag::None&&(dragButton_<0||!ImGui::IsMouseDown(dragButton_))) {
+            if(drag_==Drag::Brush&&ui_.viewportHovered)stampAt(point.x,point.y);
+            endInteraction();
+        }
+        if(ui_.viewportHovered&&drag_==Drag::None) {
+            if(ImGui::IsMouseClicked(2)){drag_=Drag::Pan;dragButton_=2;}
+            else if(ImGui::IsMouseClicked(1)) {
+                if(ui_.mode==lab::EditorMode::Choose)action(lab::EditorAction::ClearSelection);
+                else {drag_=Drag::Orbit;dragButton_=1;}
+            }
+            else if(ImGui::IsMouseClicked(0)) {
+                using M=lab::EditorMode;
+                if(ui_.mode==M::Choose){int part=renderer_.PickGeometry(point.x,point.y);endInteraction();renderer_.SelectPart(part);}
+                else if(ui_.mode==M::Brush){if(beginStroke(point.x,point.y)){drag_=Drag::Brush;dragButton_=0;stampAt(point.x,point.y);}}
+                else {drag_=ui_.mode==M::Light?Drag::Light:ui_.mode==M::Model?Drag::Model:Drag::Orbit;dragButton_=0;}
+            }
+        }
+        const float dx=io.MouseDelta.x/dpiScale_,dy=io.MouseDelta.y/dpiScale_;
+        if(drag_==Drag::Orbit)renderer_.OrbitCamera(dx,dy);
+        if(drag_==Drag::Pan)renderer_.PanCamera(dx,dy);
+        if(drag_==Drag::Model)renderer_.RotateModel(dx,dy);
+        if(drag_==Drag::Light){renderer_.OrbitLight(dx,dy);ui_.lightAzimuth=renderer_.LightAzimuthDegrees();ui_.lightElevation=renderer_.LightElevationDegrees();}
+        if(drag_==Drag::Brush&&(io.MouseDelta.x!=0||io.MouseDelta.y!=0)) {
+            if(ui_.viewportHovered)stampAt(point.x,point.y);else lastBrushValid_=false;
+        }
+        if(ui_.viewportHovered&&io.MouseWheel!=0) {
+            if(ui_.mode==lab::EditorMode::Brush&&io.KeyCtrl){endInteraction();ui_.brushRadiusPercent=std::clamp(ui_.brushRadiusPercent+io.MouseWheel*.5f,.2f,30.f);}
+            else renderer_.Zoom(io.MouseWheel);
+        }
+        if(ui_.viewportHovered&&(ui_.mode==lab::EditorMode::Choose||ui_.mode==lab::EditorMode::Brush)) {
+            lab::Renderer::PickHit hit;
+            if(renderer_.PickUV(point.x,point.y,hit)) {
+                if(ui_.mode==lab::EditorMode::Choose)renderer_.SetHoverPart(hit.part);
+                else if(hit.part>=0&&size_t(hit.part)<meshes_.size()) {
+                    auto material=meshes_[size_t(hit.part)].material;
+                    uint32_t w=material->document?material->document->Width():material->loadedPair.bump.w;
+                    uint32_t h=material->document?material->document->HeightPixels():material->loadedPair.bump.h;
+                    const float radius=ui_.brushRadiusPercent*.01f*std::max(w,h);
+                    if(w&&h)renderer_.SetBrushCursor(hit,radius/w,radius/h);else renderer_.ClearBrushCursor();
+                }
+            }else{renderer_.ClearHover();renderer_.ClearBrushCursor();}
+        }else{renderer_.ClearHover();renderer_.ClearBrushCursor();}
+    }
+    void tickAnimation(float delta) {
+        if(!ui_.animationPlaying)return;
+        auto* motion=renderer_.MotionAt(size_t(std::max(0,ui_.animationIndex)));if(!motion){stopAnimation(true);return;}
+        animationTime_+=delta*ui_.animationSpeed*motion->speed;
+        if(!ui_.animationLoop&&animationTime_>=motion->duration()){animationTime_=std::max(0.f,motion->duration()-1.f/std::max(1.f,motion->fps));stopAnimation(false);}
+        else if(ui_.animationLoop&&motion->duration()>0)animationTime_=std::fmod(animationTime_,motion->duration());
+        setAnimationPose();
+    }
+    void applyDpi() {
+        ImGuiIO& io=ImGui::GetIO();
+        if(imguiReady_)ImGui_ImplDX11_InvalidateDeviceObjects();
+        lab::ConfigureEditorUIStyle(dpiScale_);ui_.uiScale=dpiScale_;
+        io.Fonts->Clear();static ImVector<ImWchar> ranges;
+        ImFontGlyphRangesBuilder builder;builder.AddRanges(io.Fonts->GetGlyphRangesCyrillic());
+        const ImWchar extra[]={0x2000,0x206f,0x2190,0x22ff,0};builder.AddRanges(extra);builder.BuildRanges(&ranges);
+        wchar_t windows[MAX_PATH]{};GetWindowsDirectoryW(windows,MAX_PATH);
+        const auto font=fs::path(windows)/L"Fonts"/L"segoeui.ttf";
+        if(!io.Fonts->AddFontFromFileTTF(utf8(font.wstring()).c_str(),16.f*dpiScale_,nullptr,ranges.Data))io.Fonts->AddFontDefault();
+        if(imguiReady_&&!ImGui_ImplDX11_CreateDeviceObjects())throw std::runtime_error("Direct3D: font resources could not be created");
+    }
+    bool dpiPending_=false;
+    void frame(bool input=true) {
+        const auto now=GetTickCount64();const float delta=std::clamp(float(now-lastTick_)*.001f,.001f,.05f);lastTick_=now;
+        if(dpiPending_){applyDpi();dpiPending_=false;}
+        // Resize before submitting the Image draw command, whose texture must stay alive for this frame.
+        if(ui_.viewportRect.w>1&&ui_.viewportRect.h>1) {
+            std::wstring error;
+            // ResizeScene keeps its previous surface on failure. Continue the
+            // UI so the error is visible and the user can shrink the viewport.
+            if(!renderer_.ResizeScene(UINT(ui_.viewportRect.w),UINT(ui_.viewportRect.h),error))status(utf8(error));
+        }
+        ui_.viewportTexture=static_cast<ImTextureID>(reinterpret_cast<intptr_t>(renderer_.SceneTexture()));
+        synchronizeUI();const auto oldTab=ui_.tab;
+        ImGui_ImplDX11_NewFrame();ImGui_ImplWin32_NewFrame();ImGui::NewFrame();
+        std::vector<std::pair<lab::EditorAction,int>> actions;
+        lab::DrawEditorUI(ui_,[&](lab::EditorAction kind,int value){actions.emplace_back(kind,value);});
+        // No callback can invalidate a mesh/animation vector while widgets iterate it.
+        for(const auto& request:actions)action(request.first,request.second);
+        if(ui_.tab!=oldTab){endInteraction();if(oldTab==lab::EditorTab::Animation)stopAnimation(true);if(ui_.tab==lab::EditorTab::Animation)setMode(lab::EditorMode::Fly);}
+        if(input)viewportInput(delta);tickAnimation(delta);
+        ImGui::Render();renderer_.DrawScene();renderer_.BeginUI();ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+        const HRESULT presented=renderer_.PresentUI();
+        if(FAILED(presented)){status("Direct3D: устройство вывода потеряно.");deviceLost_=true;exitCode_=1;}
+    }
+    void recoverDocuments() {
+        recoveryAttempted_=true;
+        // Saving sessions is CPU-only and remains available after a device loss.
+        bool saved=true;size_t count=0;fs::path directory;
+        try {
+            try{endInteraction();}catch(const std::exception&){saved=false;}
+            directory=fs::temp_directory_path()/L"MaterialLab-recovery"/(std::to_wstring(GetCurrentProcessId())+L"-"+std::to_wstring(GetTickCount64()));
+            std::unordered_set<Material*> seen;
+            for(const auto& row:meshes_)if(seen.insert(row.material.get()).second&&row.material->document&&row.material->document->IsDirty()) {
+                std::error_code ec;fs::create_directories(directory,ec);
+                const fs::path file=directory/(std::to_wstring(++count)+L"-"+safeName(wide(row.material->label))+L".krlab");
+                std::string error;
+                if(ec||!row.material->document->Save(file,error))saved=false;
+                else row.material->sessionPath=file;
+            }
+        }catch(const std::exception&){saved=false;}
+        const std::wstring message=saved?(count?L"Ошибка вывода. Изменённые материалы сохранены для восстановления:\n\n"+directory.wstring()+L"\n\nПосле перезапуска откройте эти .krlab через «Открыть сеанс».":L"Ошибка вывода. Несохранённых изменений нет."):
+            L"Ошибка вывода. Не удалось автоматически сохранить все материалы. Сохраните оставшиеся сеансы в следующем диалоге. При отмене данные останутся в памяти; закройте окно, чтобы повторить сохранение.";
+        MessageBoxW(window_,message.c_str(),AppTitle,MB_OK|MB_ICONERROR);
+        if(saved||confirmAll())running_=false;
+    }
+    static LRESULT CALLBACK windowProc(HWND window,UINT message,WPARAM wParam,LPARAM lParam) {
+        App* app=reinterpret_cast<App*>(GetWindowLongPtrW(window,GWLP_USERDATA));
+        if(message==WM_NCCREATE){app=static_cast<App*>(reinterpret_cast<CREATESTRUCTW*>(lParam)->lpCreateParams);app->window_=window;SetWindowLongPtrW(window,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(app));}
+        const bool handled=app&&app->imguiReady_&&ImGui_ImplWin32_WndProcHandler(window,message,wParam,lParam)!=0;
+        if(!app)return DefWindowProcW(window,message,wParam,lParam);
+        switch(message) {
+        case WM_SIZE:
+            app->minimized_=wParam==SIZE_MINIMIZED;
+            if(app->renderer_.Device()&&!app->minimized_){std::wstring error;if(!app->renderer_.Resize(UINT(LOWORD(lParam)),UINT(HIWORD(lParam)),error))app->status(utf8(error));}
+            return 0;
+        case WM_DPICHANGED: {
+            app->endInteraction();app->dpiScale_=float(HIWORD(wParam))/96.f;app->dpiPending_=true;
+            const RECT& rect=*reinterpret_cast<const RECT*>(lParam);const RECT work=monitorWorkArea(window);
+            const int width=std::min(rect.right-rect.left,work.right-work.left),height=std::min(rect.bottom-rect.top,work.bottom-work.top);
+            SetWindowPos(window,nullptr,std::clamp(int(rect.left),int(work.left),int(work.right)-width),std::clamp(int(rect.top),int(work.top),int(work.bottom)-height),width,height,SWP_NOZORDER|SWP_NOACTIVATE);return 0;
+        }
+        case WM_GETMINMAXINFO: {
+            const RECT work=monitorWorkArea(window);
+            auto* limits=reinterpret_cast<MINMAXINFO*>(lParam);limits->ptMinTrackSize={std::min(LONG(960*app->dpiScale_),work.right-work.left),std::min(LONG(600*app->dpiScale_),work.bottom-work.top)};return 0;
+        }
+        case WM_CAPTURECHANGED:
+            if(reinterpret_cast<HWND>(lParam)!=window)app->finishPointerInteraction();
+            return 0;
+        case WM_CANCELMODE:app->endInteraction();return 0;
+        case WM_KILLFOCUS:app->endInteraction();app->viewportFocus_=false;return 0;
+        case WM_CLOSE:
+            if(app->confirmAll())DestroyWindow(window);return 0;
+        case WM_DESTROY:app->running_=false;PostQuitMessage(0);return 0;
+        case WM_ERASEBKGND:return 1;
+        case WM_SYSCOMMAND:if((wParam&0xfff0)==SC_KEYMENU)return 0;break;
+        }
+        return handled?1:DefWindowProcW(window,message,wParam,lParam);
+    }
 public:
- static LRESULT CALLBACK mainProc(HWND hwnd,UINT message,WPARAM w,LPARAM l){auto* a=reinterpret_cast<App*>(GetWindowLongPtrW(hwnd,GWLP_USERDATA));if(message==WM_NCCREATE){a=reinterpret_cast<App*>(reinterpret_cast<CREATESTRUCTW*>(l)->lpCreateParams);SetWindowLongPtrW(hwnd,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(a));a->window_=hwnd;}return a?a->handle(hwnd,message,w,l):DefWindowProcW(hwnd,message,w,l);}
- static LRESULT CALLBACK viewProc(HWND hwnd,UINT message,WPARAM w,LPARAM l){auto* a=reinterpret_cast<App*>(GetWindowLongPtrW(hwnd,GWLP_USERDATA));if(message==WM_NCCREATE){a=reinterpret_cast<App*>(reinterpret_cast<CREATESTRUCTW*>(l)->lpCreateParams);SetWindowLongPtrW(hwnd,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(a));}return a?a->view(hwnd,message,w,l):DefWindowProcW(hwnd,message,w,l);}
- LRESULT view(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
-  switch(msg){
-   case WM_ERASEBKGND:return 1;
-   case WM_PAINT:{PAINTSTRUCT ps;BeginPaint(hwnd,&ps);if(ready_)render_.Draw();EndPaint(hwnd,&ps);return 0;}
-   case WM_SIZE:{if(ready_&&LOWORD(lp)>0&&HIWORD(lp)>0){std::wstring err;if(!render_.Resize(LOWORD(lp),HIWORD(lp),err))status(err);}return 0;}
-   case WM_LBUTTONDOWN:{
-    endInteraction();SetFocus(hwnd);last_={GET_X_LPARAM(lp),GET_Y_LPARAM(lp)};
-    if(!animPlaying_&&selectionMode_){const int hit=render_.PickGeometry(last_.x,last_.y);
-     if(hit>=0){syncMeshListSelection(hit);refreshBrushAvailability();status(L"Mesh "+std::to_wstring(hit+1)+L" выбран");}
-     InvalidateRect(hwnd,nullptr,FALSE);return 0;
+    ~App() {
+        if(imguiReady_){ImGui_ImplDX11_Shutdown();ImGui_ImplWin32_Shutdown();imguiReady_=false;}
+        if(ImGui::GetCurrentContext())ImGui::DestroyContext();
+        if(window_&&IsWindow(window_))DestroyWindow(window_);
     }
-    if(!animPlaying_&&brushMode_){beginBrushStroke();brushDown_=true;brushScreenValid_=false;paintStrokeTo(last_.x,last_.y,true);}
-    else lDown_=true;
-    SetCapture(hwnd);return 0;
-   }
-   case WM_RBUTTONDOWN:{
-    endInteraction();SetFocus(hwnd);last_={GET_X_LPARAM(lp),GET_Y_LPARAM(lp)};
-    if(selectionMode_&&!animPlaying_){clearSelection();return 0;}
-    rDown_=true;render_.ClearBrushCursor();SetCapture(hwnd);return 0;
-   }
-   case WM_MBUTTONDOWN:endInteraction();SetFocus(hwnd);mDown_=true;last_={GET_X_LPARAM(lp),GET_Y_LPARAM(lp)};render_.ClearBrushCursor();SetCapture(hwnd);return 0;
-   case WM_MOUSEMOVE:{
-    TRACKMOUSEEVENT tme={sizeof(tme),TME_LEAVE,hwnd,0};TrackMouseEvent(&tme);
-    const POINT at={GET_X_LPARAM(lp),GET_Y_LPARAM(lp)};const float dx=float(at.x-last_.x),dy=float(at.y-last_.y);last_=at;
-    bool changed=false;
-    if(!animPlaying_&&brushDown_&&(wp&MK_LBUTTON)){paintStrokeTo(at.x,at.y);changed=true;}
-    else if(lDown_&&(wp&MK_LBUTTON)){
-     if(viewMode_==ViewMode::Light)render_.OrbitLight(dx,dy);
-     else if(modelRotateMode_&&!animationPageActive()&&!animPlaying_)render_.RotateModel(dx,dy);
-     else render_.OrbitCamera(dx,dy);changed=true;
-    }else if(rDown_&&(wp&MK_RBUTTON)){render_.OrbitCamera(dx,dy);changed=true;}
-    else if(mDown_&&(wp&MK_MBUTTON)){render_.PanCamera(dx,dy);changed=true;}
-    else if(!animPlaying_&&brushMode_){updateBrushCursor(at.x,at.y);changed=true;}
-    else if(!animPlaying_&&selectionMode_&&GetTickCount64()-hoverLastTick_>=33){
-     hoverLastTick_=GetTickCount64();lab::Renderer::PickHit hit;
-     if(render_.PickUV(at.x,at.y,hit))render_.SetHoverPart(hit.part);else render_.ClearHover();changed=true;
+    bool create(HINSTANCE instance,bool software=false) {
+        ImGui_ImplWin32_EnableDpiAwareness();
+        WNDCLASSEXW klass{};klass.cbSize=sizeof(klass);klass.style=CS_CLASSDC;klass.lpfnWndProc=windowProc;klass.hInstance=instance;klass.hCursor=LoadCursorW(nullptr,IDC_ARROW);klass.lpszClassName=L"KichRayMaterialLabImGui";
+        if(!RegisterClassExW(&klass)&&GetLastError()!=ERROR_CLASS_ALREADY_EXISTS)return false;
+        dpiScale_=ImGui_ImplWin32_GetDpiScaleForMonitor(MonitorFromPoint(POINT{0,0},MONITOR_DEFAULTTOPRIMARY));
+        const RECT work=monitorWorkArea(nullptr);
+        const int width=std::min(int(1360*dpiScale_),int(work.right-work.left)),height=std::min(int(850*dpiScale_),int(work.bottom-work.top));
+        window_=CreateWindowExW(0,klass.lpszClassName,AppTitle,WS_OVERLAPPEDWINDOW,work.left+(work.right-work.left-width)/2,work.top+(work.bottom-work.top-height)/2,width,height,nullptr,nullptr,instance,this);
+        if(!window_)return false;
+        std::wstring error;if(!renderer_.Init(window_,error,software)){fail(utf8(error));return false;}
+        IMGUI_CHECKVERSION();ImGui::CreateContext();ImGuiIO& io=ImGui::GetIO();
+        io.ConfigFlags|=ImGuiConfigFlags_NavEnableKeyboard;io.IniFilename=nullptr;io.LogFilename=nullptr;
+        applyDpi();ImGui::GetStyle().HoverDelayNormal=.6f;
+        if(!ImGui_ImplWin32_Init(window_)){fail("Не удалось создать интерфейс Win32.");return false;}
+        if(!ImGui_ImplDX11_Init(renderer_.Device(),renderer_.Context())){ImGui_ImplWin32_Shutdown();fail("Не удалось создать интерфейс Direct3D.");return false;}
+        imguiReady_=true;if(!ImGui_ImplDX11_CreateDeviceObjects()){fail("Не удалось загрузить шрифт на видеокарту.");return false;}
+        if(!newCube(false))return false;
+        const fs::path ini=executableDirectory()/L"MaterialLab.ini";
+        ui_.lightAzimuth=float(GetPrivateProfileIntW(L"Scene",L"LightAzimuth",52,ini.c_str()));
+        ui_.lightElevation=std::clamp(float(GetPrivateProfileIntW(L"Scene",L"LightElevation",37,ini.c_str())),-81.f,81.f);
+        applyPreviewSettings();applyAlphaSettings();applyLightSettings(false);renderer_.OutlineEnabled(ui_.outline);renderer_.SkeletonEnabled(ui_.skeleton);
+        ShowWindow(window_,SW_SHOWDEFAULT);UpdateWindow(window_);lastTick_=GetTickCount64();return true;
     }
-    if(changed)InvalidateRect(hwnd,nullptr,FALSE);return 0;
-   }
-   case WM_MOUSELEAVE:if(!brushDown_)render_.ClearBrushCursor();render_.ClearHover();InvalidateRect(hwnd,nullptr,FALSE);return 0;
-   case WM_LBUTTONUP:if(brushDown_)paintStrokeTo(GET_X_LPARAM(lp),GET_Y_LPARAM(lp));endInteraction();if(brushMode_)updateBrushCursor(GET_X_LPARAM(lp),GET_Y_LPARAM(lp));InvalidateRect(hwnd,nullptr,FALSE);syncTools();return 0;
-   case WM_RBUTTONUP:case WM_MBUTTONUP:endInteraction();return 0;
-   case WM_CAPTURECHANGED:if(reinterpret_cast<HWND>(lp)!=hwnd)endInteraction(false);return 0;
-   case WM_CANCELMODE:case WM_KILLFOCUS:endInteraction();render_.ClearBrushCursor();render_.ClearHover();InvalidateRect(hwnd,nullptr,FALSE);return 0;
-   case WM_MOUSEWHEEL:if(brushMode_&&(GET_KEYSTATE_WPARAM(wp)&MK_CONTROL))adjustBrushRadius(GET_WHEEL_DELTA_WPARAM(wp)/WHEEL_DELTA*2);else render_.Zoom(float(GET_WHEEL_DELTA_WPARAM(wp))/WHEEL_DELTA);InvalidateRect(hwnd,nullptr,FALSE);return 0;
-   case WM_SETCURSOR:if(LOWORD(lp)==HTCLIENT){const wchar_t* cursor=brushMode_||selectionMode_?IDC_CROSS:(viewMode_==ViewMode::Light||viewMode_==ViewMode::Model?IDC_SIZEALL:IDC_ARROW);SetCursor(LoadCursorW(nullptr,cursor));return TRUE;}break;
-  }
-  return DefWindowProcW(hwnd,msg,wp,lp);
- }
- LRESULT handle(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
-  switch(msg){
-   case WM_GETMINMAXINFO:{auto* info=reinterpret_cast<MINMAXINFO*>(lp);info->ptMinTrackSize={ui(1140),ui(580)};return 0;}
-   case WM_PAINT:{PAINTSTRUCT ps;BeginPaint(hwnd,&ps);RECT r{};GetClientRect(hwnd,&r);FillRect(ps.hdc,&r,panelBrush());RECT tools={ui(PANEL),std::max(0L,r.bottom-ui(32+lab::ViewportToolbar::Height)),r.right,std::max(0L,r.bottom-ui(32))};FillRect(ps.hdc,&tools,toolBrush());EndPaint(hwnd,&ps);return 0;}
-   case WM_CTLCOLORSTATIC:case WM_CTLCOLORBTN:{HDC dc=reinterpret_cast<HDC>(wp);if(reinterpret_cast<HWND>(lp)==toolbar_.hint()){SetTextColor(dc,RGB(179,192,211));SetBkColor(dc,RGB(29,35,46));return reinterpret_cast<LRESULT>(toolBrush());}SetTextColor(dc,RGB(48,59,76));SetBkColor(dc,RGB(246,248,251));return reinterpret_cast<LRESULT>(panelBrush());}
-   case WM_SIZE:layout();return 0;
-   case WM_COMMAND:{int id=LOWORD(wp),code=HIWORD(wp);if(code==BN_CLICKED)click(id);else if(id==ALPHA_MODE&&code==CBN_SELCHANGE){updateAlphaSettings();}else if(id==ANIM_COMBO&&code==CBN_SELCHANGE&&animationPageActive()){int sel=int(SendMessageW(controls_[ANIM_COMBO],CB_GETCURSEL,0,0));if(sel>=0){stopAnimation();configureAnimation(size_t(sel),true);}}return 0;}
-   case WM_NOTIFY:{auto* h=reinterpret_cast<NMHDR*>(lp);LRESULT toolbarResult=0;if(toolbar_.notify(h,toolbarResult))return toolbarResult;if(h&&h->hwndFrom==tab_&&h->code==TCN_SELCHANGE){activateTab(TabCtrl_GetCurSel(tab_));return 0;}if(h&&h->hwndFrom==controls_[MESH_LIST]&&h->code==LVN_ITEMCHANGED&&!meshListUpdating_){if(animPlaying_){status(L"Редактирование заблокировано во время анимации");return 0;}auto* lv=reinterpret_cast<NMLISTVIEW*>(lp);if(lv->iItem>=0&&size_t(lv->iItem)<render_.PartCount()){const int oldCheck=(lv->uOldState&LVIS_STATEIMAGEMASK)>>12,newCheck=(lv->uNewState&LVIS_STATEIMAGEMASK)>>12;if(oldCheck!=newCheck&&newCheck){const bool visible=newCheck==2;restoreIsolation();render_.SetPartVisible(size_t(lv->iItem),visible);if(!visible){meshListUpdating_=true;ListView_SetItemState(controls_[MESH_LIST],lv->iItem,0,LVIS_SELECTED|LVIS_FOCUSED);meshListUpdating_=false;}refreshBrushAvailability();InvalidateRect(preview_,nullptr,FALSE);}if((lv->uNewState&LVIS_SELECTED)&&!(lv->uOldState&LVIS_SELECTED)&&render_.PartVisible(size_t(lv->iItem))){render_.SelectPart(lv->iItem,false);render_.ClearHover();refreshBrushAvailability();InvalidateRect(preview_,nullptr,FALSE);}}return 0;}break;}
-   case WM_HSCROLL:{HWND ctrl=reinterpret_cast<HWND>(lp);if(ctrl){int id=GetDlgCtrlID(ctrl);const bool animControl=id==ANIM_TIMELINE||id==ANIM_SPEED||id==ALPHA_CUTOFF||id==SLIDER_LIGHT_AZ||id==SLIDER_LIGHT_EL;if(animPlaying_&&!animControl){status(L"Редактирование заблокировано во время анимации");return 0;}const int scrollCode=LOWORD(wp);const bool persistBase=scrollCode==TB_ENDTRACK||scrollCode==TB_THUMBPOSITION;if(id==SLIDER_NORMAL||id==SLIDER_GLOSS||id==SLIDER_HEIGHT||id==SLIDER_BLUR||id==SLIDER_SHARP||id==SLIDER_LIGHT_AZ||id==SLIDER_LIGHT_EL||id==ANIM_TIMELINE||id==ANIM_SPEED||id==BRUSH_RADIUS||id==BRUSH_STRENGTH||id==BRUSH_HARDNESS||id==ALPHA_CUTOFF)movedSlider(id,persistBase);}return 0;}
-   case WM_TIMER:if(wp==ANIM_TIMER)tickAnimation();else if(wp==VIEW_TIMER)tickView();return 0;
-   case WM_ACTIVATEAPP:if(!wp)endInteraction();return 0;
-   case WM_DESTROY:KillTimer(window_,VIEW_TIMER);endInteraction();stopAnimation();PostQuitMessage(0);return 0;
-  }
-  return DefWindowProcW(hwnd,msg,wp,lp);
- }
-
- bool create(HINSTANCE instance,bool software=false){HDC screen=GetDC(nullptr);if(screen){uiDpi=GetDeviceCaps(screen,LOGPIXELSX);ReleaseDC(nullptr,screen);}INITCOMMONCONTROLSEX ic={sizeof(ic),ICC_BAR_CLASSES|ICC_TAB_CLASSES|ICC_LISTVIEW_CLASSES};InitCommonControlsEx(&ic);WNDCLASSEXW wc={sizeof(wc)};wc.hInstance=instance;wc.lpfnWndProc=&App::mainProc;wc.lpszClassName=L"KichRayMaterialLab";wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);wc.hbrBackground=panelBrush();if(!RegisterClassExW(&wc))return false;wc.lpfnWndProc=&App::viewProc;wc.lpszClassName=L"KichRayMaterialView";wc.hbrBackground=reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));if(!RegisterClassExW(&wc))return false;WNDCLASSEXW pc={sizeof(pc)};pc.hInstance=instance;pc.lpfnWndProc=&materialPageProc;pc.lpszClassName=L"KichRayMaterialPage";pc.hCursor=LoadCursorW(nullptr,IDC_ARROW);pc.hbrBackground=panelBrush();if(!RegisterClassExW(&pc))return false;font_=CreateFontW(ui(-15),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH|FF_DONTCARE,L"Segoe UI");if(!font_)font_=reinterpret_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));window_=CreateWindowExW(0,L"KichRayMaterialLab",L"KichRay Material Lab 0.9.1",WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN,CW_USEDEFAULT,CW_USEDEFAULT,ui(1490),ui(860),nullptr,nullptr,instance,this);if(!window_)return false;
-  tab_=CreateWindowExW(0,WC_TABCONTROLW,L"",WS_CHILD|WS_VISIBLE|WS_CLIPSIBLINGS|TCS_SINGLELINE|TCS_RAGGEDRIGHT,ui(8),ui(8),ui(PANEL-16),ui(38),window_,reinterpret_cast<HMENU>(TAB_MAIN),instance,nullptr);SendMessageW(tab_,WM_SETFONT,reinterpret_cast<WPARAM>(font_),TRUE);SendMessageW(tab_,TCM_SETPADDING,0,MAKELPARAM(ui(5),ui(4)));const wchar_t* tabs[]={L"Импорт",L"Вывод",L"Материал",L"Сцена",L"Кисть"};for(int i=0;i<5;++i){TCITEMW ti={};ti.mask=TCIF_TEXT;ti.pszText=const_cast<LPWSTR>(tabs[i]);TabCtrl_InsertItem(tab_,i,&ti);}
-  pageHost_=CreateWindowExW(WS_EX_COMPOSITED|WS_EX_CONTROLPARENT,L"KichRayMaterialPage",L"",WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,ui(PAGE_TOP),ui(PANEL),ui(700),window_,nullptr,instance,nullptr);if(!pageHost_)return false;
-  for(int i=0;i<TAB_COUNT;++i){pages_[i]=CreateWindowExW(WS_EX_CONTROLPARENT,L"KichRayMaterialPage",L"",WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|WS_VSCROLL,0,0,ui(PANEL),ui(700),pageHost_,nullptr,instance,&pageScroll_[i]);if(!pages_[i])return false;}
-  group(0,L"Модель",54,66);control(0,LOAD_OGF,L"BUTTON",L"Открыть OGF",18,76,PANEL-36,32,BS_PUSHBUTTON|WS_TABSTOP);
-  group(0,L"Карты материала",128,198);const int half=(PANEL-48)/2;control(0,LOAD_DIFF,L"BUTTON",L"Diffuse",18,154,half,31,BS_PUSHBUTTON);control(0,LOAD_NORMAL,L"BUTTON",L"Normal",24+half,154,half,31,BS_PUSHBUTTON);control(0,LOAD_GLOSS,L"BUTTON",L"Gloss",18,193,half,31,BS_PUSHBUTTON);control(0,LOAD_HEIGHT,L"BUTTON",L"Height",24+half,193,half,31,BS_PUSHBUTTON);control(0,LOAD_BUMP,L"BUTTON",L"_bump",18,232,half,31,BS_PUSHBUTTON);control(0,LOAD_BUMPX,L"BUTTON",L"_bump#",24+half,232,half,31,BS_PUSHBUTTON);
-
-  group(1,L"Генерация",54,76);control(1,GENERATE,L"BUTTON",L"Создать bump",18,79,PANEL-36,36,BS_PUSHBUTTON|WS_TABSTOP);
-  group(1,L"Экспорт",140,132);control(1,EXPORT_NAME,L"EDIT",L"",18,166,PANEL-36,31,WS_BORDER|ES_AUTOHSCROLL|WS_TABSTOP);SendMessageW(controls_[EXPORT_NAME],EM_SETCUEBANNER,TRUE,reinterpret_cast<LPARAM>(L"Имя экспорта"));control(1,USE_TEX_NAME,L"BUTTON",L"Использовать имя текстуры",18,205,PANEL-36,27,BS_AUTOCHECKBOX);SendMessageW(controls_[USE_TEX_NAME],BM_SETCHECK,BST_CHECKED,0);control(1,EXPORT,L"BUTTON",L"Экспорт",18,238,PANEL-36,31,BS_PUSHBUTTON|WS_TABSTOP);
-
-  group(2,L"Материал",54,344);label(2,L"Сила нормалей",78);slider(2,SLIDER_NORMAL,98,0,200,100);label(2,L"Блеск",136);slider(2,SLIDER_GLOSS,156,0,200,90);label(2,L"Высота",194);slider(2,SLIDER_HEIGHT,214,0,200,100);label(2,L"Blur",252);slider(2,SLIDER_BLUR,272,0,100,12);label(2,L"Sharp",310);slider(2,SLIDER_SHARP,330,0,200,35);control(2,INVERT_Y,L"BUTTON",L"Инверсия Y",18,364,PANEL-36,24,BS_AUTOCHECKBOX);
-  group(2,L"Просмотр",408,168);control(2,BUMP_ENABLED,L"BUTTON",L"Показывать bump",18,432,PANEL-36,24,BS_AUTOCHECKBOX);SendMessageW(controls_[BUMP_ENABLED],BM_SETCHECK,BST_CHECKED,0);control(2,COLOR_TINT,L"BUTTON",L"Цвет материала",18,464,PANEL-36,30,BS_PUSHBUTTON);control(2,SELECT_MODE,L"BUTTON",L"Режим выделения",18,502,PANEL-36,24,BS_AUTOCHECKBOX);control(2,CLEAR_SELECTION,L"BUTTON",L"Снять выделение",18,532,PANEL-36,28,BS_PUSHBUTTON);
-  group(2,L"Прозрачность diffuse",588,176);
-  control(2,ALPHA_ENABLED,L"BUTTON",L"Учитывать альфа-канал",18,612,PANEL-36,24,BS_AUTOCHECKBOX|WS_TABSTOP);
-  SendMessageW(controls_[ALPHA_ENABLED],BM_SETCHECK,BST_CHECKED,0);
-  control(2,ALPHA_MODE,L"COMBOBOX",L"",18,646,PANEL-36,140,CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP);
-  for(const wchar_t* mode:{L"Авто: маска / полупрозрачность",L"Отсечение: листва, сетки",L"Смешивание: стекло"})SendMessageW(controls_[ALPHA_MODE],CB_ADDSTRING,0,reinterpret_cast<LPARAM>(mode));
-  SendMessageW(controls_[ALPHA_MODE],CB_SETCURSEL,0,0);label(2,L"Порог отсечения альфы",684);slider(2,ALPHA_CUTOFF,704,0,255,128);
-
-
-  group(3,L"Освещение",54,238);label(3,L"Азимут",78);slider(3,SLIDER_LIGHT_AZ,98,0,360,52);label(3,L"Высота света",136);slider(3,SLIDER_LIGHT_EL,156,-80,80,37);control(3,COLOR_LIGHT,L"BUTTON",L"Цвет света",18,202,half,30,BS_PUSHBUTTON);control(3,COLOR_AMBIENT,L"BUTTON",L"Окружение",24+half,202,half,30,BS_PUSHBUTTON);control(3,SKELETON_ENABLED,L"BUTTON",L"Скелет",18,244,half,24,BS_AUTOCHECKBOX);SendMessageW(controls_[SKELETON_ENABLED],BM_SETCHECK,BST_UNCHECKED,0);EnableWindow(controls_[SKELETON_ENABLED],FALSE);control(3,RESET,L"BUTTON",L"Сброс вида",24+half,242,half,28,BS_PUSHBUTTON);
-  group(3,L"Геометрия",302,326);HWND list=control(3,MESH_LIST,WC_LISTVIEWW,L"",18,328,PANEL-36,246,LVS_REPORT|LVS_SINGLESEL|LVS_SHOWSELALWAYS|LVS_NOCOLUMNHEADER|WS_BORDER|WS_TABSTOP);ListView_SetExtendedListViewStyle(list,LVS_EX_CHECKBOXES|LVS_EX_FULLROWSELECT|LVS_EX_DOUBLEBUFFER);LVCOLUMNW col={};col.mask=LVCF_WIDTH;col.cx=ui(PANEL-62);ListView_InsertColumn(list,0,&col);control(3,MESH_SHOW_ALL,L"BUTTON",L"Показать все",18,584,half,28,BS_PUSHBUTTON);control(3,MESH_HIDE_SELECTED,L"BUTTON",L"Скрыть выбранный",24+half,584,half,28,BS_PUSHBUTTON);
-
-  control(BRUSH_TAB,BRUSH_MODE,L"BUTTON",L"Включить кисть",12,56,PANEL-24,30,BS_AUTOCHECKBOX);EnableWindow(controls_[BRUSH_MODE],FALSE);
-  group(BRUSH_TAB,L"Операция",94,156);control(BRUSH_TAB,BRUSH_TARGET_RELIEF,L"BUTTON",L"Рельеф",18,118,176,24,BS_AUTORADIOBUTTON);control(BRUSH_TAB,BRUSH_TARGET_SHARP,L"BUTTON",L"Sharp",210,118,176,24,BS_AUTORADIOBUTTON);control(BRUSH_TAB,BRUSH_TARGET_HEIGHT_ADD,L"BUTTON",L"Высота +",18,146,176,24,BS_AUTORADIOBUTTON);control(BRUSH_TAB,BRUSH_TARGET_BLUR,L"BUTTON",L"Blur",210,146,176,24,BS_AUTORADIOBUTTON);control(BRUSH_TAB,BRUSH_TARGET_HEIGHT_SUB,L"BUTTON",L"Впадина",18,174,176,24,BS_AUTORADIOBUTTON);control(BRUSH_TAB,BRUSH_TARGET_GLOSS_ADD,L"BUTTON",L"Блеск +",210,174,176,24,BS_AUTORADIOBUTTON);control(BRUSH_TAB,BRUSH_TARGET_GLOSS_SUB,L"BUTTON",L"Блеск -",210,202,176,24,BS_AUTORADIOBUTTON);SendMessageW(controls_[BRUSH_TARGET_RELIEF],BM_SETCHECK,BST_CHECKED,0);
-  group(BRUSH_TAB,L"Параметры кисти",258,226);control(BRUSH_TAB,BRUSH_RADIUS_TEXT,L"STATIC",L"Размер: 3.0%",18,282,176,20,SS_LEFT);slider(BRUSH_TAB,BRUSH_RADIUS,302,1,200,30);control(BRUSH_TAB,BRUSH_STRENGTH_TEXT,L"STATIC",L"Сила: 35.0%",18,340,176,20,SS_LEFT);slider(BRUSH_TAB,BRUSH_STRENGTH,360,0,1000,705);control(BRUSH_TAB,BRUSH_HARDNESS_TEXT,L"STATIC",L"Резкость края: 65%",18,398,220,20,SS_LEFT);slider(BRUSH_TAB,BRUSH_HARDNESS,418,0,100,65);control(BRUSH_TAB,BRUSH_INVERT,L"BUTTON",L"Инвертировать действие",18,456,PANEL-36,24,BS_AUTOCHECKBOX);
-  group(BRUSH_TAB,L"Форма / пресет",496,78);control(BRUSH_TAB,PRESET_LOAD,L"BUTTON",L"Загрузить",18,522,half,30,BS_PUSHBUTTON);control(BRUSH_TAB,PRESET_SAVE,L"BUTTON",L"Сохранить",24+half,522,half,30,BS_PUSHBUTTON);
-  control(BRUSH_TAB,BRUSH_APPLY,L"BUTTON",L"Применить  Ctrl+S",18,588,half,34,BS_PUSHBUTTON);control(BRUSH_TAB,BRUSH_CLEAR,L"BUTTON",L"Очистить",24+half,588,half,34,BS_PUSHBUTTON);
-
-  control(ANIM_TAB,ANIM_COMBO,L"COMBOBOX",L"",12,62,PANEL-24,240,CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP);button(ANIM_TAB,ANIM_PLAY,L"Старт",112,36);control(ANIM_TAB,ANIM_LOOP,L"BUTTON",L"Цикл",12,158,PANEL-24,27,BS_AUTOCHECKBOX);label(ANIM_TAB,L"Кадр",199);slider(ANIM_TAB,ANIM_TIMELINE,221,0,1,0);label(ANIM_TAB,L"Скорость",263);slider(ANIM_TAB,ANIM_SPEED,285,25,200,100);
-  status_=control(-1,STATUS,L"STATIC",L"",12,650,PANEL-24,24,SS_LEFT|SS_NOPREFIX|SS_ENDELLIPSIS);if(!toolbar_.create(window_,font_,VIEW_TOOLS,sizeof(VIEW_TOOLS)/sizeof(VIEW_TOOLS[0]),uiDpi))return false;preview_=CreateWindowExW(0,L"KichRayMaterialView",L"",WS_CHILD|WS_VISIBLE|WS_CLIPSIBLINGS,PANEL,0,980,760,window_,nullptr,instance,this);if(!preview_)return false;std::wstring err;if(!render_.Init(preview_,err,software)){MessageBoxW(window_,err.c_str(),L"D3D11",MB_ICONERROR);return false;}render_.SetNormalSettings(settings_.normalStrength,settings_.invertY);render_.SetGlossStrength(settings_.gloss);loadLight();updateAlphaSettings();ready_=true;setMode(ViewMode::Fly);refreshBrushAvailability();viewLastTick_=GetTickCount64();SetTimer(window_,VIEW_TIMER,16,nullptr);showTab(0);layout();status(L"Material Lab · Откройте OGF или загрузите diffuse для тестового куба");ShowWindow(window_,SW_SHOW);UpdateWindow(window_);return true;}
- int smokeTest(){
-  // Real HWNDs, D3D11 WARP and runtime HLSL compilation on the Windows runner.
-  std::ofstream log(exeDir()/L"smoke-tests.txt");bool ok=true;
-  auto check=[&](bool condition,const char* name){log<<(condition?"PASS: ":"FAIL: ")<<name<<std::endl;ok=ok&&condition;};
-  check(viewMode_==ViewMode::Fly,"flight is the default mode");
-  auto pagesCorrect=[&](int active){
-   bool valid=true;
-   for(int t=0;t<TAB_COUNT;++t){valid=valid&&IsWindowVisible(pages_[t])==(t==active);
-    for(HWND child:tabItems_[t])valid=valid&&((GetWindowLongPtrW(child,GWL_STYLE)&WS_VISIBLE)!=0)==(t==active);
-   }return valid;
-  };
-  bool tabsOK=true,positionsOK=true;
-  SetWindowPos(window_,nullptr,0,0,ui(1140),ui(580),SWP_NOMOVE|SWP_NOZORDER);
-  for(int repeat=0;repeat<8;++repeat)for(int t=0;t<5;++t){
-   showTab(t);tabsOK=tabsOK&&pagesCorrect(t);scrollPage(pages_[t],pageScroll_[t],repeat%2?100000:0);
-   for(const auto& item:pageScroll_[t].items){RECT rect{};GetWindowRect(item.window,&rect);MapWindowPoints(nullptr,pages_[t],reinterpret_cast<POINT*>(&rect),2);
-    RECT pageRect{};GetClientRect(pages_[t],&pageRect);positionsOK=positionsOK&&rect.top==item.bounds.top-pageScroll_[t].offset&&rect.left==MulDiv(int(item.bounds.left),int(pageRect.right),ui(PANEL));
-   }
-  }
-  check(tabsOK,"40 tab switches expose only the active page and controls");
-  check(positionsOK,"scrolling and resizing preserve absolute control positions");
-  showTab(0);SetWindowPos(window_,nullptr,0,0,ui(1490),ui(860),SWP_NOMOVE|SWP_NOZORDER);
-  const int toolIds[]={TOOL_FLY,TOOL_ORBIT,TOOL_CHOOSE,TOOL_LIGHT,TOOL_MODEL};
-  const ViewMode modes[]={ViewMode::Fly,ViewMode::Orbit,ViewMode::Choose,ViewMode::Light,ViewMode::Model};
-  for(int i=0;i<5;++i){click(toolIds[i]);check(viewMode_==modes[i],"toolbar switches the active interaction mode");}
-  click(TOOL_OUTLINE);check(!outline_,"outline is independent from the active mode");click(TOOL_OUTLINE);
-  TabCtrl_SetCurSel(tab_,3);activateTab(3);check(viewMode_==ViewMode::Model,"ordinary tab changes preserve navigation");
-  render_.SelectPart(0);click(TOOL_ISOLATE);check(!isolatedVisibility_.empty(),"selection can be isolated");
-  click(TOOL_ISOLATE);check(isolatedVisibility_.empty()&&render_.PartVisible(0),"isolation restores previous visibility");
-  click(TOOL_FRAME);click(TOOL_WIRE);render_.Draw();click(TOOL_WIRE);click(TOOL_RESET);
-  sources_.diffuse=lab::DefaultChecker(64);generateBump(true);click(TOOL_BRUSH);
-  check(viewMode_==ViewMode::Brush&&TabCtrl_GetCurSel(tab_)==BRUSH_TAB,"brush opens its settings page after bump generation");
-  RECT viewRect{};GetClientRect(preview_,&viewRect);const int x=int(viewRect.right)/2,y=int(viewRect.bottom)/2;
-  view(preview_,WM_LBUTTONDOWN,MK_LBUTTON,MAKELPARAM(x,y));
-  check(brushDown_&&!currentUndo_.tiles.empty(),"a brush stroke raycasts and captures undo tiles");
-  SetCapture(window_);ReleaseCapture();
-  check(!brushDown_&&!lDown_&&!rDown_&&!mDown_&&!brushUndo_.empty(),"capture loss completes the brush stroke and releases input state");
-  click(TOOL_UNDO);check(brushDirty_&&!brushDirtyKeys_.empty(),"undo remains a saveable edit");
-  click(TOOL_APPLY);check(!brushDirty_&&brushDirtyKeys_.empty(),"apply writes the layer snapshot");
-  animPlaying_=true;setMode(ViewMode::Fly);refreshBrushAvailability();click(TOOL_MODEL);
-  check(viewMode_==ViewMode::Fly,"animation blocks model editing");stopAnimation();refreshBrushAvailability();
-  SetWindowPos(window_,nullptr,0,0,ui(1140),ui(580),SWP_NOMOVE|SWP_NOZORDER);
-  scrollPage(pages_[BRUSH_TAB],pageScroll_[BRUSH_TAB],ui(100));
-  check(pageScroll_[BRUSH_TAB].offset>0,"short windows can scroll the brush controls");
-  RECT bar{},lastButton{};GetClientRect(toolbar_.window(),&bar);
-  SendMessageW(toolbar_.window(),TB_GETRECT,TOOL_RESET,reinterpret_cast<LPARAM>(&lastButton));
-  check(lastButton.right<=bar.right,"all viewport tools fit at the minimum window width");
-  showTab(2);check(pagesCorrect(2),"alpha controls do not resurrect other tabs");
-  // An invisible front quad must reveal and allow picking an opaque rear quad.
-  lab::Mesh alphaMesh;
-  for(float z:{-.25f,.25f}){lab::MeshPart part;part.vertices={{{-1,-1,z},{0,0,-1},0,1},{{-1,1,z},{0,0,-1},0,0},{{1,1,z},{0,0,-1},1,0},{{1,-1,z},{0,0,-1},1,1}};part.indices={0,1,2,0,2,3};alphaMesh.parts.push_back(std::move(part));}
-  std::wstring alphaError;check(render_.SetMesh(alphaMesh,alphaError),"alpha fixture uploads");
-  render_.ResetView();render_.OutlineEnabled(false);render_.SkeletonEnabled(false);
-  lab::PartImages rear;rear.diffuse.w=rear.diffuse.h=4;rear.diffuse.pixels.assign(16,{40,180,70,255});render_.SetPartImages(0,rear);
-  lab::PartImages front=rear;front.diffuse.pixels.assign(16,{220,30,30,0});front.diffuse.pixels[0].a=255;render_.SetPartImages(1,front);
-  lab::Image clear,through,opaque,blended;
-  render_.AlphaEnabled(true);render_.SetPartVisible(1,false);render_.CaptureFrame(clear);render_.SetPartVisible(1,true);render_.CaptureFrame(through);
-  auto center=[](const lab::Image& im){return im.valid()?im.pixels[size_t(im.h/2)*im.w+im.w/2]:lab::Pixel{};};
-  auto difference=[](lab::Pixel a,lab::Pixel b){return std::abs(int(a.r)-int(b.r))+std::abs(int(a.g)-int(b.g))+std::abs(int(a.b)-int(b.b));};
-  check(clear.valid()&&through.valid()&&difference(center(clear),center(through))==0,"zero alpha leaves the rendered background unchanged");
-  RECT alphaView{};GetClientRect(preview_,&alphaView);lab::Renderer::PickHit hit;
-  check(render_.PickUV(int(alphaView.right/2),int(alphaView.bottom/2),hit)&&hit.part==0,"picking passes through invisible diffuse texels");
-  render_.AlphaEnabled(false);render_.CaptureFrame(opaque);
-  check(difference(center(opaque),center(through))>10,"disabling alpha restores the otherwise invisible front surface");
-  front.diffuse.pixels.assign(16,{220,30,30,128});render_.SetPartImages(1,front);render_.AlphaEnabled(true);render_.SetAlphaPreview(lab::AlphaPreview::Blend);render_.CaptureFrame(blended);
-  check(difference(center(blended),center(opaque))>5&&difference(center(blended),center(through))>5,"fractional alpha blends the foreground and background");
-  render_.Draw();log.close();DestroyWindow(window_);return ok?0:1;
- }
- int run(){
-  MSG msg{};int result=0;
-  while((result=GetMessageW(&msg,nullptr,0,0))>0){
-   if(msg.message==WM_KEYDOWN){
-    const bool ctrl=(GetKeyState(VK_CONTROL)&0x8000)!=0;
-    wchar_t klass[32]{};GetClassNameW(GetFocus(),klass,32);const bool textEditing=lstrcmpiW(klass,L"EDIT")==0;
-    const bool repeat=(msg.lParam&(LPARAM(1)<<30))!=0;
-    if(!textEditing&&ctrl&&(msg.wParam=='Z'||msg.wParam=='S')){if(!repeat)click(msg.wParam=='Z'?TOOL_UNDO:TOOL_APPLY);continue;}
-    if(GetFocus()==preview_&&!ctrl){
-     int action=0;
-     switch(msg.wParam){
-      case '1':case VK_ESCAPE:action=TOOL_FLY;break;case '2':action=TOOL_ORBIT;break;
-      case '3':case 'C':action=TOOL_CHOOSE;break;case '4':action=TOOL_LIGHT;break;
-      case '5':case 'B':action=TOOL_BRUSH;break;case '6':case 'R':action=TOOL_MODEL;break;
-      case 'O':action=TOOL_OUTLINE;break;case 'F':action=TOOL_FRAME;break;case 'I':action=TOOL_ISOLATE;break;
-      case 'V':action=TOOL_WIRE;break;case VK_HOME:action=TOOL_RESET;break;
-      case VK_OEM_4:adjustBrushRadius(-2);continue;case VK_OEM_6:adjustBrushRadius(2);continue;
-      case 'X':if(!repeat&&brushMode_&&!brushDown_){SendMessageW(controls_[BRUSH_INVERT],BM_SETCHECK,brushInvert_?BST_UNCHECKED:BST_CHECKED,0);click(BRUSH_INVERT);}continue;
-      case 'H':if(!repeat&&!editingLocked()){if(GetKeyState(VK_SHIFT)&0x8000)showAllMeshes();else hideSelectedMesh();}continue;
-     }
-     if(action){if(!repeat)click(action);continue;}
+    int run() {
+        MSG message{};
+        while(running_) {
+            while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)){if(message.message==WM_QUIT){running_=false;break;}TranslateMessage(&message);DispatchMessageW(&message);}
+            if(!running_)break;
+            if(deviceLost_){if(!recoveryAttempted_)recoverDocuments();else WaitMessage();continue;}
+            if(minimized_){WaitMessage();continue;}
+            try{frame();}catch(const std::exception& error){status(std::string("Ошибка: ")+error.what());deviceLost_=true;exitCode_=1;}
+        }
+        return exitCode_;
     }
-   }
-   if(IsDialogMessageW(window_,&msg))continue;
-   TranslateMessage(&msg);DispatchMessageW(&msg);
-  }
-  return result<0?1:int(msg.wParam);
- }
-
+    int smokeTest() {
+        std::ofstream log(executableDirectory()/L"smoke-tests.txt",std::ios::trunc);bool success=true;
+        auto check=[&](bool condition,const char* message){log<<(condition?"PASS ":"FAIL ")<<message<<'\n';log.flush();success=condition&&success;};
+        auto pump=[&]{MSG message{};while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)){TranslateMessage(&message);DispatchMessageW(&message);}};
+        auto same=[](const lab::Image& a,const lab::Image& b){return a.valid()&&b.valid()&&a.w==b.w&&a.h==b.h&&std::memcmp(a.pixels.data(),b.pixels.data(),a.pixels.size()*sizeof(lab::Pixel))==0;};
+        try {
+            check(renderer_.SceneTexture()!=nullptr,"offscreen scene SRV exists");
+            for(const auto dimensions:{POINT{960,600},POINT{1490,900},POINT{1120,640}}) {
+                SetWindowPos(window_,nullptr,0,0,dimensions.x,dimensions.y,SWP_NOMOVE|SWP_NOZORDER);pump();
+                for(int repeat=0;repeat<2;++repeat)for(int tab=5;tab>=0;--tab) {
+                    ui_.tab=lab::EditorTab(tab);ui_.forceTab=true;frame(false);frame(false);
+                    check(ui_.renderedPaneCount==1,"exactly one active inspector pane after tab switch");
+                    check(ui_.toolbarRect.y>=ui_.viewportRect.y+ui_.viewportRect.h-1,"camera tools remain below the viewport");
+                    check(ui_.viewportRect.x>=ui_.inspectorRect.x+ui_.inspectorRect.w-1,"inspector does not overlap the scene");
+                    check(ui_.toolbarRect.x+ui_.toolbarRect.w<=ImGui::GetIO().DisplaySize.x+1,"toolbar fits in client width");
+                }
+            }
+            // Changing tools must neither re-generate the material nor alter preview strength.
+            auto material=selectedMaterial();material->sources.diffuse=lab::DefaultChecker(64);
+            lab::Settings settings;settings.normalStrength=1.7f;
+            const auto pair=lab::GenerateBumpPreview(material->sources,settings);
+            material->document=std::make_unique<lab::MaterialDocument>();std::string error;
+            check(material->document->Load(pair,error,true),"generated material initializes at source resolution");
+            check(upload(material,true),"material uploads");renderer_.OutlineEnabled(false);renderer_.ClearBrushCursor();
+            lab::Image initial,toolChange,painted,undone,redone;renderer_.CaptureFrame(initial);
+            setMode(lab::EditorMode::Brush);renderer_.CaptureFrame(toolChange);
+            check(same(initial,toolChange)&&renderer_.NormalStrength()==1.f,"entering brush leaves normals and preview gain unchanged");
+            check(beginStroke(int(renderer_.SceneWidth()/2),int(renderer_.SceneHeight()/2)),"ray-picked brush stroke starts");
+            stampAt(int(renderer_.SceneWidth()/2),int(renderer_.SceneHeight()/2));
+            drag_=Drag::Brush;dragButton_=0;
+            POINT previousCursor{};GetCursorPos(&previousCursor);
+            POINT cursor{LONG(ui_.viewportRect.x+ui_.viewportRect.w*.5f),LONG(ui_.viewportRect.y+ui_.viewportRect.h*.5f)};ClientToScreen(window_,&cursor);SetCursorPos(cursor.x,cursor.y);
+            SendMessageW(window_,WM_CAPTURECHANGED,0,0);SetCursorPos(previousCursor.x,previousCursor.y);
+            check(!material->document->InStroke()&&drag_==Drag::None&&!strokeMaterial_,"capture loss commits and releases stroke ownership");
+            renderer_.CaptureFrame(painted);
+            check(material->document->CanUndo()&&!same(initial,painted),"stroke visibly changes scene and creates history");
+            editHistory(lab::EditorAction::Undo);renderer_.CaptureFrame(undone);check(same(initial,undone),"undo restores exact rendered baseline");
+            editHistory(lab::EditorAction::Redo);renderer_.CaptureFrame(redone);check(same(painted,redone),"redo restores exact rendered stroke");
+            const fs::path session=fs::temp_directory_path()/(L"MaterialLab-smoke-"+std::to_wstring(GetCurrentProcessId())+L".krlab");
+            check(material->document->Save(session,error)&&material->document->CanUndo(),"saving retains undo history");
+            lab::MaterialDocument reopened;check(reopened.Open(session,error)&&same(reopened.Preview(0).bump,material->document->Preview(0).bump),"session round trip preserves edited packed channels");
+            std::error_code cleanup;fs::remove(session,cleanup);
+            std::wstring renderError;check(renderer_.ResizeScene(96,64,renderError),"scene resize independent from window");
+            lab::Image small;renderer_.CaptureFrame(small);check(small.w==96&&small.h==64,"capture uses scene dimensions");
+            RECT rect{};GetClientRect(window_,&rect);check(renderer_.Resize(UINT(rect.right),UINT(rect.bottom),renderError)&&renderer_.SceneWidth()==96&&renderer_.SceneHeight()==64,"window resize keeps scene dimensions");
+            lab::Image invalid=pair.bumpX;invalid.w+=1;
+            check(!renderer_.SetPartBumpImages(0,pair.bump,invalid,true),"invalid texture pair rejected transactionally");
+            lab::Image afterInvalid;renderer_.CaptureFrame(afterInvalid);check(same(small,afterInvalid),"invalid texture pair keeps previous framebuffer");
+            lab::Mesh invalidMesh=lab::MakeCube();invalidMesh.parts[0].indices[0]=uint32_t(invalidMesh.parts[0].vertices.size()+10);
+            check(!renderer_.SetMesh(invalidMesh,renderError)&&renderer_.PartCount()==meshes_.size(),"invalid mesh preserves current scene");
+            // Actual draw and picking through diffuse alpha, independent of bump alpha.
+            lab::Mesh alphaMesh;
+            for(float z:{-.25f,.25f}){lab::MeshPart part;part.vertices={{{-1,-1,z},{0,0,-1},0,1},{{-1,1,z},{0,0,-1},0,0},{{1,1,z},{0,0,-1},1,0},{{1,-1,z},{0,0,-1},1,1}};part.indices={0,1,2,0,2,3};alphaMesh.parts.push_back(std::move(part));}
+            check(renderer_.SetMesh(alphaMesh,renderError),"alpha fixture uploads");renderer_.ResetView();renderer_.OutlineEnabled(false);renderer_.SkeletonEnabled(false);
+            lab::PartImages rear;rear.diffuse.w=rear.diffuse.h=4;rear.diffuse.pixels.assign(16,{40,180,70,255});check(renderer_.SetPartImages(0,rear),"opaque rear material uploads");
+            lab::PartImages front=rear;front.diffuse.pixels.assign(16,{220,30,30,0});check(renderer_.SetPartImages(1,front),"transparent front material uploads");
+            lab::Image clear,through,opaque,blended;renderer_.AlphaEnabled(true);renderer_.SetPartVisible(1,false);renderer_.CaptureFrame(clear);renderer_.SetPartVisible(1,true);renderer_.CaptureFrame(through);
+            check(same(clear,through),"zero diffuse alpha leaves background unchanged");
+            lab::Renderer::PickHit hit;check(renderer_.PickUV(48,32,hit)&&hit.part==0,"ray picking passes through transparent diffuse");
+            renderer_.AlphaEnabled(false);renderer_.CaptureFrame(opaque);check(!same(opaque,through),"alpha can be disabled for inspection");
+            front.diffuse.pixels.assign(16,{220,30,30,128});renderer_.SetPartImages(1,front);renderer_.AlphaEnabled(true);renderer_.SetAlphaPreview(lab::AlphaPreview::Blend);renderer_.CaptureFrame(blended);
+            check(!same(blended,opaque)&&!same(blended,through),"fractional alpha blends scene");
+        }catch(const std::exception& error){log<<"FAIL exception: "<<error.what()<<'\n';success=false;}
+        log<<(success?"All native smoke tests passed.\n":"Native smoke tests failed.\n");log.close();return success?0:1;
+    }
 };
 }
-int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,LPWSTR args,int){HRESULT hr=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);if(FAILED(hr))return 2;int result=3;{const bool smoke=args&&std::wstring(args)==L"--smoke-test";App app;if(app.create(instance,smoke))result=smoke?app.smokeTest():app.run();}CoUninitialize();return result;}
+int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,LPWSTR args,int) {
+    const HRESULT com=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);if(FAILED(com))return 2;
+    int result=3;
+    try {const bool smoke=args&&std::wstring(args)==L"--smoke-test";App app;if(app.create(instance,smoke))result=smoke?app.smokeTest():app.run();}
+    catch(const std::exception& error){MessageBoxW(nullptr,wide(error.what()).c_str(),AppTitle,MB_OK|MB_ICONERROR);}
+    CoUninitialize();return result;
+}

@@ -48,7 +48,9 @@ class Renderer {
   };
   Dev device_;Ctx context_;
   Microsoft::WRL::ComPtr<IDXGISwapChain> swap_;
-  Microsoft::WRL::ComPtr<ID3D11RenderTargetView> rtv_;
+  Microsoft::WRL::ComPtr<ID3D11RenderTargetView> rtv_,uiRtv_;
+  Microsoft::WRL::ComPtr<ID3D11Texture2D> scene_;
+  Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> sceneView_;
   Microsoft::WRL::ComPtr<ID3D11DepthStencilView> dsv_;
   Microsoft::WRL::ComPtr<ID3D11Texture2D> depth_;
   Microsoft::WRL::ComPtr<ID3D11VertexShader> vs_,vsSkeleton_,vsOutline_;
@@ -63,7 +65,7 @@ class Renderer {
   std::vector<RenderPart> parts_;
   std::vector<Bone> bones_;
   std::vector<Motion> motions_;
-  UINT skeletonVertexCount_=0,brushVertexCount_=0,width_=0,height_=0;
+  UINT skeletonVertexCount_=0,brushVertexCount_=0,width_=0,height_=0,windowWidth_=0,windowHeight_=0;
   V3 modelCenter_{}; float modelScale_=1.f;
   ViewportCamera camera_;
   float lightYaw_=0.9f,lightPitch_=0.65f;
@@ -79,19 +81,28 @@ class Renderer {
   ID3D11Buffer* sortedAlphaIndices(RenderPart& part,const DirectX::XMMATRIX& modelView);
   bool createViews(UINT w,UINT h,std::wstring& error);
   bool makeTexture(const Image& img,Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>& out,Microsoft::WRL::ComPtr<ID3D11Texture2D>* textureOut=nullptr);
-  bool updateTexture(const Image& img,Microsoft::WRL::ComPtr<ID3D11Texture2D>& texture,Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>& view);
   bool uploadBindPose(std::wstring* error=nullptr);
 public:
   bool Init(HWND hwnd,std::wstring& error,bool software=false);
+  // Window and scene surfaces are independent: the scene is displayed by ImGui.
   bool Resize(UINT w,UINT h,std::wstring& error);
+  bool ResizeScene(UINT w,UINT h,std::wstring& error);
+  ID3D11Device* Device()const{return device_.Get();}
+  ID3D11DeviceContext* Context()const{return context_.Get();}
+  ID3D11ShaderResourceView* SceneTexture()const{return sceneView_.Get();}
+  UINT SceneWidth()const{return width_;}
+  UINT SceneHeight()const{return height_;}
+  void DrawScene();
+  void BeginUI();
+  HRESULT PresentUI();
   bool SetMesh(Mesh& mesh,std::wstring& error);
   bool SetPartImages(size_t part,const PartImages& images);
   bool SetPartBumpImages(size_t part,const Image& bump,const Image& bumpX,bool hasBump=true);
   bool CopyPartMaterial(size_t dst,size_t src);
-  void SetImages(const Image& diffuse,const Image& bump,const Image& bumpX);
-  void SetBumpImages(const Image& bump,const Image& bumpX,bool hasBump=true);
+  bool SetImages(const Image& diffuse,const Image& bump,const Image& bumpX);
+  bool SetBumpImages(const Image& bump,const Image& bumpX,bool hasBump=true);
   bool SetAnimationPose(size_t motionIndex,float seconds,bool loop,std::wstring& error);
-  void SetBindPose();
+  bool SetBindPose(std::wstring* error=nullptr);
   size_t PartCount()const{return parts_.size();}
   size_t MotionCount()const{return motions_.size();}
   const Motion* MotionAt(size_t index)const{return index<motions_.size()?&motions_[index]:nullptr;}
@@ -122,6 +133,9 @@ public:
   void SetAlphaCutoff(float value){alphaCutoff_=std::clamp(value,0.f,1.f);}
   void SetNormalSettings(float strength,bool invertY){normalStrength_=strength;invertNormalY_=invertY;}
   void SetGlossStrength(float strength){glossStrength_=std::max(0.f,std::min(strength,1.f));}
+  float NormalStrength()const{return normalStrength_;}
+  bool NormalYInverted()const{return invertNormalY_;}
+  float GlossStrength()const{return glossStrength_;}
   void SetPartVisible(size_t part,bool visible);
   bool PartVisible(size_t part)const;
   bool PartSelected(size_t part)const{return part<parts_.size()&&parts_[part].selected&&parts_[part].visible;}
@@ -129,6 +143,7 @@ public:
   void SetHoverPart(int part){hoverPart_=(part>=0&&size_t(part)<parts_.size()&&parts_[size_t(part)].visible)?part:-1;}
   void ClearHover(){hoverPart_=-1;}
   int HoverPart()const{return hoverPart_;}
+  // Coordinates are local pixels inside SceneTexture, not the main window.
   struct PickHit{int part=-1;float u=0.f,v=0.f;V3 position{},normal{},du{},dv{};};
   bool PickUV(int screenX,int screenY,PickHit& hit);
   void SetBrushCursor(const PickHit& hit,float radiusU,float radiusV);

@@ -67,6 +67,8 @@ std::vector<uint8_t> EncodeBC3DDS(const Image& rgba,const std::vector<Image>& mi
 Image DecompressBC3Image(const std::vector<uint8_t>& blocks,uint32_t width,uint32_t height);
 Image ResizeImageMax(const Image& src,uint32_t maxDimension);
 Image MakeDefaultNormalPreset(uint32_t size=128);
+// Layer normals use the pre-SoC-boost basis; rendered=true applies the engine z*=0.5.
+V3 DecodeBumpNormal(Pixel packed,Pixel correction,bool rendered=false);
 Image UnpackNormalMap(const Image& bump,const Image& bumpX);
 Image UnpackGlossMap(const Image& bump);
 Image UnpackHeightMap(const Image& bumpX);
@@ -79,17 +81,23 @@ void StampNormalPresetLayer(Image& target,GrayImage& coverage,const Image& prese
 void StampScalarPreset(Image& target,const Image& preset,float u,float v,float radiusPixels,float value);
 void StampScalarPreset(GrayImage& target,const Image& preset,float u,float v,float radiusPixels,float value);
 void StampScalarPresetLayer(GrayImage& target,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float value);
-void StampNormalStrengthLayer(Image& target,const Image& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float strength,bool invert,float hardness);
-void StampScalarDeltaLayer(GrayImage& target,const GrayImage& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float delta,float hardness);
-void StampNormalFilterLayer(Image& target,const Image& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float strength,bool sharpen,float hardness);
+bool StampNormalReliefLayer(Image& target,const Image& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float strength,bool remove,float hardness);
+bool StampScalarDeltaLayer(GrayImage& target,const GrayImage& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float delta,float hardness);
+bool StampNormalFilterLayer(Image& target,const Image& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float strength,bool sharpen,float hardness);
 void StampMaterialPreset(Image& normalTarget,Image& glossTarget,const Image& preset,float u,float v,float radiusPixels,float glossValue);
 bool SaveNormalPreset(const Image& preset,float gloss,const std::wstring& path,std::string& error);
 bool LoadNormalPreset(const std::wstring& path,Image& preset,float& gloss,std::string& error);
 bool SaveNormalPreset(const Image& preset,const std::wstring& path,std::string& error);
 bool LoadNormalPreset(const std::wstring& path,Image& preset,std::string& error);
 BumpPair GenerateBump(const Sources& src,const Settings& cfg);
-BumpPair GenerateBumpPreview(const Sources& src,const Settings& cfg);
+BumpPair GenerateBumpPreview(const Sources& src,const Settings& cfg,uint32_t maxDimension=1024);
 BumpPair PackBumpLayersPreview(const Image& normal,const GrayImage& gloss,const GrayImage& height,uint32_t maxDimension=0,const GrayImage* baseHeight=nullptr);
+// Preserve original packed channels wherever the editable layers did not change.
+BumpPair CompositeBumpLayersPreview(const Image& normal,const GrayImage& gloss,const GrayImage& height,const Image& baseNormal,const GrayImage& baseGloss,const GrayImage& baseHeight,const BumpPair& originalPair,uint32_t maxDimension=0);
+// Stage both files before replacement and roll back on ordinary I/O failures.
+// Two separate paths cannot form a power-loss-atomic filesystem transaction.
+bool WriteBumpPairDDSBytesAtomic(const std::wstring& baseWithoutSuffix,const std::vector<uint8_t>& bumpBytes,const std::vector<uint8_t>& bumpXBytes,std::string& error);
+bool ExportPackedBumpPair(const BumpPair& pair,const std::wstring& baseWithoutSuffix,std::string& error);
 bool ExportBumpLayers(const Image& normal,const GrayImage& gloss,const GrayImage& height,uint32_t width,uint32_t heightPixels,const std::wstring& baseWithoutSuffix,std::string& error,const GrayImage* baseHeight=nullptr);
 bool ExportBumpPair(const Sources& src,const Settings& cfg,const std::wstring& baseWithoutSuffix,std::string& error);
 Mesh MakeCube();

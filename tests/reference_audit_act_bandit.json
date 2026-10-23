@@ -1,0 +1,102 @@
+{
+  "width": 1024,
+  "height": 1024,
+  "bump_rgba_stats": [
+    {
+      "min": 8,
+      "max": 255,
+      "mean": 55.765315
+    },
+    {
+      "min": 174,
+      "max": 255,
+      "mean": 253.686598
+    },
+    {
+      "min": 0,
+      "max": 255,
+      "mean": 126.987035
+    },
+    {
+      "min": 10,
+      "max": 243,
+      "mean": 127.326228
+    }
+  ],
+  "bumpX_rgba_stats": [
+    {
+      "min": 123,
+      "max": 140,
+      "mean": 128.348387
+    },
+    {
+      "min": 53,
+      "max": 210,
+      "mean": 130.223167
+    },
+    {
+      "min": 107,
+      "max": 156,
+      "mean": 130.104402
+    },
+    {
+      "min": 69,
+      "max": 202,
+      "mean": 127.990642
+    }
+  ],
+  "soc_z_boost_mean_angle_deg": 3.239475,
+  "layer_repack_roundtrip": {
+    "mean_angle_deg": 3.334233,
+    "p95_angle_deg": 5.083594,
+    "max_angle_deg": 51.569271,
+    "gloss_rmse": 0.009561,
+    "height_rmse": 0.000583
+  },
+  "edited_export_full_residual": {
+    "mean_angle_deg": 2.29151,
+    "p95_angle_deg": 5.861666,
+    "max_angle_deg": 49.093457,
+    "gloss_rmse": 0.006156,
+    "height_rmse": 0.000583
+  },
+  "edited_export_sdk_two_thirds_residual": {
+    "mean_angle_deg": 2.327155,
+    "p95_angle_deg": 6.186057,
+    "max_angle_deg": 47.7516,
+    "gloss_rmse": 0.006156,
+    "height_rmse": 0.000583
+  },
+  "identity_preview_changed_bytes": 0,
+  "gloss_only_preview_changed_normal_bytes": 0,
+  "unchanged_export_byte_exact": true,
+  "reference_files": [
+    {
+      "name": "act_bandit_bump.dds",
+      "size_bytes": 1398256,
+      "sha256": "1d2c616b084dd0d1225491ee9ecbe14c56ec812fb42888bcd119245a99111801"
+    },
+    {
+      "name": "act_bandit_bump#.dds",
+      "size_bytes": 1398256,
+      "sha256": "9763eabf87ba06da8d21a13991ff5c9255887f0c2be438058cfd39ea896651d1"
+    }
+  ],
+  "primary_sources": {
+    "shader": "https://github.com/OpenXRay/xray/blob/d7b23596a70374d8a7ffda0e98852f93ce985182/trunk/resources/shaders/r2/sload.h",
+    "sdk_converter": "https://github.com/OpenXRay/xray/blob/d7b23596a70374d8a7ffda0e98852f93ce985182/trunk/xrDXT/NormalMapGen.cpp"
+  },
+  "interpretation": {
+    "normal_basis": "Layer editing stores the decoded normal before the SoC shader's final z *= 0.5. Rendered angular errors include that scale once.",
+    "gloss": "The shader uses bump.r squared. UI layer gloss is linear and packing takes its square root.",
+    "height": "Parallax uses bumpX alpha. RGB stores normal residuals, not RGB height.",
+    "residual": "SDK emits 128 + 2*error/3. Material Lab uses full residual because actual double-BC3 encode/decode gives lower angular error on this fixture with its encoder. The format matches; output is not bit-identical to SDK conversion.",
+    "checks": "No-op preview and gloss-only normal channels must change exactly zero bytes. Unchanged raw DDS export must be byte exact. Angular/RMSE metrics describe this fixture; they are not guarantees for arbitrary textures.",
+    "limitations": "Edited DDS export is lossy BC3. No-op byte preservation applies to raw original DDS export; edited files and their derived mipmaps are recompressed."
+  },
+  "source_file_sha256_at_audit_time": {
+    "src/Core.cpp": "b1b9962c21d9eedceddab624b9419fad8dfbe4fe1c83d9998e746c628ca9f2cd",
+    "src/DDS.cpp": "bd5c06848f965a598ed45048b56fd00649ea0fc53bec468ca5e6989f46dc5a0d",
+    "tools/MaterialReferenceAudit.cpp": "cbb84d6f0819d9e3b37161bd10749037a6e5f89d392a811d926a15db877fe687"
+  }
+}

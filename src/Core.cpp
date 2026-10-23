@@ -5,13 +5,22 @@
 #include <filesystem>
 #include <stdexcept>
 #include <cstring>
+#include <chrono>
+#include <atomic>
+#include <system_error>
 namespace lab {
 namespace {
 float sat(float x){return std::max(0.f,std::min(x,1.f));}
 float brushMask(float distance,float alpha,float hardness){hardness=sat(hardness);const float feather=std::max(0.02f,1.f-hardness*0.98f);const float edge=sat((1.f-distance)/feather);return sat(alpha)*edge;}
 uint8_t b8(float x){return uint8_t(sat(x)*255.f+0.5f);}
 float lum(Pixel p){return (0.2126f*p.r+0.7152f*p.g+0.0722f*p.b)/255.f;}
-Pixel sample(const Image& im,float u,float v){if(!im.valid())return {};u=sat(u)*im.w-.5f;v=sat(v)*im.h-.5f;int x=int(floor(u)),y=int(floor(v));float a=u-x,b=v-y;auto at=[&](int i,int j)->Pixel{return im.pixels[size_t(std::min(int(im.h)-1,std::max(0,j)))*im.w+std::min(int(im.w)-1,std::max(0,i))];};Pixel a0=at(x,y),b0=at(x+1,y),a1=at(x,y+1),b1=at(x+1,y+1),o;uint8_t* d=&o.r;for(int k=0;k<4;++k){const float v0=(&a0.r)[k]*(1-a)+(&b0.r)[k]*a,v1=(&a1.r)[k]*(1-a)+(&b1.r)[k]*a;d[k]=b8((v0*(1-b)+v1*b)/255.f);}return o;}
+Pixel sample(const Image& im,float u,float v){
+ if(!im.valid())return {};u=sat(u)*im.w-.5f;v=sat(v)*im.h-.5f;const int x=int(std::floor(u)),y=int(std::floor(v));const float a=u-x,b=v-y;
+ auto at=[&](int i,int j)->Pixel{return im.pixels[size_t(std::clamp(j,0,int(im.h)-1))*im.w+uint32_t(std::clamp(i,0,int(im.w)-1))];};
+ const Pixel p00=at(x,y),p10=at(x+1,y),p01=at(x,y+1),p11=at(x+1,y+1);
+ auto mix=[&](uint8_t q00,uint8_t q10,uint8_t q01,uint8_t q11){return b8(((q00*(1-a)+q10*a)*(1-b)+(q01*(1-a)+q11*a)*b)/255.f);};
+ return {mix(p00.r,p10.r,p01.r,p11.r),mix(p00.g,p10.g,p01.g,p11.g),mix(p00.b,p10.b,p01.b,p11.b),mix(p00.a,p10.a,p01.a,p11.a)};
+}
 V3 norm(V3 n){float l=sqrt(n.x*n.x+n.y*n.y+n.z*n.z);if(l<1e-5f)return {0,0,1};return{n.x/l,n.y/l,n.z/l};}
 Image makeBump(const Sources& s,const Settings& cfg,uint32_t w,uint32_t h){
  if(!s.diffuse.valid()||!w||!h)return {};
@@ -51,11 +60,13 @@ Image makeBump(const Sources& s,const Settings& cfg,uint32_t w,uint32_t h){
   V3 n=reliefN;
   if(s.normal.valid()){
    V3 base=decodeNormal(sample(s.normal,u,v));
-   base=norm({base.x*std::max(0.25f,normalGain),base.y*std::max(0.25f,normalGain)*(cfg.invertY?-1.f:1.f),base.z});
+   if(cfg.invertY)base.y=-base.y;
    const float blend=std::clamp(cfg.height*1.35f,0.f,1.35f);
    n=norm({base.x+reliefN.x*blend,base.y+reliefN.y*blend,std::max(0.15f,base.z*reliefN.z)});
-  }else n=norm({reliefN.x*std::max(0.25f,normalGain),reliefN.y*std::max(0.25f,normalGain),reliefN.z});
-  normalField[size_t(y)*w+x]=n;
+  }
+  // Apply strength once to the complete normal, including generated height
+  // detail. Scaling only the authored layer left relief active at zero.
+  normalField[size_t(y)*w+x]=norm({n.x*normalGain,n.y*normalGain,n.z});
  }
  // Blur/sharp must also affect an authored or painted normal layer.  Applying
  // it only to the scalar height source made the control almost invisible once
@@ -77,8 +88,8 @@ Image makeBump(const Sources& s,const Settings& cfg,uint32_t w,uint32_t h){
   const float u=(x+.5f)/float(w),v=(y+.5f)/float(h);const V3 n=normalField[size_t(y)*w+x];
   const Pixel gp=s.gloss.valid()?sample(s.gloss,u,v):sample(s.diffuse,u,v);
   const float sourceGloss=s.gloss.valid()?lum(gp):(std::max(gp.r,std::max(gp.g,gp.b))/255.f);
-  const float glossBoost=std::clamp(0.55f+cfg.gloss*1.45f,0.f,2.25f);
-  const float g=s.gloss.valid()?sat(sourceGloss):sat(std::pow(std::max(0.f,sourceGloss),0.82f)*glossBoost);
+  const float glossGain=std::clamp(cfg.gloss*2.f,0.f,2.f);
+  const float g=sat(sourceGloss*glossGain);
   Pixel p;p.r=b8(std::sqrt(g));p.g=b8(n.z*.5f+.5f);p.b=b8(n.y*.5f+.5f);p.a=b8(n.x*.5f+.5f);
   out.pixels[size_t(y)*w+x]=p;
  }
@@ -89,10 +100,10 @@ Image correction(const Image& original,const Image& decoded,const Sources& src,c
  const Image& map=src.height.valid()?src.height:src.diffuse;
  for(uint32_t y=0;y<out.h;++y)for(uint32_t x=0;x<out.w;++x){
   const size_t i=size_t(y)*out.w+x;const Pixel p=original.pixels[i],c=decoded.pixels[i];
-  // BumpX / SDK-style compensation: RGB stores twice the BC3 normal error
-  // around neutral 128, alpha stores height.  This is the pair expected by
-  // the classic X-Ray bump workflow.
-  auto err8=[](int d)->uint8_t{return uint8_t(std::clamp(d*2+128,0,255));};
+  // The shader adds bump.agb + bumpX.rgb - 1. Store the BC3 error
+  // once around neutral 128; doubling it overcorrects every normal.
+  // Alpha remains the independent height channel.
+  auto err8=[](int d)->uint8_t{return uint8_t(std::clamp(d+128,0,255));};
   Pixel e;
   e.r=err8(int(p.a)-int(c.a));
   e.g=err8(int(p.b)-int(c.b));
@@ -105,33 +116,63 @@ Image correction(const Image& original,const Image& decoded,const Sources& src,c
  return out;
 }
 BumpPair oneMip(const Sources& src,const Settings& cfg,uint32_t w,uint32_t h){BumpPair pair;pair.bump=makeBump(src,cfg,w,h);auto compressed=EncodeBC3DDS(pair.bump,{pair.bump});std::string err;Image decoded=DecodeDDS(compressed,err);if(!decoded.valid())return {};pair.bumpX=correction(pair.bump,decoded,src,cfg);return pair;}
+struct SampleWeight {uint32_t index;float weight;};
+using AxisWeights=std::vector<std::vector<SampleWeight>>;
+AxisWeights resampleWeights(uint32_t source,uint32_t target){
+ AxisWeights weights(target);
+ for(uint32_t i=0;i<target;++i){
+  if(target<source){
+   const double begin=double(i)*source/target,end=double(i+1)*source/target;
+   for(uint32_t j=uint32_t(std::floor(begin));j<std::min(source,uint32_t(std::ceil(end)));++j){const double overlap=std::min(end,double(j+1))-std::max(begin,double(j));if(overlap>0)weights[i].push_back({j,float(overlap/(end-begin))});}
+  }else{
+   const double center=(double(i)+.5)*source/target-.5;const int left=int(std::floor(center));const float t=float(center-left);
+   const uint32_t a=uint32_t(std::clamp(left,0,int(source)-1)),b=uint32_t(std::clamp(left+1,0,int(source)-1));
+   if(a==b)weights[i].push_back({a,1});else{weights[i].push_back({a,1-t});weights[i].push_back({b,t});}
+  }
+ }
+ return weights;
+}
 Image resizeImageExact(const Image& src,uint32_t w,uint32_t h){
  if(!src.valid()||!w||!h)return {};
  if(src.w==w&&src.h==h)return src;
  Image out;out.w=w;out.h=h;out.pixels.resize(size_t(w)*h);
- for(uint32_t y=0;y<h;++y)for(uint32_t x=0;x<w;++x)out.pixels[size_t(y)*w+x]=sample(src,(x+.5f)/float(w),(y+.5f)/float(h));
+ const auto xs=resampleWeights(src.w,w),ys=resampleWeights(src.h,h);
+ for(uint32_t y=0;y<h;++y)for(uint32_t x=0;x<w;++x){double sum[4]={};for(const auto yy:ys[y])for(const auto xx:xs[x]){const Pixel p=src.pixels[size_t(yy.index)*src.w+xx.index];const double weight=double(xx.weight)*yy.weight;sum[0]+=p.r*weight;sum[1]+=p.g*weight;sum[2]+=p.b*weight;sum[3]+=p.a*weight;}auto byte=[](double v){return uint8_t(std::clamp(v,0.,255.)+.5);};out.pixels[size_t(y)*w+x]={byte(sum[0]),byte(sum[1]),byte(sum[2]),byte(sum[3])};}
  return out;
 }
 GrayImage resizeGrayExact(const GrayImage& src,uint32_t w,uint32_t h){
  if(!src.valid()||!w||!h)return {};
  if(src.w==w&&src.h==h)return src;
  GrayImage out;out.w=w;out.h=h;out.pixels.resize(size_t(w)*h);
- auto at=[&](int x,int y){x=std::clamp(x,0,int(src.w)-1);y=std::clamp(y,0,int(src.h)-1);return src.pixels[size_t(y)*src.w+uint32_t(x)];};
- for(uint32_t y=0;y<h;++y)for(uint32_t x=0;x<w;++x){
-  const float sx=(x+.5f)*src.w/float(w)-.5f,sy=(y+.5f)*src.h/float(h)-.5f;const int x0=int(std::floor(sx)),y0=int(std::floor(sy));const float fx=sx-x0,fy=sy-y0;
-  const float a=at(x0,y0)*(1.f-fx)+at(x0+1,y0)*fx,b=at(x0,y0+1)*(1.f-fx)+at(x0+1,y0+1)*fx;
-  out.pixels[size_t(y)*w+x]=uint8_t(std::clamp(a*(1.f-fy)+b*fy,0.f,255.f)+.5f);
- }
+ const auto xs=resampleWeights(src.w,w),ys=resampleWeights(src.h,h);
+ for(uint32_t y=0;y<h;++y)for(uint32_t x=0;x<w;++x){double sum=0;for(const auto yy:ys[y])for(const auto xx:xs[x])sum+=src.pixels[size_t(yy.index)*src.w+xx.index]*double(xx.weight)*yy.weight;out.pixels[size_t(y)*w+x]=uint8_t(std::clamp(sum,0.,255.)+.5);}
  return out;
 }
 BumpPair packLayersOneMip(const Image& normal,const GrayImage& gloss,const GrayImage& height,uint32_t w,uint32_t h,bool bc3Correction,const GrayImage* baseHeight){
  if(!normal.valid()||!gloss.valid()||!height.valid()||!w||!h)return {};
- Image n=resizeImageExact(normal,w,h);GrayImage g=resizeGrayExact(gloss,w,h),hh=resizeGrayExact(height,w,h),bh;if(baseHeight&&baseHeight->valid())bh=resizeGrayExact(*baseHeight,w,h);if(!n.valid()||!g.valid()||!hh.valid())return {};
- BumpPair pair;pair.bump.w=w;pair.bump.h=h;pair.bump.pixels.resize(size_t(w)*h);pair.bumpX.w=w;pair.bumpX.h=h;pair.bumpX.pixels.resize(size_t(w)*h);
+ // Derive painted height relief at the authored resolution, then resample the
+ // result. Recomputing Sobel at preview/mip resolution changes its strength.
+ Image composed=normal;
  auto decode=[](Pixel p){return norm({p.r/127.5f-1.f,p.g/127.5f-1.f,p.b/127.5f-1.f});};
- auto wrap=[](int v,int m){v%=m;return v<0?v+m:v;};
- for(uint32_t y=0;y<h;++y)for(uint32_t x=0;x<w;++x){const size_t i=size_t(y)*w+x;V3 q=decode(n.pixels[i]);if(bh.valid()){auto D=[&](int ox,int oy){const int xx=wrap(int(x)+ox,int(w)),yy=wrap(int(y)+oy,int(h));const size_t at=size_t(yy)*w+uint32_t(xx);return (int(hh.pixels[at])-int(bh.pixels[at]))/255.f;};const float tl=D(-1,-1),t=D(0,-1),tr=D(1,-1),l=D(-1,0),r=D(1,0),bl=D(-1,1),b=D(0,1),br=D(1,1);const float gx=tl+2.f*l+bl-tr-2.f*r-br,gy=tl+2.f*t+tr-bl-2.f*b-br;const V3 dn=norm({gx*8.f,gy*8.f,1.f});q=norm({q.x+dn.x,q.y+dn.y,std::max(.15f,q.z*dn.z)});}const float gf=g.pixels[i]/255.f;pair.bump.pixels[i]={b8(std::sqrt(sat(gf))),b8(q.z*.5f+.5f),b8(q.y*.5f+.5f),b8(q.x*.5f+.5f)};pair.bumpX.pixels[i]={128,128,128,hh.pixels[i]};}
- if(bc3Correction){auto encoded=EncodeBC3DDS(pair.bump,{pair.bump});std::string err;Image decoded=DecodeDDS(encoded,err);if(!decoded.valid())return {};auto err8=[](int d)->uint8_t{return uint8_t(std::clamp(d*2+128,0,255));};for(size_t i=0;i<pair.bump.pixels.size();++i){const Pixel p=pair.bump.pixels[i],c=decoded.pixels[i];pair.bumpX.pixels[i].r=err8(int(p.a)-int(c.a));pair.bumpX.pixels[i].g=err8(int(p.b)-int(c.b));pair.bumpX.pixels[i].b=err8(int(p.g)-int(c.g));}}
+ if(baseHeight&&baseHeight->valid()){
+  const GrayImage edited=resizeGrayExact(height,normal.w,normal.h),base=resizeGrayExact(*baseHeight,normal.w,normal.h);
+  auto wrap=[](int v,int m){v%=m;return v<0?v+m:v;};
+  for(uint32_t y=0;y<normal.h;++y)for(uint32_t x=0;x<normal.w;++x){
+   auto D=[&](int ox,int oy){const int xx=wrap(int(x)+ox,int(normal.w)),yy=wrap(int(y)+oy,int(normal.h));const size_t at=size_t(yy)*normal.w+uint32_t(xx);return (int(edited.pixels[at])-int(base.pixels[at]))/255.f;};
+   const float gx=D(-1,-1)+2.f*D(-1,0)+D(-1,1)-D(1,-1)-2.f*D(1,0)-D(1,1);
+   const float gy=D(-1,-1)+2.f*D(0,-1)+D(1,-1)-D(-1,1)-2.f*D(0,1)-D(1,1);
+   // A zero height difference is exactly neutral, including steep normals.
+   if(gx==0.f&&gy==0.f)continue;
+   const size_t i=size_t(y)*normal.w+x;const V3 q=decode(normal.pixels[i]);const float z=std::max(.001f,q.z);
+   const V3 n=norm({q.x+gx*8.f*z,q.y+gy*8.f*z,q.z});
+   composed.pixels[i]={b8(n.x*.5f+.5f),b8(n.y*.5f+.5f),b8(n.z*.5f+.5f),255};
+  }
+ }
+ Image n=resizeImageExact(composed,w,h);GrayImage g=resizeGrayExact(gloss,w,h),hh=resizeGrayExact(height,w,h);
+ if(!n.valid()||!g.valid()||!hh.valid())return {};
+ BumpPair pair;pair.bump.w=w;pair.bump.h=h;pair.bump.pixels.resize(size_t(w)*h);pair.bumpX.w=w;pair.bumpX.h=h;pair.bumpX.pixels.resize(size_t(w)*h);
+ for(size_t i=0;i<pair.bump.pixels.size();++i){const V3 q=decode(n.pixels[i]);const float gf=g.pixels[i]/255.f;pair.bump.pixels[i]={b8(std::sqrt(sat(gf))),b8(q.z*.5f+.5f),b8(q.y*.5f+.5f),b8(q.x*.5f+.5f)};pair.bumpX.pixels[i]={128,128,128,hh.pixels[i]};}
+ if(bc3Correction){auto encoded=EncodeBC3DDS(pair.bump,{pair.bump});std::string err;Image decoded=DecodeDDS(encoded,err);if(!decoded.valid())return {};auto err8=[](int d)->uint8_t{return uint8_t(std::clamp(d+128,0,255));};for(size_t i=0;i<pair.bump.pixels.size();++i){const Pixel p=pair.bump.pixels[i],c=decoded.pixels[i];pair.bumpX.pixels[i].r=err8(int(p.a)-int(c.a));pair.bumpX.pixels[i].g=err8(int(p.b)-int(c.b));pair.bumpX.pixels[i].b=err8(int(p.g)-int(c.g));}}
  return pair;
 }
 
@@ -141,19 +182,20 @@ Image ResizeImageMax(const Image& src,uint32_t maxDimension){
  if(!src.valid()||!maxDimension)return {};
  const uint32_t biggest=std::max(src.w,src.h);if(biggest<=maxDimension)return src;
  const float k=float(maxDimension)/float(biggest);const uint32_t w=std::max(1u,uint32_t(std::lround(src.w*k))),h=std::max(1u,uint32_t(std::lround(src.h*k)));
- Image out;out.w=w;out.h=h;out.pixels.resize(size_t(w)*h);
- for(uint32_t y=0;y<h;++y)for(uint32_t x=0;x<w;++x)out.pixels[size_t(y)*w+x]=sample(src,(x+.5f)/float(w),(y+.5f)/float(h));
- return out;
+ return resizeImageExact(src,w,h);
+}
+V3 DecodeBumpNormal(Pixel packed,Pixel correction,bool rendered){
+ V3 n{float(int(packed.a)+int(correction.r)-255),float(int(packed.b)+int(correction.g)-255),float(int(packed.g)+int(correction.b)-255)};
+ if(rendered)n.z*=.5f;return norm(n);
 }
 Image UnpackNormalMap(const Image& bump,const Image& bumpX){
- if(!bump.valid()||!bumpX.valid())return {};
- const uint32_t w=std::min(bump.w,bumpX.w),h=std::min(bump.h,bumpX.h);if(!w||!h)return {};
+ if(!bump.valid()||!bumpX.valid()||bump.w!=bumpX.w||bump.h!=bumpX.h)return {};
+ const uint32_t w=bump.w,h=bump.h;
  Image out;out.w=w;out.h=h;out.pixels.resize(size_t(w)*h);
  for(uint32_t y=0;y<h;++y)for(uint32_t x=0;x<w;++x){
   const Pixel n=sample(bump,(x+.5f)/float(w),(y+.5f)/float(h));
   const Pixel e=sample(bumpX,(x+.5f)/float(w),(y+.5f)/float(h));
-  V3 v{n.a/255.f+(e.r/255.f-1.f),n.b/255.f+(e.g/255.f-1.f),n.g/255.f+(e.b/255.f-1.f)};
-  v=norm(v);out.pixels[size_t(y)*w+x]={b8(v.x*.5f+.5f),b8(v.y*.5f+.5f),b8(v.z*.5f+.5f),255};
+  V3 v=DecodeBumpNormal(n,e);out.pixels[size_t(y)*w+x]={b8(v.x*.5f+.5f),b8(v.y*.5f+.5f),b8(v.z*.5f+.5f),255};
  }
  return out;
 }
@@ -238,25 +280,65 @@ void StampScalarPresetLayer(GrayImage& target,GrayImage& coverage,const Image& p
  value=sat(value);const uint8_t q=b8(value);u-=std::floor(u);v-=std::floor(v);const int cx=int(std::floor(u*target.w)),cy=int(std::floor(v*target.h)),r=int(std::ceil(radiusPixels));
  for(int oy=-r;oy<=r;++oy)for(int ox=-r;ox<=r;++ox){const float nx=ox/radiusPixels,ny=oy/radiusPixels,d2=nx*nx+ny*ny;if(d2>1.f)continue;const float pu=nx*.5f+.5f,pv=ny*.5f+.5f;const Pixel sp=sample(preset,pu,pv);const float radial=sat(1.f-std::sqrt(d2));const uint8_t cov=b8((sp.a/255.f)*std::min(1.f,radial*4.f));if(cov<20)continue;int tx=(cx+ox)%int(target.w),ty=(cy+oy)%int(target.h);if(tx<0)tx+=int(target.w);if(ty<0)ty+=int(target.h);const size_t at=size_t(ty)*target.w+uint32_t(tx);if(cov<=coverage.pixels[at])continue;coverage.pixels[at]=cov;target.pixels[at]=q;}
 }
-void StampNormalStrengthLayer(Image& target,const Image& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float strength,bool invert,float hardness){
- if(!target.valid()||!base.valid()||target.w!=base.w||target.h!=base.h||!preset.valid()||radiusPixels<.5f)return;
- if(!coverage.valid()||coverage.w!=target.w||coverage.h!=target.h){coverage.w=target.w;coverage.h=target.h;coverage.pixels.assign(size_t(target.w)*target.h,0);}
- strength=sat(strength);u-=std::floor(u);v-=std::floor(v);const int cx=int(std::floor(u*target.w)),cy=int(std::floor(v*target.h)),r=int(std::ceil(radiusPixels));
- auto decode=[](Pixel p){return norm({p.r/127.5f-1.f,p.g/127.5f-1.f,p.b/127.5f-1.f});};
- for(int oy=-r;oy<=r;++oy)for(int ox=-r;ox<=r;++ox){const float nx=ox/radiusPixels,ny=oy/radiusPixels,d2=nx*nx+ny*ny;if(d2>1.f)continue;const float pu=nx*.5f+.5f,pv=ny*.5f+.5f;const Pixel sp=sample(preset,pu,pv);const float dist=std::sqrt(d2);const uint8_t cov=b8(brushMask(dist,sp.a/255.f,hardness));if(cov<8)continue;int tx=(cx+ox)%int(target.w),ty=(cy+oy)%int(target.h);if(tx<0)tx+=int(target.w);if(ty<0)ty+=int(target.h);const size_t at=size_t(ty)*target.w+uint32_t(tx);if(cov<=coverage.pixels[at])continue;coverage.pixels[at]=cov;V3 bn=decode(base.pixels[at]),sn=decode(sp);if(invert){sn.x=-sn.x;sn.y=-sn.y;}const float a=strength*(cov/255.f);V3 n=norm({bn.x+(sn.x-bn.x)*a,bn.y+(sn.y-bn.y)*a,bn.z+(sn.z-bn.z)*a});target.pixels[at]={b8(n.x*.5f+.5f),b8(n.y*.5f+.5f),b8(n.z*.5f+.5f),255};}
+namespace {
+bool samePixel(Pixel a,Pixel b){return a.r==b.r&&a.g==b.g&&a.b==b.b&&a.a==b.a;}
+// Coverage is per stroke, not per event: overlapping dabs cannot repeatedly
+// amplify a pixel merely because the mouse delivered more move messages.
+template<class Paint>
+bool stampLayer(uint32_t w,uint32_t h,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float hardness,Paint paint){
+ if(!w||!h||!preset.valid()||!std::isfinite(radiusPixels)||radiusPixels<.5f||!std::isfinite(u)||!std::isfinite(v))return false;
+ if(!coverage.valid()||coverage.w!=w||coverage.h!=h){coverage.w=w;coverage.h=h;coverage.pixels.assign(size_t(w)*h,0);}
+ u-=std::floor(u);v-=std::floor(v);const int cx=int(std::floor(u*w)),cy=int(std::floor(v*h)),r=int(std::ceil(std::min(radiusPixels,8192.f)));
+ bool changed=false;
+ for(int oy=-r;oy<=r;++oy)for(int ox=-r;ox<=r;++ox){
+  const float nx=ox/radiusPixels,ny=oy/radiusPixels,d2=nx*nx+ny*ny;if(d2>1.f)continue;
+  const Pixel sp=sample(preset,nx*.5f+.5f,ny*.5f+.5f);const uint8_t cov=b8(brushMask(std::sqrt(d2),sp.a/255.f,hardness));if(!cov)continue;
+  int tx=(cx+ox)%int(w),ty=(cy+oy)%int(h);if(tx<0)tx+=int(w);if(ty<0)ty+=int(h);
+  const size_t at=size_t(ty)*w+uint32_t(tx);if(cov<=coverage.pixels[at])continue;coverage.pixels[at]=cov;
+  changed=paint(at,tx,ty,sp,cov/255.f)||changed;
+ }
+ return changed;
 }
-void StampScalarDeltaLayer(GrayImage& target,const GrayImage& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float delta,float hardness){
- if(!target.valid()||!base.valid()||target.w!=base.w||target.h!=base.h||!preset.valid()||radiusPixels<.5f)return;
- if(!coverage.valid()||coverage.w!=target.w||coverage.h!=target.h){coverage.w=target.w;coverage.h=target.h;coverage.pixels.assign(size_t(target.w)*target.h,0);}
- delta=std::clamp(delta,-1.f,1.f);u-=std::floor(u);v-=std::floor(v);const int cx=int(std::floor(u*target.w)),cy=int(std::floor(v*target.h)),r=int(std::ceil(radiusPixels));
- for(int oy=-r;oy<=r;++oy)for(int ox=-r;ox<=r;++ox){const float nx=ox/radiusPixels,ny=oy/radiusPixels,d2=nx*nx+ny*ny;if(d2>1.f)continue;const float pu=nx*.5f+.5f,pv=ny*.5f+.5f;const Pixel sp=sample(preset,pu,pv);const float dist=std::sqrt(d2);const uint8_t cov=b8(brushMask(dist,sp.a/255.f,hardness));if(cov<8)continue;int tx=(cx+ox)%int(target.w),ty=(cy+oy)%int(target.h);if(tx<0)tx+=int(target.w);if(ty<0)ty+=int(target.h);const size_t at=size_t(ty)*target.w+uint32_t(tx);if(cov<=coverage.pixels[at])continue;coverage.pixels[at]=cov;const float b=base.pixels[at]/255.f;target.pixels[at]=b8(b+delta*(cov/255.f));}
+V3 decodeLayerNormal(Pixel p){return norm({p.r/127.5f-1.f,p.g/127.5f-1.f,p.b/127.5f-1.f});}
+Pixel encodeLayerNormal(V3 n){return {b8(n.x*.5f+.5f),b8(n.y*.5f+.5f),b8(n.z*.5f+.5f),255};}
 }
-void StampNormalFilterLayer(Image& target,const Image& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float strength,bool sharpen,float hardness){
- if(!target.valid()||!base.valid()||target.w!=base.w||target.h!=base.h||!preset.valid()||radiusPixels<.5f)return;
- if(!coverage.valid()||coverage.w!=target.w||coverage.h!=target.h){coverage.w=target.w;coverage.h=target.h;coverage.pixels.assign(size_t(target.w)*target.h,0);}
- strength=sat(strength);u-=std::floor(u);v-=std::floor(v);const int cx=int(std::floor(u*target.w)),cy=int(std::floor(v*target.h)),r=int(std::ceil(radiusPixels));
- auto decode=[](Pixel p){return norm({p.r/127.5f-1.f,p.g/127.5f-1.f,p.b/127.5f-1.f});};auto wrap=[](int a,int n){a%=n;return a<0?a+n:a;};
- for(int oy=-r;oy<=r;++oy)for(int ox=-r;ox<=r;++ox){const float nx=ox/radiusPixels,ny=oy/radiusPixels,d2=nx*nx+ny*ny;if(d2>1.f)continue;const float pu=nx*.5f+.5f,pv=ny*.5f+.5f;const Pixel sp=sample(preset,pu,pv);const float dist=std::sqrt(d2);const uint8_t cov=b8(brushMask(dist,sp.a/255.f,hardness));if(cov<8)continue;int tx=wrap(cx+ox,int(target.w)),ty=wrap(cy+oy,int(target.h));const size_t at=size_t(ty)*target.w+uint32_t(tx);if(cov<=coverage.pixels[at])continue;coverage.pixels[at]=cov;V3 c=decode(base.pixels[at]),avg{};for(int fy=-1;fy<=1;++fy)for(int fx=-1;fx<=1;++fx){const V3 q=decode(base.pixels[size_t(wrap(ty+fy,int(base.h)))*base.w+uint32_t(wrap(tx+fx,int(base.w)))]);const float k=(fx==0&&fy==0)?4.f:((fx==0||fy==0)?2.f:1.f);avg.x+=q.x*k;avg.y+=q.y*k;avg.z+=q.z*k;}avg=norm({avg.x/16.f,avg.y/16.f,avg.z/16.f});const float a=strength*(cov/255.f);V3 filtered=sharpen?norm({c.x+(c.x-avg.x)*2.f,c.y+(c.y-avg.y)*2.f,c.z+(c.z-avg.z)*2.f}):avg;V3 n=norm({c.x+(filtered.x-c.x)*a,c.y+(filtered.y-c.y)*a,c.z+(filtered.z-c.z)*a});target.pixels[at]={b8(n.x*.5f+.5f),b8(n.y*.5f+.5f),b8(n.z*.5f+.5f),255};}
+bool StampNormalReliefLayer(Image& target,const Image& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float strength,bool remove,float hardness){
+ if(!target.valid()||!base.valid()||target.w!=base.w||target.h!=base.h||!std::isfinite(strength)||strength<=0.f)return false;
+ strength=sat(strength);
+ return stampLayer(target.w,target.h,coverage,preset,u,v,radiusPixels,hardness,[&](size_t at,int,int,Pixel sp,float mask){
+  const V3 bn=decodeLayerNormal(base.pixels[at]);const float a=strength*mask;V3 n;
+  if(remove){
+   // Remove detail by approaching the flat surface, never by reversing XY.
+   n=norm({bn.x*(1.f-a),bn.y*(1.f-a),bn.z+(1.f-bn.z)*a});
+  }else{
+   // A preset adds its tangent-plane slopes to the existing detail. Canonical
+   // (128,128,255) is neutral and must not flatten an authored normal map.
+   const float dx=(int(sp.r)-128)/127.f,dy=(int(sp.g)-128)/127.f;
+   if(dx==0.f&&dy==0.f)return false;
+   const float dz=std::max(.2f,sp.b/127.5f-1.f),bz=std::max(.001f,bn.z);
+   n=norm({bn.x+a*dx/dz*bz,bn.y+a*dy/dz*bz,bn.z});
+  }
+  const Pixel out=encodeLayerNormal(n);if(samePixel(out,target.pixels[at]))return false;target.pixels[at]=out;return true;
+ });
+}
+bool StampScalarDeltaLayer(GrayImage& target,const GrayImage& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float delta,float hardness){
+ if(!target.valid()||!base.valid()||target.w!=base.w||target.h!=base.h||!std::isfinite(delta)||delta==0.f)return false;
+ delta=std::clamp(delta,-1.f,1.f);
+ return stampLayer(target.w,target.h,coverage,preset,u,v,radiusPixels,hardness,[&](size_t at,int,int,Pixel,float mask){
+  const uint8_t out=b8(base.pixels[at]/255.f+delta*mask);if(out==target.pixels[at])return false;target.pixels[at]=out;return true;
+ });
+}
+bool StampNormalFilterLayer(Image& target,const Image& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float strength,bool sharpen,float hardness){
+ if(!target.valid()||!base.valid()||target.w!=base.w||target.h!=base.h||!std::isfinite(strength)||strength<=0.f)return false;
+ strength=sat(strength);auto wrap=[](int a,int n){a%=n;return a<0?a+n:a;};
+ return stampLayer(target.w,target.h,coverage,preset,u,v,radiusPixels,hardness,[&](size_t at,int tx,int ty,Pixel,float mask){
+  const V3 c=decodeLayerNormal(base.pixels[at]);V3 avg{};
+  for(int fy=-1;fy<=1;++fy)for(int fx=-1;fx<=1;++fx){const V3 q=decodeLayerNormal(base.pixels[size_t(wrap(ty+fy,int(base.h)))*base.w+uint32_t(wrap(tx+fx,int(base.w)))]);const float k=(fx==0&&fy==0)?4.f:((fx==0||fy==0)?2.f:1.f);avg.x+=q.x*k;avg.y+=q.y*k;avg.z+=q.z*k;}
+  avg=norm({avg.x/16.f,avg.y/16.f,avg.z/16.f});const float a=strength*mask;
+  const V3 filtered=sharpen?norm({c.x+(c.x-avg.x)*2.f,c.y+(c.y-avg.y)*2.f,c.z+(c.z-avg.z)*2.f}):avg;
+  const Pixel out=encodeLayerNormal(norm({c.x+(filtered.x-c.x)*a,c.y+(filtered.y-c.y)*a,c.z+(filtered.z-c.z)*a}));
+  if(samePixel(out,target.pixels[at]))return false;target.pixels[at]=out;return true;
+ });
 }
 void StampMaterialPreset(Image& normalTarget,Image& glossTarget,const Image& preset,float u,float v,float radiusPixels,float glossValue){
  if(!normalTarget.valid()||!preset.valid()||radiusPixels<.5f)return;
@@ -292,9 +374,10 @@ BumpPair GenerateBump(const Sources& src,const Settings& cfg){
  preview.bumpX=DecodeDDS(EncodeBC3DDS(raw.bumpX,{raw.bumpX}),err);
  return preview;
 }
-BumpPair GenerateBumpPreview(const Sources& src,const Settings& cfg){
+BumpPair GenerateBumpPreview(const Sources& src,const Settings& cfg,uint32_t maxDimension){
  const Image& ref=src.diffuse;if(!ref.valid())return {};
- const float scale=std::min(1.f,1024.f/float(std::max(ref.w,ref.h)));const uint32_t w=std::max(1u,uint32_t(ref.w*scale)),h=std::max(1u,uint32_t(ref.h*scale));
+ if(!maxDimension&&(ref.w>4096||ref.h>4096))return {};
+ const float scale=maxDimension?std::min(1.f,float(maxDimension)/float(std::max(ref.w,ref.h))):1.f;const uint32_t w=std::max(1u,uint32_t(ref.w*scale)),h=std::max(1u,uint32_t(ref.h*scale));
  BumpPair p;p.bump=makeBump(src,cfg,w,h);if(!p.bump.valid())return {};p.bumpX=correction(p.bump,p.bump,src,cfg);return p;
 }
 BumpPair PackBumpLayersPreview(const Image& normal,const GrayImage& gloss,const GrayImage& height,uint32_t maxDimension,const GrayImage* baseHeight){
@@ -303,13 +386,83 @@ BumpPair PackBumpLayersPreview(const Image& normal,const GrayImage& gloss,const 
  if(maxDimension&&std::max(w,h)>maxDimension){const float k=float(maxDimension)/float(std::max(w,h));w=std::max(1u,uint32_t(std::lround(w*k)));h=std::max(1u,uint32_t(std::lround(h*k)));}
  return packLayersOneMip(normal,gloss,height,w,h,false,baseHeight);
 }
+BumpPair CompositeBumpLayersPreview(const Image& normal,const GrayImage& gloss,const GrayImage& height,const Image& baseNormal,const GrayImage& baseGloss,const GrayImage& baseHeight,const BumpPair& originalPair,uint32_t maxDimension){
+ BumpPair edited=PackBumpLayersPreview(normal,gloss,height,maxDimension,&baseHeight);
+ if(!edited.bump.valid()||!originalPair.bump.valid()||!originalPair.bumpX.valid())return edited;
+ BumpPair baseline=packLayersOneMip(baseNormal,baseGloss,baseHeight,edited.bump.w,edited.bump.h,false,&baseHeight);
+ if(!baseline.bump.valid())return edited;
+ const Image original=resizeImageExact(originalPair.bump,edited.bump.w,edited.bump.h),correction=resizeImageExact(originalPair.bumpX,edited.bump.w,edited.bump.h);
+ for(size_t i=0;i<edited.bump.pixels.size();++i){
+  Pixel& p=edited.bump.pixels[i];Pixel& e=edited.bumpX.pixels[i];const Pixel b=baseline.bump.pixels[i];
+  if(p.a==b.a&&p.b==b.b&&p.g==b.g){p.a=original.pixels[i].a;p.b=original.pixels[i].b;p.g=original.pixels[i].g;e.r=correction.pixels[i].r;e.g=correction.pixels[i].g;e.b=correction.pixels[i].b;}
+  if(p.r==b.r)p.r=original.pixels[i].r;
+  if(e.a==baseline.bumpX.pixels[i].a)e.a=correction.pixels[i].a;
+ }
+ return edited;
+}
+namespace {
+// Preserve pre-existing correction (imported pairs) and compensate only the
+// quantization introduced by this encoding. The full residual is deliberate:
+// it measures better with our encoder than the old SDK's 2/3 heuristic.
+bool correctCompressedPair(BumpPair& pair){
+ std::string error;const Image decoded=DecodeDDS(EncodeBC3DDS(pair.bump,{pair.bump}),error);if(!decoded.valid())return false;
+ for(size_t i=0;i<pair.bump.pixels.size();++i){const Pixel p=pair.bump.pixels[i],d=decoded.pixels[i];Pixel& e=pair.bumpX.pixels[i];e.r=uint8_t(std::clamp(int(e.r)+int(p.a)-int(d.a),0,255));e.g=uint8_t(std::clamp(int(e.g)+int(p.b)-int(d.b),0,255));e.b=uint8_t(std::clamp(int(e.b)+int(p.g)-int(d.g),0,255));}
+ return true;
+}
+bool exportPreparedPair(const BumpPair& top,const std::wstring& name,std::string& error){
+ if(!top.bump.valid()||!top.bumpX.valid())throw std::runtime_error("Cannot export an empty bump pair");
+ // Derive mipmaps from the authored top level. Re-running Sobel at each mip
+ // produced different relief at every distance; point sampling also aliased.
+ const Image normals=UnpackNormalMap(top.bump,top.bumpX);const GrayImage gloss=UnpackGlossGray(top.bump),height=UnpackHeightGray(top.bumpX);
+ std::vector<Image> mips,corrections;uint32_t w=top.bump.w,h=top.bump.h;
+ for(;;){
+  BumpPair p=(w==top.bump.w&&h==top.bump.h)?top:packLayersOneMip(normals,gloss,height,w,h,false,nullptr);
+  if(!correctCompressedPair(p))throw std::runtime_error("BC3 correction generation failed");
+  mips.push_back(std::move(p.bump));corrections.push_back(std::move(p.bumpX));if(w==1&&h==1)break;w=std::max(1u,w/2);h=std::max(1u,h/2);
+ }
+ const auto a=EncodeBC3DDS(mips.front(),mips),b=EncodeBC3DDS(corrections.front(),corrections);
+ if(a.empty()||b.empty())throw std::runtime_error("BC3 encode failed");
+ return WriteBumpPairDDSBytesAtomic(name,a,b,error);
+}
+}
+bool WriteBumpPairDDSBytesAtomic(const std::wstring& name,const std::vector<uint8_t>& bumpBytes,const std::vector<uint8_t>& bumpXBytes,std::string& error){
+ error.clear();if(bumpBytes.size()<128||bumpXBytes.size()<128){error="DDS pair is incomplete";return false;}
+ const std::filesystem::path base(name);const std::filesystem::path targets[]={std::filesystem::path(base.wstring()+L"_bump.dds"),std::filesystem::path(base.wstring()+L"_bump#.dds")};
+ static std::atomic<unsigned long long> sequence{0};const auto token=std::to_wstring(std::chrono::steady_clock::now().time_since_epoch().count())+L"_"+std::to_wstring(sequence.fetch_add(1));
+ std::filesystem::path staged[2],backups[2];bool backed[2]={},installed[2]={};
+ try{
+  if(!base.parent_path().empty())std::filesystem::create_directories(base.parent_path());
+  for(int i=0;i<2;++i){
+   if(std::filesystem::exists(targets[i])&&!std::filesystem::is_regular_file(targets[i]))throw std::runtime_error("Export destination is not a regular file");
+   staged[i]=targets[i];staged[i]+=L".writing_"+token;backups[i]=targets[i];backups[i]+=L".backup_"+token;
+   const auto& bytes=i==0?bumpBytes:bumpXBytes;std::ofstream out(staged[i],std::ios::binary|std::ios::trunc);if(!out)throw std::runtime_error("Cannot stage output DDS file");
+   out.write(reinterpret_cast<const char*>(bytes.data()),std::streamsize(bytes.size()));out.flush();if(!out)throw std::runtime_error("DDS staging write failed");out.close();if(!out)throw std::runtime_error("DDS staging close failed");
+  }
+  // Both new files exist completely before either old file is moved.
+  for(int i=0;i<2;++i)if(std::filesystem::exists(targets[i])){std::filesystem::rename(targets[i],backups[i]);backed[i]=true;}
+  for(int i=0;i<2;++i){std::filesystem::rename(staged[i],targets[i]);installed[i]=true;}
+  for(int i=0;i<2;++i)if(backed[i]){std::error_code ec;std::filesystem::remove(backups[i],ec);}
+  return true;
+ }catch(const std::exception& ex){
+  error=ex.what();bool rollbackFailed=false;
+  for(int i=1;i>=0;--i){std::error_code ec;if(installed[i]){std::filesystem::remove(targets[i],ec);if(ec)rollbackFailed=true;}if(backed[i]){ec.clear();std::filesystem::rename(backups[i],targets[i],ec);if(ec)rollbackFailed=true;}if(!staged[i].empty()){ec.clear();std::filesystem::remove(staged[i],ec);}}
+  if(rollbackFailed)error+="; rollback incomplete: recover the .backup files beside the export";
+  return false;
+ }
+}
 bool ExportBumpLayers(const Image& normal,const GrayImage& gloss,const GrayImage& height,uint32_t width,uint32_t heightPixels,const std::wstring& name,std::string& error,const GrayImage* baseHeight){
  error.clear();if(!normal.valid()||!gloss.valid()||!height.valid()){error="Material layers are incomplete";return false;}if(!width||!heightPixels||width>4096||heightPixels>4096){error="Export layer size is invalid";return false;}
- try{std::vector<Image> mips,corrections;uint32_t w=width,h=heightPixels;for(;;){BumpPair p=packLayersOneMip(normal,gloss,height,w,h,true,baseHeight);if(!p.bump.valid()||!p.bumpX.valid()){error="Failed to pack material layers";return false;}mips.push_back(std::move(p.bump));corrections.push_back(std::move(p.bumpX));if(w==1&&h==1)break;w=std::max(1u,w/2);h=std::max(1u,h/2);}auto a=EncodeBC3DDS(mips[0],mips),b=EncodeBC3DDS(corrections[0],corrections);if(a.empty()||b.empty())throw std::runtime_error("BC3 encode failed");std::filesystem::path base(name);std::filesystem::path path1(base.wstring()+L"_bump.dds"),path2(base.wstring()+L"_bump#.dds");auto write=[&](const std::filesystem::path& path,const std::vector<uint8_t>& bytes){std::ofstream out(path,std::ios::binary|std::ios::trunc);if(!out)throw std::runtime_error("Cannot open output DDS file");out.write(reinterpret_cast<const char*>(bytes.data()),std::streamsize(bytes.size()));if(!out)throw std::runtime_error("DDS file write failed");};write(path1,a);write(path2,b);return true;}catch(const std::exception& ex){error=ex.what();return false;}
+ try{return exportPreparedPair(packLayersOneMip(normal,gloss,height,width,heightPixels,false,baseHeight),name,error);}catch(const std::exception& ex){error=ex.what();return false;}
 }
-bool ExportBumpPair(const Sources& src,const Settings& cfg,const std::wstring& name,std::string& error){error.clear();const Image& ref=src.diffuse;if(!ref.valid()){error="Diffuse texture is required";return false;}if(ref.w>4096||ref.h>4096){error="Export limited to 4096x4096 in prototype";return false;}
- std::vector<Image> mips,corrections;uint32_t w=ref.w,h=ref.h;try{for(;;){BumpPair p=oneMip(src,cfg,w,h);if(!p.bump.valid()){error="Failed to generate bump";return false;}mips.push_back(std::move(p.bump));corrections.push_back(std::move(p.bumpX));if(w==1&&h==1)break;w=std::max(1u,w/2);h=std::max(1u,h/2);}auto a=EncodeBC3DDS(mips[0],mips),b=EncodeBC3DDS(corrections[0],corrections);if(a.empty()||b.empty())throw std::runtime_error("BC3 encode failed");std::filesystem::path base(name);std::filesystem::path path1(base.wstring()+L"_bump.dds"),path2(base.wstring()+L"_bump#.dds");auto write=[&](const std::filesystem::path& path,const std::vector<uint8_t>& bytes){std::ofstream out(path,std::ios::binary|std::ios::trunc);if(!out)throw std::runtime_error("Cannot open output DDS file");out.write(reinterpret_cast<const char*>(bytes.data()),std::streamsize(bytes.size()));if(!out)throw std::runtime_error("DDS file write failed");};write(path1,a);write(path2,b);return true;
- }catch(const std::exception& ex){error=ex.what();return false;}}
+bool ExportPackedBumpPair(const BumpPair& pair,const std::wstring& name,std::string& error){
+ error.clear();if(!pair.bump.valid()||!pair.bumpX.valid()||pair.bump.w!=pair.bumpX.w||pair.bump.h!=pair.bumpX.h){error="Bump pair is incomplete or dimensions differ";return false;}
+ if(pair.bump.w>4096||pair.bump.h>4096){error="Export limited to 4096x4096";return false;}
+ try{return exportPreparedPair(pair,name,error);}catch(const std::exception& ex){error=ex.what();return false;}
+}
+bool ExportBumpPair(const Sources& src,const Settings& cfg,const std::wstring& name,std::string& error){
+ error.clear();const Image& ref=src.diffuse;if(!ref.valid()){error="Diffuse texture is required";return false;}if(ref.w>4096||ref.h>4096){error="Export limited to 4096x4096";return false;}
+ try{BumpPair top;top.bump=makeBump(src,cfg,ref.w,ref.h);top.bumpX=correction(top.bump,top.bump,src,cfg);return exportPreparedPair(top,name,error);}catch(const std::exception& ex){error=ex.what();return false;}
+}
 Mesh MakeCube(){Mesh m;MeshPart part;struct Face{V3 n,p[4];};const Face faces[]={{{0,0,1},{{-1,-1,1},{1,-1,1},{1,1,1},{-1,1,1}}},{{0,0,-1},{{1,-1,-1},{-1,-1,-1},{-1,1,-1},{1,1,-1}}},{{1,0,0},{{1,-1,1},{1,-1,-1},{1,1,-1},{1,1,1}}},{{-1,0,0},{{-1,-1,-1},{-1,-1,1},{-1,1,1},{-1,1,-1}}},{{0,1,0},{{-1,1,1},{1,1,1},{1,1,-1},{-1,1,-1}}},{{0,-1,0},{{-1,-1,-1},{1,-1,-1},{1,-1,1},{-1,-1,1}}}};
  const float uv[4][2]={{0,1},{1,1},{1,0},{0,0}};for(auto& f:faces){uint32_t o=uint32_t(part.vertices.size());for(int k=0;k<4;++k)part.vertices.push_back({f.p[k],f.n,uv[k][0],uv[k][1]});for(int k:{0,1,2,0,2,3})part.indices.push_back(o+k);}m.parts.push_back(std::move(part));m.sourceParts=1;return m;}
 

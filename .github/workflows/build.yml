@@ -1,4 +1,4 @@
-name: Windows build and viewport tests
+name: Build and regression tests
 on:
   push:
   pull_request:
@@ -17,13 +17,12 @@ jobs:
       - uses: microsoft/setup-msbuild@v2
       - name: Build Material Lab
         run: msbuild KichRay_MaterialLab.sln /m /p:Configuration=Release /p:Platform=${{ matrix.platform }} /verbosity:minimal
-      - name: Compile and run viewport regressions
-        shell: cmd
-        run: |
-          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do call "%%i\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.platform == 'x64' && 'x64' || 'x86' }}
-          cl /nologo /std:c++17 /EHsc /utf-8 /W4 /Isrc tests\ViewportToolsTests.cpp src\Core.cpp src\DDS.cpp /Fe:viewport-tests.exe
-          if errorlevel 1 exit /b 1
-          viewport-tests.exe
+      - name: Configure portable regressions
+        run: cmake -S . -B test-build -A ${{ matrix.platform }}
+      - name: Build portable regressions
+        run: cmake --build test-build --config Release --parallel 2
+      - name: Run portable regressions
+        run: ctest --test-dir test-build -C Release --output-on-failure
       - name: Run Win32 and D3D11 WARP smoke test
         shell: pwsh
         run: |
@@ -32,3 +31,29 @@ jobs:
           if (-not $process.WaitForExit(60000)) { $process.Kill(); throw 'Material Lab smoke test timed out' }
           Get-Content "bin/Release/${{ matrix.platform }}/smoke-tests.txt" -ErrorAction Continue
           if ($process.ExitCode -ne 0) { throw "Material Lab smoke test failed: $($process.ExitCode)" }
+      - name: Preserve failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.platform }}-diagnostics
+          path: |
+            test-build/Testing/Temporary/LastTest.log
+            bin/Release/${{ matrix.platform }}/smoke-tests.txt
+          if-no-files-found: ignore
+  portable-sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install UI test font
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-dejavu-core
+      - name: Configure ASan and UBSan regressions
+        run: cmake -S . -B test-build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DMATERIALLAB_SANITIZERS=ON
+      - name: Build regressions
+        run: cmake --build test-build --parallel 2
+      - name: Run regressions
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --test-dir test-build --output-on-failure

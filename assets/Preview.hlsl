@@ -18,19 +18,23 @@ Texture2D BumpErrorMap : register(t2);
 SamplerState LinearWrap : register(s0);
 struct In {float3 pos:POSITION;float3 norm:NORMAL;float2 uv:TEXCOORD;float3 tangent:TANGENT;float3 bitangent:BINORMAL;};
 struct Out {float4 pos:SV_Position;float3 wp:TEXCOORD0;float3 n:TEXCOORD1;float2 uv:TEXCOORD2;float3 t:TEXCOORD3;float3 b:TEXCOORD4;};
+float3 safeNormal(float3 v,float3 fallback){
+    float lengthSquared=dot(v,v);
+    return lengthSquared>1e-10?v*rsqrt(max(lengthSquared,1e-10)):fallback;
+}
 Out VSMain(In i){
     Out o;
     float4 wp=mul(float4(i.pos,1),worldMatrix);
     o.pos=mul(float4(i.pos,1),worldViewProjection);
     o.wp=wp.xyz;
-    o.n=normalize(mul(float4(i.norm,0),worldMatrix).xyz);
+    o.n=safeNormal(mul(float4(i.norm,0),worldMatrix).xyz,float3(0,0,1));
     o.uv=i.uv;
-    o.t=normalize(mul(float4(i.tangent,0),worldMatrix).xyz);
-    o.b=normalize(mul(float4(i.bitangent,0),worldMatrix).xyz);
+    o.t=mul(float4(i.tangent,0),worldMatrix).xyz;
+    o.b=mul(float4(i.bitangent,0),worldMatrix).xyz;
     return o;
 }
 float4 PSMain(Out i):SV_Target {
-    float4 albedo=DiffuseMap.Sample(LinearWrap,i.uv);float gloss=0.25;float3 N=normalize(i.n);
+    float4 albedo=DiffuseMap.Sample(LinearWrap,i.uv);float gloss=0.25;float3 N=safeNormal(i.n,float3(0,0,1));
     float opacity=1;
     if(alphaSettings.x>0.5){
         opacity=albedo.a;
@@ -40,12 +44,14 @@ float4 PSMain(Out i):SV_Target {
     if(parameters.x>0.5){
         float4 packed=BumpMap.Sample(LinearWrap,i.uv);float4 corr=BumpErrorMap.Sample(LinearWrap,i.uv);
         float3 tn=float3(packed.a,packed.b,packed.g)+corr.rgb-1.0;
-        tn.xy*=max(parameters.y,0.0);if(parameters.w>0.5)tn.y=-tn.y;tn.z*=0.5;tn=normalize(tn);
-        float3 T=normalize(i.t-dot(i.t,N)*N);float3 B=normalize(i.b-dot(i.b,N)*N-dot(i.b,T)*T);if(dot(B,B)<0.1)B=normalize(cross(N,T));
-        N=normalize(T*tn.x+B*tn.y+N*tn.z);gloss=saturate(packed.r*packed.r*max(parameters.z*2.0,0.0));
+        tn.xy*=max(parameters.y,0.0);if(parameters.w>0.5)tn.y=-tn.y;tn.z*=0.5;tn=safeNormal(tn,float3(0,0,1));
+        float3 fallbackT=safeNormal(cross(abs(N.y)<0.9?float3(0,1,0):float3(1,0,0),N),float3(1,0,0));
+        float3 T=safeNormal(i.t-dot(i.t,N)*N,fallbackT);
+        float3 B=safeNormal(i.b-dot(i.b,N)*N-dot(i.b,T)*T,cross(N,T));
+        N=safeNormal(T*tn.x+B*tn.y+N*tn.z,N);gloss=saturate(packed.r*packed.r*max(parameters.z*2.0,0.0));
     }
-    float3 L=normalize(lightDirection.xyz);float3 V=normalize(eyePosition.xyz-i.wp);float nl=saturate(dot(N,L));float hemi=saturate(N.y*0.5+0.5);
-    float3 diffuse=ambientColor.rgb*(0.65+0.35*hemi)+lightColor.rgb*nl;float3 H=normalize(L+V);
+    float3 L=safeNormal(lightDirection.xyz,float3(0,1,0));float3 V=safeNormal(eyePosition.xyz-i.wp,N);float nl=saturate(dot(N,L));float hemi=saturate(N.y*0.5+0.5);
+    float3 diffuse=ambientColor.rgb*(0.65+0.35*hemi)+lightColor.rgb*nl;float3 H=safeNormal(L+V,N);
     float spec=pow(saturate(dot(N,H)),8+gloss*72)*(0.15+0.85*gloss)*nl;
     float3 result=albedo.rgb*materialTint.rgb*diffuse+lightColor.rgb*spec*0.85;
     return float4(saturate(result),opacity);
