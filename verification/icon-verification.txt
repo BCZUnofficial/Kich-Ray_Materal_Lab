@@ -1,0 +1,4 @@
+ICO: 10 RGBA frames, transparent corners; sizes 256, 128, 96, 64, 48, 40, 32, 24, 20, 16
+x64: embedded icon group 101; all 10 RT_ICON payloads match the ICO byte for byte; manifest retained
+Win32: embedded icon group 101; all 10 RT_ICON payloads match the ICO byte for byte; manifest retained
+Windows execution / MSVC: not run in this environment

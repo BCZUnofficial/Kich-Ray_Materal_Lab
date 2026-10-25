@@ -29,7 +29,7 @@ struct UIContext {
     ~UIContext(){ImGui::DestroyContext();}
 };
 lab::EditorUIState fixture(float scale) {
-    lab::EditorUIState s;s.uiScale=scale;s.canBrush=true;s.canAdjust=true;s.canUndo=true;s.canRedo=true;s.hasSkeleton=true;
+    lab::EditorUIState s;s.uiScale=scale;s.canBrush=true;s.canAdjust=true;s.canUndo=true;s.canRedo=true;s.hasSkeleton=true;s.hasDiffuse=true;
     s.modelName="act_bandit.ogf";s.status="Материал загружен. Кисть готова к работе.";
     s.sourceNames={"act_bandit.dds","","","","act_bandit_bump.dds","act_bandit_bump#.dds"};
     s.documentInfo="1024 × 1024 · исходная пара ТЧ";
@@ -123,6 +123,37 @@ void wheelAndAnimationInteractions() {
     const float opened=popup->Scroll.y;io.AddMousePosEvent(popup->Pos.x+40,popup->Pos.y+50);step();io.AddMouseWheelEvent(0,-2);step();step();
     require(popup->Scroll.y>opened&&s.animationIndex==125,"animation list wheel scroll must preserve selection");
 }
+void surfaceReliefInteractions() {
+    UIContext context(1.f);auto s=fixture(1.f);auto& io=ImGui::GetIO();
+    s.tab=lab::EditorTab::Brush;s.forceTab=true;s.brushChannel=2;s.brushRemove=true;
+    std::vector<std::pair<lab::EditorAction,int>> actions;
+    auto callback=[&](lab::EditorAction action,int value){actions.emplace_back(action,value);
+        if(action==lab::EditorAction::SetBrushTool)s.brushTool=lab::BrushTool(value);
+        if(action==lab::EditorAction::SurfacePreset)s.surfacePreset=value;
+    };
+    auto step=[&]{frame(s,1490,1000,callback);};for(int i=0;i<4;++i)step();
+    auto pane=[](){for(auto* w:GImGui->Windows)if(w->LastFrameActive==GImGui->FrameCount&&std::string(w->Name).find("Active pane")!=std::string::npos)return w;return static_cast<ImGuiWindow*>(nullptr);};
+    auto* w=pane();require(w!=nullptr,"brush pane exists");
+    auto* tabs=GImGui->TabBars.GetByKey(w->GetID("Brush tools"));require(tabs&&tabs->Tabs.Size==2,"brush has two independent tool tabs");
+    ImGuiTabItem* surface=nullptr;
+    for(auto& tab:tabs->Tabs)if(std::string(ImGui::TabBarGetTabName(tabs,&tab))=="Нанесение рельефа поверхности")surface=&tab;
+    require(surface!=nullptr,"dedicated surface relief tab is named explicitly");
+    const ImVec2 tabPoint(tabs->BarRect.Min.x+surface->Offset+surface->Width*.5f,tabs->BarRect.GetCenter().y);
+    io.AddMousePosEvent(tabPoint.x,tabPoint.y);step();io.AddMouseButtonEvent(0,true);step();io.AddMouseButtonEvent(0,false);step();step();
+    require(s.brushTool==lab::BrushTool::SurfaceRelief,"click switches into surface relief tab");
+    require(s.brushChannel==2&&s.brushRemove,"surface tab preserves independent freehand channel and remove settings");
+    auto hover=[&](const char* label){const auto id=ImHashStr(label,0,surface->ID);
+        for(float y=w->Pos.y+10;y<w->Pos.y+w->Size.y-10;y+=4){io.AddMousePosEvent(w->Pos.x+70,y);step();if(GImGui->HoveredId==id)return;}
+        throw std::runtime_error(std::string("missing surface control: ")+label);
+    };
+    hover("Кожа");actions.clear();io.AddMouseButtonEvent(0,true);step();io.AddMouseButtonEvent(0,false);step();
+    require(actions.size()==1&&actions[0]==std::make_pair(lab::EditorAction::SurfacePreset,4),"one mouse click selects one surface preset");
+    require(s.brushChannel==2&&s.brushRemove,"preset selection cannot change freehand operation");
+    s.hasDiffuse=false;step();actions.clear();io.AddMouseButtonEvent(0,true);step();io.AddMouseButtonEvent(0,false);step();
+    require(actions.empty(),"surface presets require a diffuse source");
+    s.hasDiffuse=true;s.brushTool=lab::BrushTool::Freehand;s.forceBrushTab=true;for(int i=0;i<4;++i)step();
+    require(s.brushTool==lab::BrushTool::Freehand&&s.brushChannel==2&&s.brushRemove,"return to freehand restores its untouched settings");
+}
 // Render the actual ImGui draw lists into an internal audit screenshot. This
 // exercises the production portable UI; it is not a separate mock-up layout.
 void snapshot(const std::string& path,int width,int height) {
@@ -163,10 +194,11 @@ int main(int argc,char** argv) {
         if(argc>=7&&std::string(argv[1])=="--snapshot"){
             int w=std::stoi(argv[3]),h=std::stoi(argv[4]),tab=std::stoi(argv[6]);float scale=std::stof(argv[5]);
             UIContext context(scale);auto state=fixture(scale);
+            if(argc>7&&std::string(argv[7])=="surface"){state.brushTool=lab::BrushTool::SurfaceRelief;state.forceBrushTab=true;}
             for(int i=0;i<5;++i){state.tab=lab::EditorTab(tab);state.forceTab=true;frame(state,w,h);}
             validate(state,w,h);snapshot(argv[2],w,h);return 0;
         }
-        interactions();wheelAndAnimationInteractions();
+        interactions();wheelAndAnimationInteractions();surfaceReliefInteractions();
         int frames=0;
         for(float scale:{1.f,1.25f,1.5f,2.f}){
             UIContext context(scale);auto state=fixture(scale);
@@ -174,6 +206,11 @@ int main(int argc,char** argv) {
                 for(int repeat=0;repeat<3;++repeat)for(int tab=0;tab<6;++tab){
                     for(int settle=0;settle<2;++settle){state.tab=lab::EditorTab(tab);state.forceTab=true;frame(state,int(size.x),int(size.y));validate(state,int(size.x),int(size.y));++frames;}
                     require(state.tab==lab::EditorTab(tab),"requested tab was not activated");
+                    if(tab==int(lab::EditorTab::Brush)){
+                        state.brushTool=lab::BrushTool::SurfaceRelief;state.forceBrushTab=true;
+                        for(int settle=0;settle<2;++settle){frame(state,int(size.x),int(size.y));validate(state,int(size.x),int(size.y));++frames;}
+                        state.brushTool=lab::BrushTool::Freehand;state.forceBrushTab=true;
+                    }
                 }
             }
         }

@@ -1,12 +1,17 @@
 # Kich-Ray Material Lab
 
-Standalone Windows / DirectX 11 material editor and OGF viewer for **S.T.A.L.K.E.R.: Shadow of Chernobyl**. Version **0.11.0**.
+Standalone Windows / DirectX 11 material editor and OGF viewer for **S.T.A.L.K.E.R.: Shadow of Chernobyl**. Version **0.12.0**.
 
 See [AUDIT_0.11.0_RU.md](AUDIT_0.11.0_RU.md) for the Russian audit, engine references and actual validation limits.
+The startup and surface-stamp update is described in [UPDATE_0.12.0_RU.md](UPDATE_0.12.0_RU.md).
 
 ## Build and run
 
 Open `KichRay_MaterialLab.sln` in **Visual Studio 2022**, choose **Release | x64**, and rebuild the solution; or run `build_vs2022.bat`. Required Visual Studio components: Desktop development with C++ and Windows SDK. Output: `bin/Release/x64/MaterialLab.exe`. Keep its `assets/Preview.hlsl` file beside the executable in the copied `assets` directory.
+
+The transparent ML emblem is embedded in the EXE by `assets/MaterialLab.rc` in every Debug/Release and Win32/x64 configuration. The window uses the same resource for its large and small icons. The multi-resolution `assets/MaterialLab.ico` and editable PNG source are included; no external ICO is required at runtime.
+
+On startup, the supplied `assets/StartupSplash.png` emblem fades in on a transparent window while the editor initializes D3D, shaders, fonts and its first viewport frames. A separate Win32 thread owns only the splash; the editor and its D3D context remain on the main thread. The 0.9-second fade is followed by a short hold and a 0.25-second fade-out once initialization finishes. The PNG is embedded in the EXE; no external splash file is required. Splash failure falls back to starting the editor normally.
 
 Dear ImGui **v1.91.9b** sources and its MIT license are included in `third_party/imgui`; no package manager or additional UI installation is required. Windows 10/11 and a DirectX 11 device are the intended runtime. x64 is recommended for large textures and skeletal models.
 
@@ -57,7 +62,9 @@ An imported bump pair does not require diffuse to be exported. Generating a new 
 
 Each mouse press creates one stroke. Repeated dabs within that stroke use maximum coverage; a new stroke accumulates on the previous result. Zero-effect strokes do not consume undo entries. Clear is undoable. Undo/redo retains up to 64 steps / 64 MiB, always retaining at least the latest step. Editing uses native texture dimensions up to 4096×4096; dragging uses a separate fast preview up to 768 pixels. After 250 ms without a drag, the viewport switches to decoded native-resolution BC3 data and the exact mip chain also used by export. The material information identifies which preview is active. Encoding large textures can briefly pause the UI.
 
-Brush hits respect visible geometry, selection and diffuse alpha. Screen-space resampling avoids drawing lines between unrelated UV islands. Focus or capture loss completes the active stroke. The **Материалы** brush tab provides deterministic glass, fabric, brushed metal, concrete and leather normal fields. These are artistic microrelief presets, not measured material models; glass transparency and the engine shader remain separate. **Из файла** supports `.krnp` and ordinary normal-map images.
+Brush hits respect visible geometry, selection and diffuse alpha. Screen-space resampling avoids drawing lines between unrelated UV islands. Focus or capture loss completes an active freehand stroke. The **Кисть** subtab retains Add/Remove channels and file presets (`.krnp` and ordinary normal-map images).
+
+The separate **Нанесение рельефа поверхности** subtab offers glass, fabric, metal, concrete and leather profiles. Selecting a profile activates the brush. Each left click applies exactly one normal-only stamp with one undo step; holding or moving the mouse does not paint. These profiles extract fine, medium and broad detail from the diffuse at the hit UV instead of inventing procedural fabric or leather. Detail stays aligned to the base texture when the brush radius changes. Existing normal detail is preserved and augmented; gloss and height remain untouched. A diffuse source is required, and a uniform or fully transparent area is a no-op with an explanatory status message. The profiles are artistic interpretations of diffuse contrast, not recovered physical geometry; transparency and the engine shader remain separate.
 
 A `.krlab` session stores the original decoded bump pair, baseline layers and current edited layers with a checksum. It does not store the mesh, diffuse image, animation, or undo history. Open the corresponding model/material before loading the session. Saves use a temporary file and atomic replacement; failed loads keep the current document intact. Old `.krlt` temporary snapshots are not automatically imported. On a graphics-device failure, the application attempts to save dirty materials under `%TEMP%/MaterialLab-recovery` and reports the path.
 
@@ -87,7 +94,7 @@ External `OGF_CHILDREN_L` references, runtime animation mixing, gameplay IK, FX 
 
 ## Validation
 
-Portable tests cover minimal baselines, live slider apply/discard, export/preview mip parity, gloss switching, five procedural presets, pinned R2 lookup values, THM metadata, animation/path selection, camera/framing, brush mathematics, native-size document state and undo/redo, transactional sessions, malformed DDS/OGF/OMF inputs, and the production ImGui layout with mouse input and scrolling. They can run without Windows:
+Portable tests cover minimal baselines, live slider apply/discard, export/preview mip parity, gloss switching, five texture-derived surface profiles, radius-independent UV alignment, one-click history and alpha, pinned R2 lookup values, THM metadata, animation/path selection, camera/framing, brush mathematics, native-size document state and undo/redo, transactional sessions, malformed DDS/OGF/OMF inputs, and the production ImGui layout with mouse input and scrolling. They can run without Windows:
 
 ```sh
 cmake -S . -B build-tests -DCMAKE_BUILD_TYPE=Debug

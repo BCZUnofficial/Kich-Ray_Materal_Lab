@@ -285,14 +285,15 @@ bool samePixel(Pixel a,Pixel b){return a.r==b.r&&a.g==b.g&&a.b==b.b&&a.a==b.a;}
 // Coverage is per stroke, not per event: overlapping dabs cannot repeatedly
 // amplify a pixel merely because the mouse delivered more move messages.
 template<class Paint>
-bool stampLayer(uint32_t w,uint32_t h,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float hardness,Paint paint){
+bool stampLayer(uint32_t w,uint32_t h,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float hardness,Paint paint,bool texelAligned=false){
  if(!w||!h||!preset.valid()||!std::isfinite(radiusPixels)||radiusPixels<.5f||!std::isfinite(u)||!std::isfinite(v))return false;
  if(!coverage.valid()||coverage.w!=w||coverage.h!=h){coverage.w=w;coverage.h=h;coverage.pixels.assign(size_t(w)*h,0);}
  u-=std::floor(u);v-=std::floor(v);const int cx=int(std::floor(u*w)),cy=int(std::floor(v*h)),r=int(std::ceil(std::min(radiusPixels,8192.f)));
+ if(texelAligned&&(preset.w!=uint32_t(2*r+1)||preset.h!=preset.w))return false;
  bool changed=false;
  for(int oy=-r;oy<=r;++oy)for(int ox=-r;ox<=r;++ox){
   const float nx=ox/radiusPixels,ny=oy/radiusPixels,d2=nx*nx+ny*ny;if(d2>1.f)continue;
-  const Pixel sp=sample(preset,nx*.5f+.5f,ny*.5f+.5f);const uint8_t cov=b8(brushMask(std::sqrt(d2),sp.a/255.f,hardness));if(!cov)continue;
+  const Pixel sp=texelAligned?preset.pixels[size_t(oy+r)*preset.w+uint32_t(ox+r)]:sample(preset,nx*.5f+.5f,ny*.5f+.5f);const uint8_t cov=b8(brushMask(std::sqrt(d2),sp.a/255.f,hardness));if(!cov)continue;
   int tx=(cx+ox)%int(w),ty=(cy+oy)%int(h);if(tx<0)tx+=int(w);if(ty<0)ty+=int(h);
   const size_t at=size_t(ty)*w+uint32_t(tx);if(cov<=coverage.pixels[at])continue;coverage.pixels[at]=cov;
   changed=paint(at,tx,ty,sp,cov/255.f)||changed;
@@ -302,7 +303,7 @@ bool stampLayer(uint32_t w,uint32_t h,GrayImage& coverage,const Image& preset,fl
 V3 decodeLayerNormal(Pixel p){return norm({p.r/127.5f-1.f,p.g/127.5f-1.f,p.b/127.5f-1.f});}
 Pixel encodeLayerNormal(V3 n){return {b8(n.x*.5f+.5f),b8(n.y*.5f+.5f),b8(n.z*.5f+.5f),255};}
 }
-bool StampNormalReliefLayer(Image& target,const Image& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float strength,bool remove,float hardness){
+bool StampNormalReliefLayer(Image& target,const Image& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float strength,bool remove,float hardness,bool texelAligned){
  if(!target.valid()||!base.valid()||target.w!=base.w||target.h!=base.h||!std::isfinite(strength)||strength<=0.f)return false;
  strength=sat(strength);
  return stampLayer(target.w,target.h,coverage,preset,u,v,radiusPixels,hardness,[&](size_t at,int,int,Pixel sp,float mask){
@@ -319,7 +320,7 @@ bool StampNormalReliefLayer(Image& target,const Image& base,GrayImage& coverage,
    n=norm({bn.x+a*dx/dz*bz,bn.y+a*dy/dz*bz,bn.z});
   }
   const Pixel out=encodeLayerNormal(n);if(samePixel(out,target.pixels[at]))return false;target.pixels[at]=out;return true;
- });
+ },texelAligned);
 }
 bool StampScalarDeltaLayer(GrayImage& target,const GrayImage& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float delta,float hardness){
  if(!target.valid()||!base.valid()||target.w!=base.w||target.h!=base.h||!std::isfinite(delta)||delta==0.f)return false;
@@ -360,28 +361,63 @@ bool LoadNormalPreset(const std::wstring& path,Image& preset,std::string& error)
 
 Settings MinimalBaseSettings(){Settings s;s.normalStrength=.25f;s.height=.10f;s.gloss=.06f;s.blur=.65f;s.sharpness=0;return s;}
 
-Image MakeSurfaceNormalPreset(SurfacePreset kind,uint32_t size){
- if(size<8||size>1024||int(kind)<0||int(kind)>4)return {};
- constexpr float tau=6.28318530718f;
- auto hash=[](int x,int y){uint32_t v=uint32_t(x)*0x9e3779b9u^uint32_t(y)*0x85ebca6bu^0x31415926u;v^=v>>16;v*=0x7feb352du;v^=v>>15;v*=0x846ca68bu;v^=v>>16;return (v&0xffff)/65535.f;};
- auto noise=[&](float u,float v,int cells){float x=u*cells,y=v*cells;int ix=int(std::floor(x)),iy=int(std::floor(y));x-=ix;y-=iy;x=x*x*(3-2*x);y=y*y*(3-2*y);auto at=[&](int a,int b){return hash((a%cells+cells)%cells,(b%cells+cells)%cells);};return (at(ix,iy)*(1-x)+at(ix+1,iy)*x)*(1-y)+(at(ix,iy+1)*(1-x)+at(ix+1,iy+1)*x)*y;};
- auto height=[&](float u,float v){
-  const float a=noise(u,v,8),b=noise(u,v,23),c=noise(u,v,47);
+Image MakeSurfaceReliefPatch(const Image& diffuse,SurfacePreset kind,uint32_t width,uint32_t height,float u,float v,float radiusPixels){
+ if(!diffuse.valid()||!width||!height||width>4096||height>4096||int(kind)<0||int(kind)>4||
+    !std::isfinite(u)||!std::isfinite(v)||!std::isfinite(radiusPixels)||radiusPixels<.5f||radiusPixels>2048.f)return {};
+ const int radius=int(std::ceil(radiusPixels)),side=2*radius+1;
+ // Cascaded binomial filters at offsets 1, 2 and 4 have a seven-texel
+ // support. One extra texel supplies the normal derivative. Keeping the halo
+ // independent of the brush prevents seams or pattern stretching at its edge.
+ constexpr int halo=8;
+ const int stride=side+2*halo;const size_t count=size_t(stride)*stride;
+ u-=std::floor(u);v-=std::floor(v);const int cx=int(std::floor(u*width)),cy=int(std::floor(v*height));
+ std::vector<float> luminance(count),alpha(count);
+ auto wrap=[](int n,int limit){n%=limit;return n<0?n+limit:n;};
+ for(int y=0;y<stride;++y)for(int x=0;x<stride;++x){
+  const float sx=(float(wrap(cx+x-radius-halo,int(width)))+.5f)*diffuse.w/width-.5f;
+  const float sy=(float(wrap(cy+y-radius-halo,int(height)))+.5f)*diffuse.h/height-.5f;
+  const int ix=int(std::floor(sx)),iy=int(std::floor(sy));const float fx=sx-ix,fy=sy-iy;
+  float light=0,weight=0;
+  for(int dy=0;dy<2;++dy)for(int dx=0;dx<2;++dx){
+   const Pixel p=diffuse.pixels[size_t(wrap(iy+dy,int(diffuse.h)))*diffuse.w+uint32_t(wrap(ix+dx,int(diffuse.w)))];
+   const float a=(dx?fx:1-fx)*(dy?fy:1-fy)*(p.a/255.f);light+=lum(p)*a;weight+=a;
+  }
+  const size_t at=size_t(y)*stride+x;luminance[at]=weight>1e-6f?light/weight:0.f;alpha[at]=weight;
+ }
+ // Normalized convolution avoids turning invisible RGB outside an alpha edge
+ // into a raised ridge. No synthetic weave, pores or random noise is added.
+ auto blur=[&](const std::vector<float>& input,int distance){
+  std::vector<float> output(count),horizontal(count),weights(count);
+  for(int y=0;y<stride;++y)for(int x=0;x<stride;++x){
+   float sum=0,total=0;
+   for(int k=-1;k<=1;++k){const size_t at=size_t(y)*stride+std::clamp(x+k*distance,0,stride-1);const float w=(k==0?2.f:1.f)*alpha[at];sum+=input[at]*w;total+=w;}
+   const size_t at=size_t(y)*stride+x;horizontal[at]=sum;weights[at]=total;
+  }
+  for(int y=0;y<stride;++y)for(int x=0;x<stride;++x){
+   float sum=0,total=0;
+   for(int k=-1;k<=1;++k){const size_t at=size_t(std::clamp(y+k*distance,0,stride-1))*stride+x;const float w=k==0?2.f:1.f;sum+=horizontal[at]*w;total+=weights[at]*w;}
+   const size_t at=size_t(y)*stride+x;output[at]=total>1e-6f?sum/total:input[at];
+  }return output;
+ };
+ const auto fine=blur(luminance,1),middle=blur(fine,2),broad=blur(middle,4);
+ auto profile=[&](size_t at){
+  const float micro=luminance[at]-fine[at],grain=fine[at]-middle[at],shape=middle[at]-broad[at];
   switch(kind){
-   case SurfacePreset::Glass:return .08f*noise(u,v,3); // slight polishing waviness
-   case SurfacePreset::Fabric:{float x=std::cos(tau*16*u),y=std::cos(tau*16*v);return .055f*(x+y)+.025f*x*y;}
-   case SurfacePreset::Metal:return .015f*std::sin(tau*32*v)+.008f*c; // brushed grooves
-   case SurfacePreset::Concrete:return .09f*a+.045f*b+.025f*c; // bounded multiscale grains
-   case SurfacePreset::Leather:{float pore=std::pow(std::max(0.f,2*b-1),4.f);return .04f*a-.065f*pore+.006f*c;}
+   case SurfacePreset::Glass:return .15f*grain+.85f*shape;
+   case SurfacePreset::Fabric:return .75f*micro+grain+.45f*shape;
+   case SurfacePreset::Metal:return .15f*micro+.65f*grain+.65f*shape;
+   case SurfacePreset::Concrete:return micro+.8f*grain+.55f*shape;
+   case SurfacePreset::Leather:{const float pores=.25f*micro+.85f*grain+.55f*shape;return pores<0?pores*1.4f:pores;}
   }return 0.f;
  };
- Image result;result.w=result.h=size;result.pixels.resize(size_t(size)*size);
- const float step=1.f/size;
- for(uint32_t y=0;y<size;++y)for(uint32_t x=0;x<size;++x){const float u=(x+.5f)*step,v=(y+.5f)*step;
-  // Central differences at a fixed UV scale keep the material independent of preset resolution.
-  const float du=(height(u+step,v)-height(u-step,v))/(2*step*16),dv=(height(u,v+step)-height(u,v-step))/(2*step*16);
-  const auto n=norm({-du,-dv,1});result.pixels[size_t(y)*size+x]={b8(n.x*.5f+.5f),b8(n.y*.5f+.5f),b8(n.z*.5f+.5f),255};}
- return result;
+ const float gains[]={5.f,7.f,5.f,8.f,7.f};const float gain=gains[int(kind)];
+ Image result;result.w=result.h=uint32_t(side);result.pixels.resize(size_t(side)*side);
+ for(int y=0;y<side;++y)for(int x=0;x<side;++x){
+  const size_t at=size_t(y+halo)*stride+x+halo;
+  const V3 n=norm({(profile(at-1)-profile(at+1))*gain,(profile(at-stride)-profile(at+stride))*gain,1.f});
+  auto signedByte=[](float value){return uint8_t(std::clamp(std::lround(value*127.f)+128L,0L,255L));};
+  result.pixels[size_t(y)*side+x]={signedByte(n.x),signedByte(n.y),b8(n.z*.5f+.5f),b8(alpha[at])};
+ }return result;
 }
 
 Image DefaultChecker(uint32_t w){Image im;im.w=im.h=w;im.pixels.resize(size_t(w)*w);for(uint32_t y=0;y<w;++y)for(uint32_t x=0;x<w;++x){int check=((x/32)^(y/32))&1;uint8_t k=uint8_t(check?166:104);im.pixels[size_t(y)*w+x]={uint8_t(k+18),k,uint8_t(k-7),255};}return im;}

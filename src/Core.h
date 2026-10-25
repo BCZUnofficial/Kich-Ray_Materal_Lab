@@ -62,7 +62,9 @@ struct Settings {float normalStrength=1.f,gloss=0.45f,height=0.5f,blur=0.12f,sha
 struct MaterialAdjustments {float normalStrength=1.f,gloss=1.f,height=1.f,blur=0.f,sharpness=0.f;bool invertY=false;};
 Settings MinimalBaseSettings();
 enum class SurfacePreset { Glass, Fabric, Metal, Concrete, Leather };
-Image MakeSurfaceNormalPreset(SurfacePreset kind,uint32_t size=128);
+// A texel-aligned stamp derived from the diffuse around the hit UV. Its detail
+// scale stays fixed in texture space when the brush radius changes.
+Image MakeSurfaceReliefPatch(const Image& diffuse,SurfacePreset kind,uint32_t width,uint32_t height,float u,float v,float radiusPixels);
 struct Sources {Image diffuse,normal,gloss,height;};
 struct BumpPair {Image bump,bumpX;};
 struct EncodedBumpPair {std::vector<uint8_t> bump,bumpX;};
@@ -90,7 +92,7 @@ void StampNormalPresetLayer(Image& target,GrayImage& coverage,const Image& prese
 void StampScalarPreset(Image& target,const Image& preset,float u,float v,float radiusPixels,float value);
 void StampScalarPreset(GrayImage& target,const Image& preset,float u,float v,float radiusPixels,float value);
 void StampScalarPresetLayer(GrayImage& target,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float value);
-bool StampNormalReliefLayer(Image& target,const Image& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float strength,bool remove,float hardness);
+bool StampNormalReliefLayer(Image& target,const Image& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float strength,bool remove,float hardness,bool texelAligned=false);
 bool StampScalarDeltaLayer(GrayImage& target,const GrayImage& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float delta,float hardness);
 bool StampNormalFilterLayer(Image& target,const Image& base,GrayImage& coverage,const Image& preset,float u,float v,float radiusPixels,float strength,bool sharpen,float hardness);
 void StampMaterialPreset(Image& normalTarget,Image& glossTarget,const Image& preset,float u,float v,float radiusPixels,float glossValue);

@@ -58,29 +58,6 @@ void encodedPreview(const std::filesystem::path& directory){
     for(const auto& mip:lab::DecodeDDSMipChain(bytes.bump,error))for(auto p:mip.pixels)check(p.r==0,"gloss-disabled DDS must have exactly zero specular in every mip");
     check(lab::EncodePackedBumpPair(base,bytes,error)&&bytes.bump==saved.bump&&bytes.bumpX==saved.bumpX,"re-enabling gloss must reproduce original data");
 }
-void presets(){
-    std::set<std::vector<uint8_t>> unique;
-    for(int i=0;i<5;++i){const auto p=lab::MakeSurfaceNormalPreset(lab::SurfacePreset(i));check(p.valid()&&same(p,lab::MakeSurfaceNormalPreset(lab::SurfacePreset(i))),"preset must be deterministic");
-        std::vector<uint8_t> channels;std::set<unsigned> directions;
-        for(const auto pixel:p.pixels){const float x=pixel.r/127.5f-1,y=pixel.g/127.5f-1,z=pixel.b/127.5f-1;
-            check(z>0&&std::fabs(std::sqrt(x*x+y*y+z*z)-1)<.012f&&pixel.a==255,"preset normals must remain normalized, finite and forward facing");
-            directions.insert(unsigned(pixel.r)*256+pixel.g);channels.push_back(pixel.r);channels.push_back(pixel.g);}
-        check(directions.size()>1,"every material preset must contain actual microrelief");unique.insert(channels);
-        lab::Image normal;normal.w=normal.h=128;normal.pixels.assign(128*128,{128,128,255,255});
-        lab::GrayImage scalar;scalar.w=scalar.h=128;scalar.pixels.assign(128*128,128);
-        const auto flat=lab::PackBumpLayersPreview(normal,scalar,scalar);std::string error;lab::MaterialDocument doc;
-        check(doc.Load(flat,error)&&doc.BeginStroke(lab::BrushOperation::ReliefAdd,{48,.35f,.65f}),"preset starts at default brush force");
-        doc.Stamp(.5f,.5f,p);
-        if(!doc.EndStroke())throw std::runtime_error("preset invisible at default brush force: "+std::to_string(i));
-        lab::EncodedBumpPair encoded,baseline;
-        check(lab::EncodePackedBumpPair(doc.Preview(0),encoded,error)&&lab::EncodePackedBumpPair(flat,baseline,error),"preset export encodes");
-        const auto n=lab::UnpackNormalMap(lab::DecodeDDS(encoded.bump,error),lab::DecodeDDS(encoded.bumpX,error));
-        const auto original=lab::UnpackNormalMap(lab::DecodeDDS(baseline.bump,error),lab::DecodeDDS(baseline.bumpX,error));
-        if(same(n,original))throw std::runtime_error("preset lost after BC3 normal reconstruction: "+std::to_string(i));
-    }
-    check(unique.size()==5,"five materials must have distinct normal fields");
-    check(!lab::MakeSurfaceNormalPreset(lab::SurfacePreset(99)).valid()&&!lab::MakeSurfaceNormalPreset(lab::SurfacePreset::Metal,1).valid(),"invalid presets rejected");
-}
 void engineLighting(){
     const auto lut=lab::MakeR2MaterialLut();check(lut.w==128&&lut.h==1024,"engine LUT dimensions");
     // Captured from upstream kichray 01b239e, KichR4MaterialLut.h::Texel.
@@ -112,6 +89,6 @@ void navigation(){
 }
 }
 int main(){const auto dir=std::filesystem::temp_directory_path()/("material-workflow-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
-    try{std::filesystem::create_directories(dir);baselineAndDraft(dir);encodedPreview(dir);presets();engineLighting();metadata();navigation();std::filesystem::remove_all(dir);std::cout<<"PASS: minimal baseline, live draft/apply/discard, exact DDS mip preview, gloss toggle, five presets, engine LUT/THM, paths, animations and axis views\n";return 0;}
+    try{std::filesystem::create_directories(dir);baselineAndDraft(dir);encodedPreview(dir);engineLighting();metadata();navigation();std::filesystem::remove_all(dir);std::cout<<"PASS: minimal baseline, live draft/apply/discard, exact DDS mip preview, gloss toggle, engine LUT/THM, paths, animations and axis views\n";return 0;}
     catch(const std::exception& e){std::filesystem::remove_all(dir);std::cerr<<"FAIL: "<<e.what()<<'\n';return 1;}
 }

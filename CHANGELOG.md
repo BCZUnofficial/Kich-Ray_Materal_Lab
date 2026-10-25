@@ -1,6 +1,16 @@
 # Changelog
 
+## 0.12.0
+
+- Fade in the supplied transparent emblem on a dedicated startup window while the main thread loads D3D resources, shaders, fonts and the initial viewport. Embed the PNG in the executable.
+- Separate freehand painting from the **Нанесение рельефа поверхности** tool. Surface profiles activate brush mode, ignore freehand channel/removal settings and apply one normal-only, undoable stamp per click.
+- Derive glass, fabric, metal, concrete and leather relief from local diffuse detail. Keep texture-space scale and UV alignment independent of brush size; respect source alpha and avoid inventing patterns on uniform areas.
+- Add surface-profile, DDS, alignment, history and actual ImGui tab/preset interaction regressions, plus native pick/move/release checks.
+
 ## 0.11.0
+
+- Embed the transparent ML radiation emblem as a multi-resolution Windows icon and use it for the application window; include the resource in all VS 2022 build configurations.
+- MSVC build hotfix: rename `small` in the native smoke test to avoid the Windows SDK RPC macro; remove the background-setting parameter-shadow warning.
 
 - Create a gentle normal baseline when missing and apply sliders live to a committed snapshot. Add Apply/Discard/Cancel transitions, Ctrl+S apply, and one-step undo without losing brush strokes.
 - Use SoC R2 direct lighting, exact material lookup values, THM class/weight and custom bump references. Remove fake zero-gloss highlights; support authored model selflight shaders.

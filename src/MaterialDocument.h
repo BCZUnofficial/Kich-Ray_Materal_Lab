@@ -37,6 +37,9 @@ public:
     bool InStroke() const { return inStroke_; }
     bool BeginStroke(BrushOperation operation, const BrushSettings& settings);
     bool Stamp(float u, float v, const Image& preset);
+    // One mouse press is one complete, undoable normal edit. Never inherits
+    // the freehand brush's channel, removal mode or in-progress stroke.
+    bool ApplySurfaceRelief(const Image& diffuse, SurfacePreset preset, float u, float v, const BrushSettings& settings);
     bool EndStroke();
     void CancelStroke();
     bool Undo();

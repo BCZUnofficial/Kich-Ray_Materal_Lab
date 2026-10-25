@@ -1,0 +1,68 @@
+name: Build and regression tests
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [x64, Win32]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+      - name: Build Material Lab
+        run: msbuild KichRay_MaterialLab.sln /m /p:Configuration=Release /p:Platform=${{ matrix.platform }} /verbosity:minimal
+      - name: Configure portable regressions
+        run: cmake -S . -B test-build -A ${{ matrix.platform }}
+      - name: Build portable regressions
+        run: cmake --build test-build --config Release --parallel 2
+      - name: Run portable regressions
+        run: ctest --test-dir test-build -C Release --output-on-failure
+      - name: Run Win32 and D3D11 WARP smoke test
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path "bin/Release/${{ matrix.platform }}/MaterialLab.exe"
+          $process = Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru
+          if (-not $process.WaitForExit(60000)) { $process.Kill(); throw 'Material Lab smoke test timed out' }
+          Get-Content "bin/Release/${{ matrix.platform }}/smoke-tests.txt" -ErrorAction Continue
+          if ($process.ExitCode -ne 0) { throw "Material Lab smoke test failed: $($process.ExitCode)" }
+      - name: Package verified Windows application
+        uses: actions/upload-artifact@v4
+        with:
+          name: MaterialLab-0.11.0-${{ matrix.platform }}
+          path: |
+            bin/Release/${{ matrix.platform }}/MaterialLab.exe
+            bin/Release/${{ matrix.platform }}/assets/Preview.hlsl
+            bin/Release/${{ matrix.platform }}/smoke-tests.txt
+          if-no-files-found: error
+      - name: Preserve failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.platform }}-diagnostics
+          path: |
+            test-build/Testing/Temporary/LastTest.log
+            bin/Release/${{ matrix.platform }}/smoke-tests.txt
+          if-no-files-found: ignore
+  portable-sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install UI test font
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-dejavu-core
+      - name: Configure ASan and UBSan regressions
+        run: cmake -S . -B test-build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DMATERIALLAB_SANITIZERS=ON
+      - name: Build regressions
+        run: cmake --build test-build --parallel 2
+      - name: Run regressions
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --test-dir test-build --output-on-failure

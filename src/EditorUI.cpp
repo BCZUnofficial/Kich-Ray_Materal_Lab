@@ -157,6 +157,10 @@ void brushPane(EditorUIState& s,const EditorUICallback& action) {
     section("Кисть материала");
     ImGui::BeginDisabled(!s.canBrush||s.editingLocked);
     if(fullButton(s.mode==EditorMode::Brush?"Кисть включена  [BR]":"Включить кисть  [BR]"))action(EditorAction::SetMode,int(EditorMode::Brush));
+    const auto requestedTool=s.brushTool;
+    if(ImGui::BeginTabBar("Brush tools",ImGuiTabBarFlags_FittingPolicyResizeDown)) {
+      if(ImGui::BeginTabItem("Кисть",nullptr,s.forceBrushTab&&requestedTool==BrushTool::Freehand?ImGuiTabItemFlags_SetSelected:0)) {
+        if(!s.forceBrushTab&&s.brushTool!=BrushTool::Freehand)action(EditorAction::SetBrushTool,int(BrushTool::Freehand));
     section("Канал");
     const char* channels[]={"Рельеф","Высота","Блеск","Резкость"};
     for(int i=0;i<4;++i){if(i%2)ImGui::SameLine(ImGui::GetWindowContentRegionMax().x*.5f);ImGui::RadioButton(channels[i],&s.brushChannel,i);}
@@ -167,26 +171,35 @@ void brushPane(EditorUIState& s,const EditorUICallback& action) {
     if(ImGui::RadioButton("Убрать (−)",&direction,1))s.brushRemove=true;
     const char* details[]={"Рельеф: добавить детали пресета / сгладить нормали к плоскости.","Высота: поднять / опустить поверхность.","Блеск: усилить / ослабить отражение света.","Резкость: подчеркнуть / смягчить детали нормалей."};
     ImGui::TextWrapped("%s",details[std::clamp(s.brushChannel,0,3)]);
+    section("Пресет кисти из файла");
+            if(fullButton("Загрузить пресет…"))action(EditorAction::LoadPreset,0);
+            if(fullButton("Сохранить пресет…"))action(EditorAction::SavePreset,0);
+    ImGui::TextWrapped("Выбран: %s",s.presetName.c_str());
+    ImGui::TextWrapped("ЛКМ — мазок; новый мазок накапливается поверх предыдущего.");
+        ImGui::EndTabItem();
+      }
+      if(ImGui::BeginTabItem("Нанесение рельефа поверхности",nullptr,s.forceBrushTab&&requestedTool==BrushTool::SurfaceRelief?ImGuiTabItemFlags_SetSelected:0)) {
+        if(!s.forceBrushTab&&s.brushTool!=BrushTool::SurfaceRelief)action(EditorAction::SetBrushTool,int(BrushTool::SurfaceRelief));
+        ImGui::TextWrapped("Нанесение рельефа поверхности");
+        ImGui::TextWrapped("Выберите материал, затем щёлкните по модели. Один щелчок — один отпечаток; удержание и движение мыши не рисуют.");
+        ImGui::BeginDisabled(!s.hasDiffuse);
+        ImGui::PushItemFlag(ImGuiItemFlags_NoNav,true);
+        const char* names[]={"Стекло","Ткань","Металл","Бетон","Кожа"};
+        for(int i=0;i<5;++i)if(ImGui::Selectable(names[i],s.surfacePreset==i))action(EditorAction::SurfacePreset,i);
+        ImGui::PopItemFlag();ImGui::EndDisabled();
+        const char* details[]={"Сглаженный рельеф крупных деталей diffuse.","Мелкие волокна и складки из рисунка diffuse.","Сглаженные царапины и неровности diffuse.","Зерно и сколы из мелких и средних деталей diffuse.","Поры и складки diffuse с подчёркнутыми углублениями."};
+        ImGui::TextWrapped("%s",details[std::clamp(s.surfacePreset,0,4)]);
+        ImGui::TextWrapped("Детали берутся из базовой текстуры в месте щелчка. Однотонный участок не создаёт выдуманного узора. Меняются только нормали.");
+        if(!s.hasDiffuse)ImGui::TextWrapped("Для этого режима загрузите diffuse выбранного материала.");
+        ImGui::EndTabItem();
+      }
+        ImGui::EndTabBar();
+    }
+    s.forceBrushTab=false;
     section("Параметры");
     wheelSlider("Размер",&s.brushRadiusPercent,.1f,20.f,"%.1f%%");
     wheelSlider("Сила",&s.brushStrengthPercent,0,100,"%.2f%%");
     wheelSlider("Резкость края",&s.brushHardnessPercent,0,100,"%.0f%%");
-    section("Пресеты нормалей");
-    if(ImGui::BeginTabBar("Brush presets")) {
-        if(ImGui::BeginTabItem("Материалы")) {
-            const char* names[]={"Стекло","Ткань","Металл","Бетон","Кожа"};
-            for(int i=0;i<5;++i){if(ImGui::Selectable(names[i],s.surfacePreset==i))action(EditorAction::SurfacePreset,i);}
-            ImGui::TextWrapped("Процедурный микрорельеф. Стекло — слабая волнистость, ткань — переплетение, металл — бороздки, бетон — зерно, кожа — поры. Прозрачность и тип шейдера не меняются.");
-            ImGui::EndTabItem();
-        }
-        if(ImGui::BeginTabItem("Из файла")) {
-            if(fullButton("Загрузить пресет…"))action(EditorAction::LoadPreset,0);
-            if(fullButton("Сохранить пресет…"))action(EditorAction::SavePreset,0);
-            ImGui::EndTabItem();
-        }
-        ImGui::EndTabBar();
-    }
-    ImGui::TextWrapped("Выбран: %s",s.presetName.c_str());
     section("История");
     ImGui::BeginDisabled(!s.canUndo);if(fullButton("Отменить  Ctrl+Z"))action(EditorAction::Undo,0);ImGui::EndDisabled();
     ImGui::BeginDisabled(!s.canRedo);if(fullButton("Повторить  Ctrl+Y"))action(EditorAction::Redo,0);ImGui::EndDisabled();
@@ -194,7 +207,7 @@ void brushPane(EditorUIState& s,const EditorUICallback& action) {
     if(fullButton("Сохранить сеанс…"))action(EditorAction::SaveSession,0);
     ImGui::EndDisabled();
     if(!s.canBrush)ImGui::TextWrapped("Сначала загрузите готовую пару bump/bump# или создайте базу.");
-    ImGui::TextWrapped("ЛКМ — мазок; ПКМ — камера; колесо над моделью — размер кисти. Сила и край — колесом над ползунками. Новый мазок накапливается поверх предыдущего.");
+    ImGui::TextWrapped("ПКМ — камера; колесо над моделью — размер. Сила и край — колесом над ползунками.");
 }
 void animationPane(EditorUIState& s,const EditorUICallback& action) {
     section("Анимация");
@@ -221,7 +234,7 @@ void toolbar(EditorUIState& s,const EditorUICallback& action) {
         {"CM","Выбрать меш (3/C). ЛКМ — выбрать; ПКМ — снять выделение.",EditorAction::SetMode,2,s.mode==EditorMode::Choose,!s.editingLocked},
         {"OL","Контур выбранного меша (O).",EditorAction::Outline,0,s.outline,true},
         {"RL","Вращение света (4). ЛКМ — свет; ПКМ — камера.",EditorAction::SetMode,3,s.mode==EditorMode::Light,true},
-        {"BR","Кисть (5/B). ЛКМ — мазок; ПКМ — камера; колесо — размер.",EditorAction::SetMode,4,s.mode==EditorMode::Brush,s.canBrush&&!s.editingLocked},
+        {"BR","Кисть (5/B). ЛКМ — мазок или один отпечаток рельефа; ПКМ — камера; колесо — размер.",EditorAction::SetMode,4,s.mode==EditorMode::Brush,s.canBrush&&!s.editingLocked},
         {"RM","Вращение модели (6/R). ЛКМ — модель; ПКМ — камера.",EditorAction::SetMode,5,s.mode==EditorMode::Model,!s.editingLocked&&s.tab!=EditorTab::Animation},
         {"FT","Вместить выбранный меш или всю видимую модель (F).",EditorAction::Frame,0,false,true},
         {"IS","Изолировать выделение; повторное нажатие вернёт видимость (I).",EditorAction::Isolate,0,s.isolated,!s.editingLocked},
@@ -267,7 +280,7 @@ void DrawEditorUI(EditorUIState& s,const EditorUICallback& action) {
     ImGuiIO& io=ImGui::GetIO();s.renderedPaneCount=0;s.viewportHovered=false;s.viewportClicked=false;
     ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(io.DisplaySize);
     ImGui::Begin("Material Lab workspace",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoBringToFrontOnFocus);
-    ImGui::TextUnformatted("KICH-RAY  /  MATERIAL LAB");ImGui::SameLine();ImGui::TextDisabled("0.11.0");
+    ImGui::TextUnformatted("KICH-RAY  /  MATERIAL LAB");ImGui::SameLine();ImGui::TextDisabled("0.12.0");
     ImGui::Separator();
     const float statusHeight=ImGui::GetTextLineHeightWithSpacing()*2.f;
     const ImVec2 room=ImGui::GetContentRegionAvail();

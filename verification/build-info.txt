@@ -1,0 +1,12 @@
+Source commit: 935d5f3167913cc4d41e4607245f80accc17efcf
+Update base: ad59fed53999310d0f482cec64cfa0161a39434d
+Cumulative patch base: 15a6b05f3ffe91d15da216cd99cf94557440dc81
+MinGW-w64 GCC 13.2: x64 and Win32 builds passed.
+Portable tests: 7/7 passed. ASan/UBSan: 7/7 passed.
+LeakSanitizer disabled: sandbox /proc access limitation.
+MSVC / native Windows execution / native smoke test: NOT RUN.
+Splash PNG matches supplied attachment byte for byte.
+x64: RCDATA 102 and all 10 icon frames match source; manifest retained.
+x64 EXE SHA256: 77231217ad2188ee8a25273663bc69c0b5e9f6d885fa5cbcc00332811eea5dfe
+Win32: RCDATA 102 and all 10 icon frames match source; manifest retained.
+Win32 EXE SHA256: 0355eda1f802fcf18e8d87081d03e1a8ee29aff7cb09f87a92638e8b743aceb1

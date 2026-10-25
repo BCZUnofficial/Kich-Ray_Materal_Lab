@@ -9,6 +9,7 @@
 namespace lab {
 enum class EditorTab { Files, Export, Material, Scene, Brush, Animation };
 enum class EditorMode { Fly, Orbit, Choose, Light, Brush, Model };
+enum class BrushTool { Freehand, SurfaceRelief };
 enum class EditorAction {
     OpenModel, NewCube, LoadDiffuse, LoadNormal, LoadGloss, LoadHeight, LoadBump, LoadBumpX,
     RequestGenerate, GenerateSelected, Export, SaveSession, OpenSession, LoadPreset, SavePreset,
@@ -16,7 +17,7 @@ enum class EditorAction {
     SelectPart, Visibility, ShowAll, HideSelected, ClearSelection, PreviewSettings,
     LightSettings, AlphaSettings, Skeleton, AnimationSelect, AnimationPlay,
     AnimationSeek, AnimationSettings, AdjustMaterial, ApplyAdjustments, DiscardAdjustments,
-    GlossSettings, BackgroundSettings, AxisView, SurfacePreset
+    GlossSettings, BackgroundSettings, AxisView, SurfacePreset, SetBrushTool
 };
 struct EditorMeshRow {
     std::string label;
@@ -33,7 +34,9 @@ struct EditorUIState {
     int alphaMode=0;
     MaterialAdjustments adjustments;
     bool pendingAdjustments=false,canAdjust=false,glossEnabled=true;
-    int surfacePreset=-1,materialClass=0;
+    int surfacePreset=1,materialClass=0;
+    BrushTool brushTool=BrushTool::Freehand;
+    bool forceBrushTab=false,hasDiffuse=false;
     float lightIntensity=1.f;
     float background[3]={.095f,.105f,.12f};
     std::array<std::string,6> sourceNames;

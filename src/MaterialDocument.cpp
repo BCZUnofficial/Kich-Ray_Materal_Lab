@@ -214,6 +214,21 @@ bool MaterialDocument::Stamp(float u, float v, const Image& preset) {
     return changed;
 }
 
+bool MaterialDocument::ApplySurfaceRelief(const Image& diffuse, SurfacePreset preset, float u, float v, const BrushSettings& settings) {
+    if (!Valid() || InStroke() || HasPendingAdjustments() ||
+        !std::isfinite(settings.strength) || settings.strength <= 0.f || !std::isfinite(settings.hardness)) return false;
+    // Build before opening a transaction: a missing source or failed allocation
+    // must not leave a half-started stroke behind.
+    const Image detail = MakeSurfaceReliefPatch(diffuse, preset, Width(), HeightPixels(), u, v, settings.radiusPixels);
+    if (!detail.valid() || !BeginStroke(BrushOperation::ReliefAdd, settings)) return false;
+    try {
+        CaptureStamp(u, v);
+        strokeChanged_ = StampNormalReliefLayer(normal_, strokeNormal_, coverage_, detail, u, v,
+            settings_.radiusPixels, settings_.strength, false, settings_.hardness, true);
+        return EndStroke();
+    } catch (...) { CancelStroke(); throw; }
+}
+
 bool MaterialDocument::FinishTile(Tile& tile) const {
     const size_t count = size_t(tile.w) * tile.h;
     if (tile.channel == Channel::Normal) tile.normalAfter.resize(count);

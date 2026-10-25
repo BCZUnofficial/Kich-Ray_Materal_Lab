@@ -1,0 +1,5 @@
+#include "../src/Resource.h"
+
+// The project adds assets to the resource compiler's include path.
+IDI_MATERIALLAB ICON "MaterialLab.ico"
+IDR_STARTUP_PNG RCDATA "StartupSplash.png"

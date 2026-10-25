@@ -25,6 +25,8 @@
 #include "EditorUI.h"
 #include "EditorWorkflow.h"
 #include "EngineTexture.h"
+#include "Resource.h"
+#include "StartupSplash.h"
 #include "imgui.h"
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"
@@ -35,7 +37,7 @@ namespace {
 using Microsoft::WRL::ComPtr;
 namespace fs=std::filesystem;
 constexpr uint32_t PreviewSize=768;
-constexpr const wchar_t* AppTitle=L"Kich-Ray Material Lab 0.11.0";
+constexpr const wchar_t* AppTitle=L"Kich-Ray Material Lab 0.12.0";
 
 std::string utf8(const std::wstring& text) {
     if(text.empty())return {};
@@ -331,6 +333,7 @@ class App {
         ui_.meshes.clear();
         for(size_t i=0;i<meshes_.size();++i){auto& mesh=meshes_[i];ui_.meshes.push_back({mesh.label,renderer_.PartVisible(i),renderer_.PartSelected(i),mesh.material->sources.diffuse.valid(),mesh.material->hasBump()});}
         const auto material=selectedMaterial();
+        ui_.hasDiffuse=material&&material->sources.diffuse.valid();
         if(uiMaterial_.lock()!=material){ui_.adjustments={};uiMaterial_=material;}
         ui_.canBrush=material&&(material->hasBump()||material->sources.diffuse.valid());ui_.canAdjust=ui_.canBrush;ui_.pendingAdjustments=material&&material->document&&material->document->HasPendingAdjustments();ui_.canUndo=material&&material->document&&material->document->CanUndo();ui_.canRedo=material&&material->document&&material->document->CanRedo();
         ui_.hasEdits=material&&material->document&&material->document->HasEdits();
@@ -562,7 +565,7 @@ class App {
         std::string error;lab::Image preset;
         if(lower(fs::path(file).extension().wstring())==L".krnp"){if(!lab::LoadNormalPreset(file,preset,error)){fail(error);return;}}
         else preset=loadImage(file,error);
-        if(!preset.valid()){fail(error);return;}preset_=std::move(preset);ui_.surfacePreset=-1;ui_.presetName=utf8(fs::path(file).filename().wstring());
+        if(!preset.valid()){fail(error);return;}preset_=std::move(preset);ui_.brushTool=lab::BrushTool::Freehand;ui_.forceBrushTab=true;ui_.presetName=utf8(fs::path(file).filename().wstring());
     }
     void savePreset() {
         auto file=chooseFile(window_,L"Normal preset (*.krnp)\0*.krnp\0",L"krnp",true,L"brush.krnp");if(file.empty())return;
@@ -603,6 +606,22 @@ class App {
         if(!material->document->BeginStroke(operation,settings))return false;
         strokeMaterial_=material;lastBrushValid_=false;lastBrushUpload_=GetTickCount64();return true;
     }
+    void applySurfaceAt(int x,int y) {
+        if(ui_.editingLocked||!resolveAdjustments())return;
+        endInteraction();
+        if(ui_.brushStrengthPercent<=0){status("Сила рельефа равна нулю. Увеличьте её колесом над ползунком.");return;}
+        lab::Renderer::PickHit hit;
+        if(!renderer_.PickUV(x,y,hit)||hit.part<0||size_t(hit.part)>=meshes_.size())return;
+        const auto material=meshes_[size_t(hit.part)].material;
+        if(!material->sources.diffuse.valid()){status("Для нанесения рельефа загрузите diffuse этого материала.");return;}
+        const bool createBase=!material->hasBump();
+        if(!ensureBase(material)||!ensureDocument(material))return;
+        renderer_.SelectPart(hit.part);
+        const lab::BrushSettings settings{std::max(1.f,ui_.brushRadiusPercent*.01f*std::max(material->document->Width(),material->document->HeightPixels())),ui_.brushStrengthPercent*.01f,ui_.brushHardnessPercent*.01f};
+        const bool changed=material->document->ApplySurfaceRelief(material->sources.diffuse,lab::SurfacePreset(ui_.surfacePreset),hit.u,hit.v,settings);
+        if(changed||createBase)upload(material);
+        status(changed?"Рельеф нанесён одним отпечатком. Ctrl+Z — отменить.":"Участок не изменён: в diffuse здесь недостаточно деталей для выбранного размера и силы.");
+    }
     void stampAt(int x,int y) {
         if(!strokeMaterial_||!strokeMaterial_->document)return;
         lab::SampleBrushStroke(lastBrush_.x,lastBrush_.y,x,y,lastBrushValid_,[&](int px,int py){
@@ -639,9 +658,18 @@ class App {
         case A::DiscardAdjustments:applyAdjustments(true);break;
         case A::GlossSettings:{renderer_.GlossEnabled(ui_.glossEnabled);std::unordered_set<Material*> seen;for(const auto& row:meshes_)if(seen.insert(row.material.get()).second)upload(row.material);
             const auto ini=executableDirectory()/L"MaterialLab.ini";WritePrivateProfileStringW(L"Scene",L"GlossEnabled",ui_.glossEnabled?L"1":L"0",ini.c_str());break;}
-        case A::BackgroundSettings:{renderer_.SetBackground(ui_.background);const auto ini=executableDirectory()/L"MaterialLab.ini";const auto value=std::to_wstring(colorRef(ui_.background));WritePrivateProfileStringW(L"Scene",L"Background",value.c_str(),ini.c_str());break;}
+        case A::BackgroundSettings:{renderer_.SetBackground(ui_.background);const auto ini=executableDirectory()/L"MaterialLab.ini";const auto backgroundValue=std::to_wstring(colorRef(ui_.background));WritePrivateProfileStringW(L"Scene",L"Background",backgroundValue.c_str(),ini.c_str());break;}
         case A::AxisView:endInteraction();renderer_.AlignAxis(value);break;
-        case A::SurfacePreset:{endInteraction();auto next=lab::MakeSurfaceNormalPreset(lab::SurfacePreset(value));if(next.valid()){preset_=std::move(next);ui_.surfacePreset=value;const char* names[]={"Стекло","Ткань","Металл","Бетон","Кожа"};ui_.presetName=names[value];}break;}
+        case A::SetBrushTool:
+            if(value>=0&&value<=int(lab::BrushTool::SurfaceRelief)){
+                if(resolveAdjustments()){endInteraction();ui_.brushTool=lab::BrushTool(value);if(ui_.brushTool==lab::BrushTool::SurfaceRelief)setMode(lab::EditorMode::Brush);}
+                else ui_.forceBrushTab=true;
+            }break;
+        case A::SurfacePreset:
+            if(value>=0&&value<5&&!ui_.editingLocked&&resolveAdjustments()){
+                setMode(lab::EditorMode::Brush);
+                if(ui_.mode==lab::EditorMode::Brush){ui_.brushTool=lab::BrushTool::SurfaceRelief;ui_.forceBrushTab=true;ui_.surfacePreset=value;status("Пресет выбран. Один щелчок по модели — один отпечаток рельефа из diffuse.");}
+            }break;
         case A::OpenSession:openSession();break;
         case A::LoadPreset:loadPreset();break;
         case A::SavePreset:savePreset();break;
@@ -724,7 +752,10 @@ class App {
             else if(ImGui::IsMouseClicked(0)) {
                 using M=lab::EditorMode;
                 if(ui_.mode==M::Choose){int part=renderer_.PickGeometry(point.x,point.y);if(resolveAdjustments()){endInteraction();renderer_.SelectPart(part);ui_.adjustments={};}}
-                else if(ui_.mode==M::Brush){if(beginStroke(point.x,point.y)){drag_=Drag::Brush;dragButton_=0;stampAt(point.x,point.y);}}
+                else if(ui_.mode==M::Brush){
+                    if(ui_.brushTool==lab::BrushTool::SurfaceRelief)applySurfaceAt(point.x,point.y);
+                    else if(beginStroke(point.x,point.y)){drag_=Drag::Brush;dragButton_=0;stampAt(point.x,point.y);}
+                }
                 else {drag_=ui_.mode==M::Light?Drag::Light:ui_.mode==M::Model?Drag::Model:Drag::Orbit;dragButton_=0;}
             }
         }
@@ -868,6 +899,9 @@ public:
         smoke_=software;
         ImGui_ImplWin32_EnableDpiAwareness();
         WNDCLASSEXW klass{};klass.cbSize=sizeof(klass);klass.style=CS_CLASSDC;klass.lpfnWndProc=windowProc;klass.hInstance=instance;klass.hCursor=LoadCursorW(nullptr,IDC_ARROW);klass.lpszClassName=L"KichRayMaterialLabImGui";
+        // Shared resource icons live for the lifetime of the module.
+        klass.hIcon=static_cast<HICON>(LoadImageW(instance,MAKEINTRESOURCEW(IDI_MATERIALLAB),IMAGE_ICON,GetSystemMetrics(SM_CXICON),GetSystemMetrics(SM_CYICON),LR_SHARED));
+        klass.hIconSm=static_cast<HICON>(LoadImageW(instance,MAKEINTRESOURCEW(IDI_MATERIALLAB),IMAGE_ICON,GetSystemMetrics(SM_CXSMICON),GetSystemMetrics(SM_CYSMICON),LR_SHARED));
         if(!RegisterClassExW(&klass)&&GetLastError()!=ERROR_CLASS_ALREADY_EXISTS)return false;
         dpiScale_=ImGui_ImplWin32_GetDpiScaleForMonitor(MonitorFromPoint(POINT{0,0},MONITOR_DEFAULTTOPRIMARY));
         const RECT work=monitorWorkArea(nullptr);
@@ -894,8 +928,12 @@ public:
         auto readColor=[&](const wchar_t* key,float* color){const COLORREF value=GetPrivateProfileIntW(L"Scene",key,colorRef(color),ini.c_str());color[0]=GetRValue(value)/255.f;color[1]=GetGValue(value)/255.f;color[2]=GetBValue(value)/255.f;};
         readColor(L"Background",ui_.background);readColor(L"LightColor",ui_.lightColor);readColor(L"AmbientColor",ui_.ambient);renderer_.SetBackground(ui_.background);
         applyPreviewSettings();applyAlphaSettings();applyLightSettings(false);renderer_.OutlineEnabled(ui_.outline);renderer_.SkeletonEnabled(ui_.skeleton);
-        ShowWindow(window_,SW_SHOWDEFAULT);UpdateWindow(window_);lastTick_=GetTickCount64();return true;
+        // Prepare the real viewport, font atlas and initial material while the
+        // splash is visible. No blank editor window is shown during loading.
+        lastTick_=GetTickCount64();frame(false);frame(false);
+        if(deviceLost_){fail(ui_.status);return false;}return true;
     }
+    void show() { if(window_&&IsWindow(window_)){ShowWindow(window_,SW_SHOWDEFAULT);UpdateWindow(window_);lastTick_=GetTickCount64();} }
     int run() {
         MSG message{};
         while(running_) {
@@ -979,13 +1017,29 @@ public:
             lab::MaterialDocument reopened;check(reopened.Open(session,error)&&same(reopened.Preview(0).bump,material->document->Preview(0).bump),"session round trip preserves edited packed channels");
             std::error_code cleanup;fs::remove(session,cleanup);
             std::wstring renderError;check(renderer_.ResizeScene(96,64,renderError),"scene resize independent from window");
-            lab::Image small;renderer_.CaptureFrame(small);check(small.w==96&&small.h==64,"capture uses scene dimensions");
+            lab::Image resizedFrame;renderer_.CaptureFrame(resizedFrame);check(resizedFrame.w==96&&resizedFrame.h==64,"capture uses scene dimensions");
             RECT rect{};GetClientRect(window_,&rect);check(renderer_.Resize(UINT(rect.right),UINT(rect.bottom),renderError)&&renderer_.SceneWidth()==96&&renderer_.SceneHeight()==64,"window resize keeps scene dimensions");
             lab::Image invalid=pair.bumpX;invalid.w+=1;
             check(!renderer_.SetPartBumpImages(0,pair.bump,invalid,true),"invalid texture pair rejected transactionally");
-            lab::Image afterInvalid;renderer_.CaptureFrame(afterInvalid);check(same(small,afterInvalid),"invalid texture pair keeps previous framebuffer");
+            lab::Image afterInvalid;renderer_.CaptureFrame(afterInvalid);check(same(resizedFrame,afterInvalid),"invalid texture pair keeps previous framebuffer");
             lab::Mesh invalidMesh=lab::MakeCube();invalidMesh.parts[0].indices[0]=uint32_t(invalidMesh.parts[0].vertices.size()+10);
             check(!renderer_.SetMesh(invalidMesh,renderError)&&renderer_.PartCount()==meshes_.size(),"invalid mesh preserves current scene");
+            // Surface stamps ignore the freehand channel/removal state and
+            // finish on mouse-down, so move/release/capture loss cannot repeat them.
+            const auto surfaceBefore=material->document->Normal();
+            const auto surfaceGloss=material->document->Gloss().pixels,surfaceHeight=material->document->Height().pixels;
+            const size_t surfaceHistory=material->document->UndoCount();
+            ui_.brushChannel=2;ui_.brushRemove=true;ui_.brushRadiusPercent=12;ui_.brushStrengthPercent=60;
+            action(lab::EditorAction::SurfacePreset,int(lab::SurfacePreset::Fabric));
+            check(ui_.mode==lab::EditorMode::Brush&&ui_.brushTool==lab::BrushTool::SurfaceRelief,"preset selection activates the dedicated brush tool");
+            applySurfaceAt(48,32);
+            const auto surfacePainted=material->document->Normal();
+            check(material->document->UndoCount()==surfaceHistory+1&&!same(surfaceBefore,surfacePainted),"one picked surface click paints one undo step");
+            check(drag_==Drag::None&&!strokeMaterial_&&!material->document->InStroke(),"surface click cannot start a continuous stroke");
+            stampAt(54,35);finishPointerInteraction();
+            check(material->document->UndoCount()==surfaceHistory+1&&same(surfacePainted,material->document->Normal()),"move and release cannot add another surface stamp");
+            check(material->document->Gloss().pixels==surfaceGloss&&material->document->Height().pixels==surfaceHeight,"surface preset cannot inherit gloss removal");
+            editHistory(lab::EditorAction::Undo);check(same(surfaceBefore,material->document->Normal()),"surface click undoes without losing earlier brush work");
             // Actual draw and picking through diffuse alpha, independent of bump alpha.
             lab::Mesh alphaMesh;
             for(float z:{-.25f,.25f}){lab::MeshPart part;part.vertices={{{-1,-1,z},{0,0,-1},0,1},{{-1,1,z},{0,0,-1},0,0},{{1,1,z},{0,0,-1},1,0},{{1,-1,z},{0,0,-1},1,1}};part.indices={0,1,2,0,2,3};alphaMesh.parts.push_back(std::move(part));}
@@ -1006,7 +1060,15 @@ public:
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,LPWSTR args,int) {
     const HRESULT com=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);if(FAILED(com))return 2;
     int result=3;const bool smoke=args&&std::wstring(args)==L"--smoke-test";
-    try {App app;if(app.create(instance,smoke))result=smoke?app.smokeTest():app.run();}
+    try {
+        ImGui_ImplWin32_EnableDpiAwareness();
+        lab::StartupSplash splash;
+        const bool splashReady=splash.Start(instance);
+        if(smoke&&!splashReady)throw std::runtime_error("Startup splash resource could not be loaded");
+        App app;
+        if(app.create(instance,smoke)){splash.Finish();app.show();result=smoke?app.smokeTest():app.run();}
+        else splash.Cancel();
+    }
     catch(const std::exception& error){if(smoke){std::ofstream log(executableDirectory()/L"smoke-tests.txt",std::ios::app);log<<"FAIL exception: "<<error.what()<<'\n';}else MessageBoxW(nullptr,wide(error.what()).c_str(),AppTitle,MB_OK|MB_ICONERROR);}
     CoUninitialize();return result;
 }
