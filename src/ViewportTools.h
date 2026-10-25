@@ -16,10 +16,12 @@ struct ViewportCamera {
                 distance*std::cos(pitch)*std::cos(yaw)};
     }
     V3 eye() const { const auto o=offset(); return {pivot.x+o.x,pivot.y+o.y,pivot.z+o.z}; }
+    V3 up() const {return {-std::sin(pitch)*std::sin(yaw),std::cos(pitch),-std::sin(pitch)*std::cos(yaw)};}
+    void alignAxis(int axis){yaw=axis==0?1.570796327f:0.f;pitch=axis==1?1.570796327f:0.f;}
     void look(float dx,float dy) {
         const auto before=eye();
         yaw=std::remainder(yaw+dx*.01f,6.283185307f);
-        pitch=std::clamp(pitch+dy*.01f,-1.42f,1.42f);
+        pitch=std::clamp(pitch+dy*.01f,-1.570796327f,1.570796327f);
         if(fly){const auto o=offset();pivot={before.x-o.x,before.y-o.y,before.z-o.z};}
     }
     void move(float right,float up,float forward) {

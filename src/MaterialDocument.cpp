@@ -133,6 +133,7 @@ MaterialDocument::Channel MaterialDocument::ActiveChannel() const {
 }
 
 bool MaterialDocument::BeginStroke(BrushOperation operation, const BrushSettings& settings) {
+    if (HasPendingAdjustments()) return false; // shell must resolve the draft first
     if (!Valid() || !std::isfinite(settings.radiusPixels) || settings.radiusPixels < .5f ||
         !std::isfinite(settings.strength) || settings.strength <= 0.f ||
         !std::isfinite(settings.hardness) ||
@@ -308,6 +309,7 @@ void MaterialDocument::CancelStroke() {
 }
 
 bool MaterialDocument::Undo() {
+    if (HasPendingAdjustments()) return false;
     EndStroke();
     if (undo_.empty()) return false;
     redo_.push_back(std::move(undo_.back()));
@@ -319,6 +321,7 @@ bool MaterialDocument::Undo() {
 }
 
 bool MaterialDocument::Redo() {
+    if (HasPendingAdjustments()) return false;
     EndStroke();
     if (redo_.empty()) return false;
     undo_.push_back(std::move(redo_.back()));
@@ -330,6 +333,7 @@ bool MaterialDocument::Redo() {
 }
 
 bool MaterialDocument::Clear() {
+    if (HasPendingAdjustments()) return false;
     EndStroke();
     if (!Valid() || !modifiedPixels_) return false;
     Change change;
@@ -376,7 +380,73 @@ void MaterialDocument::TrimHistory() {
 void MaterialDocument::SetHistoryBudget(size_t bytes, size_t maximumSteps) {
     historyBudget_ = bytes; maximumSteps_ = std::max(size_t(1), maximumSteps); TrimHistory();
 }
-void MaterialDocument::MarkSaved() { EndStroke(); savedState_ = state_; }
+void MaterialDocument::MarkSaved() { EndStroke(); CommitAdjustments(); savedState_ = state_; }
+
+bool MaterialDocument::Adjust(const MaterialAdjustments& s) {
+    if (!Valid() || InStroke()) return false;
+    for (float value : {s.normalStrength,s.gloss,s.height,s.blur,s.sharpness})
+        if (!std::isfinite(value) || value < 0) return false;
+    if (!adjustmentNormal_.valid()) {
+        // Allocate all snapshots before installing them.
+        Image n=normal_; GrayImage g=gloss_,h=height_;
+        adjustmentNormal_=std::move(n);adjustmentGloss_=std::move(g);adjustmentHeight_=std::move(h);
+    }
+    Image next=adjustmentNormal_;
+    GrayImage gloss=adjustmentGloss_,height=adjustmentHeight_;
+    const bool normalChange=s.normalStrength!=1 || s.blur!=0 || s.sharpness!=0 || s.invertY;
+    auto decode=[](Pixel p){return V3{p.r/127.5f-1,p.g/127.5f-1,p.b/127.5f-1};};
+    auto byte=[](float value){return uint8_t(std::clamp(value,0.f,255.f)+.5f);};
+    auto at=[&](int x,int y){x=(x%int(Width())+int(Width()))%int(Width());y=(y%int(HeightPixels())+int(HeightPixels()))%int(HeightPixels());return decode(adjustmentNormal_.pixels[size_t(y)*Width()+uint32_t(x)]);};
+    for(uint32_t y=0;y<HeightPixels();++y)for(uint32_t x=0;x<Width();++x) {
+        const size_t i=size_t(y)*Width()+x;
+        if(normalChange) {
+            V3 n=decode(adjustmentNormal_.pixels[i]),avg{};
+            if(s.blur!=0 || s.sharpness!=0) {
+                for(int dy=-1;dy<=1;++dy)for(int dx=-1;dx<=1;++dx){const auto q=at(int(x)+dx,int(y)+dy);const float k=float((dx==0?2:1)*(dy==0?2:1))/16.f;avg.x+=q.x*k;avg.y+=q.y*k;avg.z+=q.z*k;}
+                const float amount=std::clamp(s.blur,0.f,1.f)-std::clamp(s.sharpness,0.f,2.f);
+                n={n.x+(avg.x-n.x)*amount,n.y+(avg.y-n.y)*amount,n.z+(avg.z-n.z)*amount};
+            }
+            n.x*=std::min(s.normalStrength,4.f);n.y*=std::min(s.normalStrength,4.f)*(s.invertY?-1.f:1.f);
+            n.z=std::max(.001f,n.z);const float length=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);
+            next.pixels[i]={byte((n.x/length+1)*127.5f),byte((n.y/length+1)*127.5f),byte((n.z/length+1)*127.5f),255};
+        }
+        if(s.gloss!=1)gloss.pixels[i]=byte(adjustmentGloss_.pixels[i]*std::min(s.gloss,2.f));
+        if(s.height!=1)height.pixels[i]=byte(128+(int(adjustmentHeight_.pixels[i])-128)*std::min(s.height,2.f));
+    }
+    adjustmentChanged_=!equal(next.pixels,adjustmentNormal_.pixels)||gloss.pixels!=adjustmentGloss_.pixels||height.pixels!=adjustmentHeight_.pixels;
+    normal_=std::move(next);gloss_=std::move(gloss);height_=std::move(height);
+    if(!adjustmentChanged_){adjustmentNormal_={};adjustmentGloss_={};adjustmentHeight_={};}
+    return true;
+}
+
+bool MaterialDocument::CommitAdjustments() {
+    if(!adjustmentChanged_)return false;
+    Change change;change.beforeState=state_;change.beforeModified=modifiedPixels_;
+    size_t modified=modifiedPixels_;
+    for(Channel channel:{Channel::Normal,Channel::Gloss,Channel::Height})
+        for(uint32_t y=0;y<HeightPixels();y+=TileSize)for(uint32_t x=0;x<Width();x+=TileSize) {
+            Tile tile=CaptureTile(channel,x,y);
+            // CaptureTile reads the live draft. Move that into after, then fill before.
+            if(channel==Channel::Normal){tile.normalAfter=tile.normalBefore;}
+            else{tile.scalarAfter=tile.scalarBefore;}
+            for(uint32_t row=0;row<tile.h;++row){const size_t src=size_t(y+row)*Width()+x,dst=size_t(row)*tile.w;
+                if(channel==Channel::Normal)std::copy_n(adjustmentNormal_.pixels.begin()+src,tile.w,tile.normalBefore.begin()+dst);
+                else{const auto& baseline=channel==Channel::Gloss?adjustmentGloss_:adjustmentHeight_;std::copy_n(baseline.pixels.begin()+src,tile.w,tile.scalarBefore.begin()+dst);}}
+            const bool different=channel==Channel::Normal?!equal(tile.normalBefore,tile.normalAfter):tile.scalarBefore!=tile.scalarAfter;
+            if(!different)continue;
+            modified-=CountModified(tile,false);modified+=CountModified(tile,true);change.tiles.push_back(std::move(tile));
+        }
+    const uint64_t next=modified?nextState_:1;
+    change.afterState=next;change.afterModified=modified;
+    Record(std::move(change));modifiedPixels_=modified;state_=next;if(modified)++nextState_;
+    adjustmentChanged_=false;adjustmentNormal_={};adjustmentGloss_={};adjustmentHeight_={};
+    return true;
+}
+
+void MaterialDocument::CancelAdjustments() {
+    if(adjustmentNormal_.valid()){normal_=std::move(adjustmentNormal_);gloss_=std::move(adjustmentGloss_);height_=std::move(adjustmentHeight_);}
+    adjustmentNormal_={};adjustmentGloss_={};adjustmentHeight_={};adjustmentChanged_=false;
+}
 
 BumpPair MaterialDocument::Preview(uint32_t maximumDimension) const {
     if (!Valid()) return {};
@@ -394,6 +464,7 @@ bool MaterialDocument::Save(const std::filesystem::path& path, std::string& erro
     if (!Valid() || path.empty()) { error = "No material or session filename"; return false; }
     try {
         EndStroke();
+        CommitAdjustments();
         static_assert(sizeof(Pixel) == 4, "Session normal and bump pixels are RGBA8");
         const size_t count = normal_.pixels.size();
         const std::array<std::pair<const void*, size_t>, 5> blocks = {{

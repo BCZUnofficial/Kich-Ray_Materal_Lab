@@ -31,6 +31,15 @@ jobs:
           if (-not $process.WaitForExit(60000)) { $process.Kill(); throw 'Material Lab smoke test timed out' }
           Get-Content "bin/Release/${{ matrix.platform }}/smoke-tests.txt" -ErrorAction Continue
           if ($process.ExitCode -ne 0) { throw "Material Lab smoke test failed: $($process.ExitCode)" }
+      - name: Package verified Windows application
+        uses: actions/upload-artifact@v4
+        with:
+          name: MaterialLab-0.11.0-${{ matrix.platform }}
+          path: |
+            bin/Release/${{ matrix.platform }}/MaterialLab.exe
+            bin/Release/${{ matrix.platform }}/assets/Preview.hlsl
+            bin/Release/${{ matrix.platform }}/smoke-tests.txt
+          if-no-files-found: error
       - name: Preserve failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4

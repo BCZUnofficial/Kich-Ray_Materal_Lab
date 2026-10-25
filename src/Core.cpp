@@ -358,6 +358,32 @@ bool SaveNormalPreset(const Image& preset,const std::wstring& path,std::string& 
 bool LoadNormalPreset(const std::wstring& path,Image& preset,std::string& error){float gloss=.45f;return LoadNormalPreset(path,preset,gloss,error);}
 
 
+Settings MinimalBaseSettings(){Settings s;s.normalStrength=.25f;s.height=.10f;s.gloss=.06f;s.blur=.65f;s.sharpness=0;return s;}
+
+Image MakeSurfaceNormalPreset(SurfacePreset kind,uint32_t size){
+ if(size<8||size>1024||int(kind)<0||int(kind)>4)return {};
+ constexpr float tau=6.28318530718f;
+ auto hash=[](int x,int y){uint32_t v=uint32_t(x)*0x9e3779b9u^uint32_t(y)*0x85ebca6bu^0x31415926u;v^=v>>16;v*=0x7feb352du;v^=v>>15;v*=0x846ca68bu;v^=v>>16;return (v&0xffff)/65535.f;};
+ auto noise=[&](float u,float v,int cells){float x=u*cells,y=v*cells;int ix=int(std::floor(x)),iy=int(std::floor(y));x-=ix;y-=iy;x=x*x*(3-2*x);y=y*y*(3-2*y);auto at=[&](int a,int b){return hash((a%cells+cells)%cells,(b%cells+cells)%cells);};return (at(ix,iy)*(1-x)+at(ix+1,iy)*x)*(1-y)+(at(ix,iy+1)*(1-x)+at(ix+1,iy+1)*x)*y;};
+ auto height=[&](float u,float v){
+  const float a=noise(u,v,8),b=noise(u,v,23),c=noise(u,v,47);
+  switch(kind){
+   case SurfacePreset::Glass:return .08f*noise(u,v,3); // slight polishing waviness
+   case SurfacePreset::Fabric:{float x=std::cos(tau*16*u),y=std::cos(tau*16*v);return .055f*(x+y)+.025f*x*y;}
+   case SurfacePreset::Metal:return .015f*std::sin(tau*32*v)+.008f*c; // brushed grooves
+   case SurfacePreset::Concrete:return .09f*a+.045f*b+.025f*c; // bounded multiscale grains
+   case SurfacePreset::Leather:{float pore=std::pow(std::max(0.f,2*b-1),4.f);return .04f*a-.065f*pore+.006f*c;}
+  }return 0.f;
+ };
+ Image result;result.w=result.h=size;result.pixels.resize(size_t(size)*size);
+ const float step=1.f/size;
+ for(uint32_t y=0;y<size;++y)for(uint32_t x=0;x<size;++x){const float u=(x+.5f)*step,v=(y+.5f)*step;
+  // Central differences at a fixed UV scale keep the material independent of preset resolution.
+  const float du=(height(u+step,v)-height(u-step,v))/(2*step*16),dv=(height(u,v+step)-height(u,v-step))/(2*step*16);
+  const auto n=norm({-du,-dv,1});result.pixels[size_t(y)*size+x]={b8(n.x*.5f+.5f),b8(n.y*.5f+.5f),b8(n.z*.5f+.5f),255};}
+ return result;
+}
+
 Image DefaultChecker(uint32_t w){Image im;im.w=im.h=w;im.pixels.resize(size_t(w)*w);for(uint32_t y=0;y<w;++y)for(uint32_t x=0;x<w;++x){int check=((x/32)^(y/32))&1;uint8_t k=uint8_t(check?166:104);im.pixels[size_t(y)*w+x]={uint8_t(k+18),k,uint8_t(k-7),255};}return im;}
 BumpPair GenerateBump(const Sources& src,const Settings& cfg){
  const Image& ref=src.diffuse;
@@ -409,8 +435,8 @@ bool correctCompressedPair(BumpPair& pair){
  for(size_t i=0;i<pair.bump.pixels.size();++i){const Pixel p=pair.bump.pixels[i],d=decoded.pixels[i];Pixel& e=pair.bumpX.pixels[i];e.r=uint8_t(std::clamp(int(e.r)+int(p.a)-int(d.a),0,255));e.g=uint8_t(std::clamp(int(e.g)+int(p.b)-int(d.b),0,255));e.b=uint8_t(std::clamp(int(e.b)+int(p.g)-int(d.g),0,255));}
  return true;
 }
-bool exportPreparedPair(const BumpPair& top,const std::wstring& name,std::string& error){
- if(!top.bump.valid()||!top.bumpX.valid())throw std::runtime_error("Cannot export an empty bump pair");
+bool encodePreparedPair(const BumpPair& top,EncodedBumpPair& output){
+ if(!top.bump.valid()||!top.bumpX.valid()||top.bump.w!=top.bumpX.w||top.bump.h!=top.bumpX.h||top.bump.w>4096||top.bump.h>4096)throw std::runtime_error("A matching bump pair up to 4096 x 4096 is required");
  // Derive mipmaps from the authored top level. Re-running Sobel at each mip
  // produced different relief at every distance; point sampling also aliased.
  const Image normals=UnpackNormalMap(top.bump,top.bumpX);const GrayImage gloss=UnpackGlossGray(top.bump),height=UnpackHeightGray(top.bumpX);
@@ -422,7 +448,16 @@ bool exportPreparedPair(const BumpPair& top,const std::wstring& name,std::string
  }
  const auto a=EncodeBC3DDS(mips.front(),mips),b=EncodeBC3DDS(corrections.front(),corrections);
  if(a.empty()||b.empty())throw std::runtime_error("BC3 encode failed");
- return WriteBumpPairDDSBytesAtomic(name,a,b,error);
+ output={a,b};return true;
+}
+}
+bool EncodePackedBumpPair(const BumpPair& pair,EncodedBumpPair& output,std::string& error){
+ error.clear();try{EncodedBumpPair next;if(!encodePreparedPair(pair,next))return false;output=std::move(next);return true;}catch(const std::exception& e){error=e.what();return false;}
+}
+namespace {
+bool exportPreparedPair(const BumpPair& top,const std::wstring& name,std::string& error){
+ EncodedBumpPair encoded;if(!EncodePackedBumpPair(top,encoded,error))return false;
+ return WriteBumpPairDDSBytesAtomic(name,encoded.bump,encoded.bumpX,error);
 }
 }
 bool WriteBumpPairDDSBytesAtomic(const std::wstring& name,const std::vector<uint8_t>& bumpBytes,const std::vector<uint8_t>& bumpXBytes,std::string& error){

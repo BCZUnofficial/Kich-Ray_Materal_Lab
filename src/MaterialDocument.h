@@ -42,11 +42,15 @@ public:
     bool Undo();
     bool Redo();
     bool Clear();
+    bool Adjust(const MaterialAdjustments& settings);
+    bool CommitAdjustments();
+    void CancelAdjustments();
+    bool HasPendingAdjustments() const { return adjustmentChanged_; }
 
     bool CanUndo() const { return !undo_.empty() || strokeChanged_; }
     bool CanRedo() const { return !inStroke_ && !redo_.empty(); }
-    bool HasEdits() const { return modifiedPixels_ != 0 || strokeChanged_; }
-    bool IsDirty() const { return state_ != savedState_ || strokeChanged_; }
+    bool HasEdits() const { return modifiedPixels_ != 0 || strokeChanged_ || adjustmentChanged_; }
+    bool IsDirty() const { return state_ != savedState_ || strokeChanged_ || adjustmentChanged_; }
     void MarkSaved();
     size_t UndoCount() const { return undo_.size(); }
     size_t RedoCount() const { return redo_.size(); }
@@ -82,6 +86,9 @@ private:
     BumpPair original_;
     Image normal_, baseNormal_;
     GrayImage gloss_, height_, baseGloss_, baseHeight_;
+    Image adjustmentNormal_;
+    GrayImage adjustmentGloss_, adjustmentHeight_;
+    bool adjustmentChanged_ = false;
     uint64_t state_ = 1, savedState_ = 1, nextState_ = 2;
     size_t modifiedPixels_ = 0;
     std::deque<Change> undo_, redo_;

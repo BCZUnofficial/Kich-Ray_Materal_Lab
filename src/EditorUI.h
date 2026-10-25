@@ -15,7 +15,8 @@ enum class EditorAction {
     ClearBrush, Undo, Redo, SetMode, Outline, Frame, Isolate, Wireframe, ResetView,
     SelectPart, Visibility, ShowAll, HideSelected, ClearSelection, PreviewSettings,
     LightSettings, AlphaSettings, Skeleton, AnimationSelect, AnimationPlay,
-    AnimationSeek, AnimationSettings
+    AnimationSeek, AnimationSettings, AdjustMaterial, ApplyAdjustments, DiscardAdjustments,
+    GlossSettings, BackgroundSettings, AxisView, SurfacePreset
 };
 struct EditorMeshRow {
     std::string label;
@@ -27,10 +28,14 @@ struct EditorUIState {
     EditorMode mode=EditorMode::Fly;
     bool forceTab=false,editingLocked=false,canBrush=false,canUndo=false,canRedo=false,hasEdits=false;
     bool outline=true,wireframe=false,isolated=false,skeleton=false,hasSkeleton=false;
-    bool bump=true,invertNormalY=false,alpha=true;
-    float previewNormal=1.f,previewGloss=.5f,alphaCutoff=.5f;
+    bool bump=true,alpha=true;
+    float alphaCutoff=.5f;
     int alphaMode=0;
-    Settings generation;
+    MaterialAdjustments adjustments;
+    bool pendingAdjustments=false,canAdjust=false,glossEnabled=true;
+    int surfacePreset=-1,materialClass=0;
+    float lightIntensity=1.f;
+    float background[3]={.095f,.105f,.12f};
     std::array<std::string,6> sourceNames;
     std::string modelName="Тестовый куб",status="Откройте OGF или загрузите diffuse.",documentInfo;
     std::array<char,256> exportName{};

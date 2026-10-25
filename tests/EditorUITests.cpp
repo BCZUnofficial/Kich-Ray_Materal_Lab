@@ -29,7 +29,7 @@ struct UIContext {
     ~UIContext(){ImGui::DestroyContext();}
 };
 lab::EditorUIState fixture(float scale) {
-    lab::EditorUIState s;s.uiScale=scale;s.canBrush=true;s.canUndo=true;s.canRedo=true;s.hasSkeleton=true;
+    lab::EditorUIState s;s.uiScale=scale;s.canBrush=true;s.canAdjust=true;s.canUndo=true;s.canRedo=true;s.hasSkeleton=true;
     s.modelName="act_bandit.ogf";s.status="Материал загружен. Кисть готова к работе.";
     s.sourceNames={"act_bandit.dds","","","","act_bandit_bump.dds","act_bandit_bump#.dds"};
     s.documentInfo="1024 × 1024 · исходная пара ТЧ";
@@ -75,7 +75,6 @@ void interactions() {
     };
     click(s.toolbarRect.x+5*(button+ImGui::GetStyle().ItemSpacing.x)+button*.5f,s.toolbarRect.y+ImGui::GetFrameHeight()*.5f);
     require(actions.size()==1&&actions.back()==lab::EditorAction::SetMode&&s.mode==lab::EditorMode::Brush,"BR toolbar click must dispatch once");
-    require(s.previewNormal==1.f&&s.previewGloss==.5f,"tool selection changed preview material parameters");
     actions.clear();s.canBrush=false;frame(s,1490,860,callback);
     click(s.toolbarRect.x+5*(button+ImGui::GetStyle().ItemSpacing.x)+button*.5f,s.toolbarRect.y+ImGui::GetFrameHeight()*.5f);
     require(actions.empty(),"disabled brush tool dispatched an action");
@@ -93,6 +92,36 @@ void interactions() {
     s.requestGeneratePopup=true;for(int i=0;i<4;++i)frame(s,1100,640);
     auto* popup=ImGui::FindWindowByName("Создать новую базу");
     require(popup&&popup->Active&&popup->Pos.x>=0&&popup->Pos.y>=0&&popup->Pos.x+popup->Size.x<=1100&&popup->Pos.y+popup->Size.y<=640,"generation popup must fit small windows with many targets");
+}
+void wheelAndAnimationInteractions() {
+    UIContext context(1.f);auto s=fixture(1.f);auto& io=ImGui::GetIO();
+    io.ConfigFlags|=ImGuiConfigFlags_NavEnableKeyboard;
+    s.tab=lab::EditorTab::Material;s.forceTab=true;s.pendingAdjustments=true;
+    std::vector<lab::EditorAction> actions;
+    auto callback=[&](lab::EditorAction kind,int){actions.push_back(kind);};
+    auto step=[&]{frame(s,1490,860,callback);};for(int i=0;i<4;++i)step();
+    auto pane=[](){for(auto* w:GImGui->Windows)if(w->LastFrameActive==GImGui->FrameCount&&std::string(w->Name).find("Active pane")!=std::string::npos)return w;return static_cast<ImGuiWindow*>(nullptr);};
+    auto hover=[&](const char* label){auto* w=pane();require(w!=nullptr,"active inspector exists");const auto id=w->GetID(label);
+        for(float y=w->Pos.y+10;y<w->Pos.y+w->Size.y-10;y+=4){io.AddMousePosEvent(w->Pos.x+70,y);step();if(GImGui->HoveredId==id)return ImVec2(w->Pos.x+70,y);}
+        throw std::runtime_error(std::string("cannot find interactive control: ")+label);
+    };
+    hover("Сила нормалей");const float scroll=pane()->Scroll.y,before=s.adjustments.normalStrength;actions.clear();
+    io.AddMouseWheelEvent(0,1);step();step();
+    require(s.adjustments.normalStrength>before&&std::count(actions.begin(),actions.end(),lab::EditorAction::AdjustMaterial)==1,"wheel must alter normal slider and dispatch one live edit");
+    require(pane()->Scroll.y==scroll,"wheel over slider must not also scroll inspector");
+    io.AddMouseButtonEvent(0,true);step();io.AddMouseButtonEvent(0,false);step();const float afterClick=s.adjustments.normalStrength;
+    io.AddKeyEvent(ImGuiKey_RightArrow,true);step();io.AddKeyEvent(ImGuiKey_RightArrow,false);step();
+    require(s.adjustments.normalStrength==afterClick,"arrow keys must not adjust mouse-only slider");
+    hover("Применить  Ctrl+S");actions.clear();io.AddMouseButtonEvent(0,true);step();io.AddMouseButtonEvent(0,false);step();
+    require(std::count(actions.begin(),actions.end(),lab::EditorAction::ApplyAdjustments)==1,"apply button dispatches once for pending draft");
+    hover("Сила нормалей");s.canAdjust=false;step();const float disabled=s.adjustments.normalStrength;actions.clear();io.AddMouseWheelEvent(0,1);step();
+    require(s.adjustments.normalStrength==disabled&&actions.empty(),"disabled slider must ignore wheel");
+    s.tab=lab::EditorTab::Animation;s.forceTab=true;s.animations.clear();for(int i=0;i<160;++i)s.animations.push_back("animation_"+std::to_string(i));s.animationIndex=125;
+    for(int i=0;i<4;++i)step();hover("Клип");io.AddMouseButtonEvent(0,true);step();io.AddMouseButtonEvent(0,false);step();for(int i=0;i<3;++i)step();
+    ImGuiWindow* popup=nullptr;for(auto* w:GImGui->Windows)if(w->Active&&(w->Flags&ImGuiWindowFlags_Popup))popup=w;
+    require(popup&&popup->ScrollMax.y>0&&popup->Scroll.y>0&&s.animationIndex==125,"long animation popup must open scrolled to last selected clip");
+    const float opened=popup->Scroll.y;io.AddMousePosEvent(popup->Pos.x+40,popup->Pos.y+50);step();io.AddMouseWheelEvent(0,-2);step();step();
+    require(popup->Scroll.y>opened&&s.animationIndex==125,"animation list wheel scroll must preserve selection");
 }
 // Render the actual ImGui draw lists into an internal audit screenshot. This
 // exercises the production portable UI; it is not a separate mock-up layout.
@@ -137,7 +166,7 @@ int main(int argc,char** argv) {
             for(int i=0;i<5;++i){state.tab=lab::EditorTab(tab);state.forceTab=true;frame(state,w,h);}
             validate(state,w,h);snapshot(argv[2],w,h);return 0;
         }
-        interactions();
+        interactions();wheelAndAnimationInteractions();
         int frames=0;
         for(float scale:{1.f,1.25f,1.5f,2.f}){
             UIContext context(scale);auto state=fixture(scale);

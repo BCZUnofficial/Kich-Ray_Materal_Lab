@@ -50,6 +50,28 @@ std::vector<uint8_t> EncodeBC3DDS(const Image& top,const std::vector<Image>& mip
  wr(o,0x1000u|(count>1?0x400008u:0u));wr(o,0);wr(o,0);wr(o,0);wr(o,0);
  for(size_t i=0;i<count;++i){auto b=EncodeBC3Blocks(level(i));o.insert(o.end(),b.begin(),b.end());}return o;
 }
+std::vector<Image> DecodeDDSMipChain(const std::vector<uint8_t>& bytes,std::string& error){
+ Image top=DecodeDDS(bytes,error);if(!top.valid())return {};
+ const uint32_t code=rd(bytes.data()+84),flags=rd(bytes.data()+80);
+ const bool dx10=(flags&4)&&code==0x30315844;
+ const uint32_t format=dx10?rd(bytes.data()+128):0;
+ const bool bc1=(flags&4)&&(code==0x31545844||(dx10&&(format==71||format==72)));
+ const bool compressed=bc1||((flags&4)&&(code==0x33545844||code==0x35545844||(dx10&&(format==74||format==75||format==77||format==78))));
+ const size_t header=dx10?148:128;
+ uint32_t w=top.w,h=top.h;size_t offset=header;
+ std::vector<Image> images;const uint32_t levels=std::max(1u,rd(bytes.data()+28));images.reserve(levels);
+ auto put=[](std::vector<uint8_t>& b,size_t at,uint32_t value){for(unsigned k=0;k<4;++k)b[at+k]=uint8_t(value>>(k*8));};
+ for(uint32_t level=0;level<levels;++level){
+  const size_t pitch=compressed?size_t((w+3)/4)*(bc1?8:16):(level==0&&(rd(bytes.data()+8)&8)?rd(bytes.data()+20):size_t(w)*4);
+  const size_t count=pitch*(compressed?(h+3)/4:h);
+  if(offset>bytes.size()||count>bytes.size()-offset){error="DDS mip chain truncated";return {};}
+  if(level==0)images.push_back(std::move(top));
+  else{std::vector<uint8_t> data(bytes.begin(),bytes.begin()+header);put(data,12,h);put(data,16,w);put(data,20,uint32_t(pitch));put(data,28,1);data.insert(data.end(),bytes.begin()+offset,bytes.begin()+offset+count);auto image=DecodeDDS(data,error);if(!image.valid())return {};images.push_back(std::move(image));}
+  offset+=count;w=std::max(1u,w/2);h=std::max(1u,h/2);
+ }
+ return images;
+}
+
 Image DecodeDDS(const std::vector<uint8_t>& buf,std::string& err){
  err.clear();
  auto fail=[&](const char* reason)->Image{err=reason;return {};};

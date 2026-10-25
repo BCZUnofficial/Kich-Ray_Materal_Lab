@@ -186,6 +186,9 @@ copy /Y "$(ProjectDir)assets\Preview.hlsl" "$(OutDir)assets\Preview.hlsl" &gt;nu
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Core.h" />
+    <ClInclude Include="src\EngineLighting.h" />
+    <ClInclude Include="src\EngineTexture.h" />
+    <ClInclude Include="src\EditorWorkflow.h" />
     <ClInclude Include="src\EditorUI.h" />
     <ClInclude Include="src\MaterialDocument.h" />
     <ClInclude Include="third_party\imgui\imgui.h" />

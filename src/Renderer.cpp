@@ -1,4 +1,5 @@
 #include "Renderer.h"
+#include "EngineLighting.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -12,7 +13,7 @@ namespace {
 using Microsoft::WRL::ComPtr;
 struct GPUVertex{XMFLOAT3 p,n;XMFLOAT2 uv;XMFLOAT3 t,b;};
 struct BoneGPU{XMFLOAT3 p;XMFLOAT4 c;};
-struct alignas(16) CB{XMFLOAT4X4 wvp,world;XMFLOAT4 eye,ld,lc,ambient,tint,params,outline,viewport,alpha;};
+struct alignas(16) CB{XMFLOAT4X4 wvp,world;XMFLOAT4 eye,ld,lc,ambient,tint,params,outline,viewport,alpha,lighting;};
 V3 sub(V3 a,V3 b){return {a.x-b.x,a.y-b.y,a.z-b.z};}
 V3 add(V3 a,V3 b){return {a.x+b.x,a.y+b.y,a.z+b.z};}
 V3 mul(V3 a,float s){return {a.x*s,a.y*s,a.z*s};}
@@ -107,6 +108,9 @@ bool Renderer::Init(HWND hwnd,std::wstring& error,bool software){RECT rc{};GetCl
  hr=device_->CreateBlendState(&blend,depthOnlyBlend_.GetAddressOf());if(FAILED(hr)){error=hrtext(L"Depth-only blend state",hr);return false;}
  D3D11_DEPTH_STENCIL_DESC alphaDepth{};alphaDepth.DepthEnable=TRUE;alphaDepth.DepthWriteMask=D3D11_DEPTH_WRITE_MASK_ZERO;alphaDepth.DepthFunc=D3D11_COMPARISON_LESS_EQUAL;
  hr=device_->CreateDepthStencilState(&alphaDepth,alphaDepth_.GetAddressOf());if(FAILED(hr)){error=hrtext(L"Alpha depth state",hr);return false;}
+ sm.AddressU=sm.AddressV=sm.AddressW=D3D11_TEXTURE_ADDRESS_CLAMP;
+ hr=device_->CreateSamplerState(&sm,materialSampler_.GetAddressOf());if(FAILED(hr)){error=hrtext(L"Material sampler",hr);return false;}
+ if(!makeTexture(MakeR2MaterialLut(),materialLut_)){error=L"Cannot create R2 material table";return false;}
  Mesh cube=MakeCube();if(!SetMesh(cube,error))return false;Image checker=DefaultChecker();PartImages initial;initial.diffuse=checker;initial.hasBump=false;if(!SetPartImages(0,initial)){error=L"Cannot create initial material";return false;}return true;}
 
 bool Renderer::Resize(UINT w,UINT h,std::wstring& error){
@@ -131,7 +135,11 @@ HRESULT Renderer::PresentUI(){return swap_?swap_->Present(1,0):E_FAIL;}
 bool Renderer::SetMesh(Mesh& mesh,std::wstring& error){
  if(!device_||!context_||!mesh.valid()){error=L"Empty mesh";return false;}bool first=true;V3 lo{},hi{};for(const auto& part:mesh.parts)for(const auto& v:part.vertices){if(!std::isfinite(v.p.x)||!std::isfinite(v.p.y)||!std::isfinite(v.p.z)||!std::isfinite(v.n.x)||!std::isfinite(v.n.y)||!std::isfinite(v.n.z)||!std::isfinite(v.u)||!std::isfinite(v.v)){error=L"Mesh contains invalid vertex values";return false;}if(first){lo=hi=v.p;first=false;}else{lo.x=std::min(lo.x,v.p.x);lo.y=std::min(lo.y,v.p.y);lo.z=std::min(lo.z,v.p.z);hi.x=std::max(hi.x,v.p.x);hi.y=std::max(hi.y,v.p.y);hi.z=std::max(hi.z,v.p.z);}}if(first){error=L"Mesh has no vertices";return false;}const V3 newCenter={(lo.x+hi.x)*.5f,(lo.y+hi.y)*.5f,(lo.z+hi.z)*.5f};float dx=hi.x-lo.x,dy=hi.y-lo.y,dz=hi.z-lo.z;const float newScale=2.f/std::max(.001f,std::max(dx,std::max(dy,dz)));
  std::vector<RenderPart> built;built.reserve(mesh.parts.size());
- for(const auto& part:mesh.parts){if(!part.valid()||part.indices.size()%3){error=L"Mesh part has incomplete triangles";return false;}RenderPart rp;rp.skeletal=part.skeletal;rp.source.resize(part.vertices.size());std::vector<XMVECTOR> tan(part.vertices.size(),XMVectorZero()),bit(part.vertices.size(),XMVectorZero());for(size_t k=0;k<part.vertices.size();++k){rp.source[k].p=part.vertices[k].p;rp.source[k].n=part.vertices[k].n;rp.source[k].u=part.vertices[k].u;rp.source[k].v=part.vertices[k].v;rp.source[k].bone0=part.vertices[k].bone0;rp.source[k].bone1=part.vertices[k].bone1;rp.source[k].weight=part.vertices[k].weight;rp.source[k].links=part.vertices[k].links;}
+ for(const auto& part:mesh.parts){if(!part.valid()||part.indices.size()%3){error=L"Mesh part has incomplete triangles";return false;}RenderPart rp;rp.skeletal=part.skeletal;
+  std::string shader=part.shader;std::replace(shader.begin(),shader.end(),'/',char(92));
+  if(shader=="models\\selflight"||shader=="models_selflight"){rp.emissive=8;rp.emissiveSpecular=8;rp.flatShader=true;}
+  else if(shader=="models\\selflightl"||shader=="models_selflightl"){rp.emissive=.5f;rp.flatShader=true;}
+  rp.source.resize(part.vertices.size());std::vector<XMVECTOR> tan(part.vertices.size(),XMVectorZero()),bit(part.vertices.size(),XMVectorZero());for(size_t k=0;k<part.vertices.size();++k){rp.source[k].p=part.vertices[k].p;rp.source[k].n=part.vertices[k].n;rp.source[k].u=part.vertices[k].u;rp.source[k].v=part.vertices[k].v;rp.source[k].bone0=part.vertices[k].bone0;rp.source[k].bone1=part.vertices[k].bone1;rp.source[k].weight=part.vertices[k].weight;rp.source[k].links=part.vertices[k].links;}
   for(size_t i=0;i+2<part.indices.size();i+=3){uint32_t ia=part.indices[i],ib=part.indices[i+1],ic=part.indices[i+2];if(ia>=rp.source.size()||ib>=rp.source.size()||ic>=rp.source.size()){error=L"Invalid mesh index";return false;}const auto& a=rp.source[ia];const auto& b=rp.source[ib];const auto& c=rp.source[ic];XMVECTOR d1=XMLoadFloat3(reinterpret_cast<const XMFLOAT3*>(&b.p))-XMLoadFloat3(reinterpret_cast<const XMFLOAT3*>(&a.p));XMVECTOR d2=XMLoadFloat3(reinterpret_cast<const XMFLOAT3*>(&c.p))-XMLoadFloat3(reinterpret_cast<const XMFLOAT3*>(&a.p));float s1=b.u-a.u,t1=b.v-a.v,s2=c.u-a.u,t2=c.v-a.v;float det=s1*t2-s2*t1;if(std::fabs(det)<1e-7f)continue;float inv=1.f/det;XMVECTOR tv=(d1*t2-d2*t1)*inv,bv=(d2*s1-d1*s2)*inv;for(auto idx:{ia,ib,ic}){tan[idx]+=tv;bit[idx]+=bv;}}
   std::vector<GPUVertex> gpu(rp.source.size());V3 plo{},phi{};bool pfirst=true;for(size_t k=0;k<rp.source.size();++k){XMVECTOR nv=XMVectorSet(rp.source[k].n.x,rp.source[k].n.y,rp.source[k].n.z,0);if(XMVectorGetX(XMVector3LengthSq(nv))<.01f)nv=XMVectorSet(0,0,1,0);nv=XMVector3Normalize(nv);XMVECTOR tv=tan[k]-nv*XMVector3Dot(tan[k],nv);if(XMVectorGetX(XMVector3LengthSq(tv))<.001f)tv=XMVector3Cross(std::fabs(XMVectorGetY(nv))<.9f?XMVectorSet(0,1,0,0):XMVectorSet(1,0,0,0),nv);tv=XMVector3Normalize(tv);XMVECTOR bv=bit[k]-nv*XMVector3Dot(bit[k],nv)-tv*XMVector3Dot(bit[k],tv);if(XMVectorGetX(XMVector3LengthSq(bv))<.001f)bv=XMVector3Cross(nv,tv);rp.source[k].n={XMVectorGetX(nv),XMVectorGetY(nv),XMVectorGetZ(nv)};rp.source[k].t={XMVectorGetX(tv),XMVectorGetY(tv),XMVectorGetZ(tv)};rp.source[k].b={XMVectorGetX(bv),XMVectorGetY(bv),XMVectorGetZ(bv)};V3 np=mul(sub(rp.source[k].p,newCenter),newScale);gpu[k].p=vec(np);gpu[k].n=vec(rp.source[k].n);gpu[k].uv={rp.source[k].u,rp.source[k].v};gpu[k].t=vec(rp.source[k].t);gpu[k].b=vec(rp.source[k].b);if(pfirst){plo=phi=np;pfirst=false;}else{plo.x=std::min(plo.x,np.x);plo.y=std::min(plo.y,np.y);plo.z=std::min(plo.z,np.z);phi.x=std::max(phi.x,np.x);phi.y=std::max(phi.y,np.y);phi.z=std::max(phi.z,np.z);}}
   if(gpu.size()>UINT32_MAX/sizeof(GPUVertex)||part.indices.size()>UINT32_MAX/sizeof(uint32_t)){error=L"Mesh part too large";return false;}D3D11_BUFFER_DESC bd={};bd.ByteWidth=UINT(gpu.size()*sizeof(GPUVertex));bd.BindFlags=D3D11_BIND_VERTEX_BUFFER;bd.Usage=rp.skeletal?D3D11_USAGE_DYNAMIC:D3D11_USAGE_DEFAULT;bd.CPUAccessFlags=rp.skeletal?D3D11_CPU_ACCESS_WRITE:0;D3D11_SUBRESOURCE_DATA dat={gpu.data(),0,0};HRESULT hr=device_->CreateBuffer(&bd,&dat,rp.vb.GetAddressOf());if(FAILED(hr)){error=hrtext(L"Vertex buffer",hr);return false;}bd={};bd.ByteWidth=UINT(part.indices.size()*sizeof(uint32_t));bd.Usage=D3D11_USAGE_DEFAULT;bd.BindFlags=D3D11_BIND_INDEX_BUFFER;dat={part.indices.data(),0,0};hr=device_->CreateBuffer(&bd,&dat,rp.ib.GetAddressOf());if(FAILED(hr)){error=hrtext(L"Index buffer",hr);return false;}rp.indexCount=UINT(part.indices.size());rp.cpuIndices=part.indices;rp.cpuPositions.resize(gpu.size());rp.cpuUV.resize(gpu.size());for(size_t k=0;k<gpu.size();++k){rp.cpuPositions[k]={gpu[k].p.x,gpu[k].p.y,gpu[k].p.z};rp.cpuUV[k]={gpu[k].uv.x,gpu[k].uv.y,0.f};}rp.center={(plo.x+phi.x)*.5f,(plo.y+phi.y)*.5f,(plo.z+phi.z)*.5f};rp.half={(phi.x-plo.x)*.5f,(phi.y-plo.y)*.5f,(phi.z-plo.z)*.5f};if(!rp.skeletal){rp.source.clear();rp.source.shrink_to_fit();}built.push_back(std::move(rp));}
@@ -197,7 +205,23 @@ bool Renderer::SetAnimationPose(size_t motionIndex,float seconds,bool loop,std::
 }
 
 bool Renderer::SetBindPose(std::wstring* error){return uploadBindPose(error);}
-bool Renderer::makeTexture(const Image& im,ComPtr<ID3D11ShaderResourceView>& out,ComPtr<ID3D11Texture2D>* textureOut){if(!im.valid()||!device_)return false;D3D11_TEXTURE2D_DESC d={};d.Width=im.w;d.Height=im.h;d.MipLevels=1;d.ArraySize=1;d.Format=DXGI_FORMAT_R8G8B8A8_UNORM;d.SampleDesc.Count=1;d.Usage=D3D11_USAGE_DEFAULT;d.BindFlags=D3D11_BIND_SHADER_RESOURCE;D3D11_SUBRESOURCE_DATA data={im.pixels.data(),im.w*4,0};ComPtr<ID3D11Texture2D> texture;HRESULT hr=device_->CreateTexture2D(&d,&data,texture.GetAddressOf());if(FAILED(hr))return false;ComPtr<ID3D11ShaderResourceView> srv;hr=device_->CreateShaderResourceView(texture.Get(),nullptr,srv.GetAddressOf());if(FAILED(hr))return false;out=srv;if(textureOut)*textureOut=texture;return true;}
+bool Renderer::makeTexture(const Image& im,ComPtr<ID3D11ShaderResourceView>& out,ComPtr<ID3D11Texture2D>* textureOut,const std::vector<Image>* mips){
+ if(!im.valid()||!device_)return false;
+ std::vector<D3D11_SUBRESOURCE_DATA> data;
+ if(mips){uint32_t w=im.w,h=im.h;for(const auto& mip:*mips){if(!mip.valid()||mip.w!=w||mip.h!=h)return false;data.push_back({mip.pixels.data(),mip.w*4,0});w=std::max(1u,w/2);h=std::max(1u,h/2);}if(data.empty())return false;}
+ D3D11_TEXTURE2D_DESC d={};d.Width=im.w;d.Height=im.h;d.MipLevels=mips?UINT(data.size()):0;d.ArraySize=1;d.Format=DXGI_FORMAT_R8G8B8A8_UNORM;d.SampleDesc.Count=1;d.Usage=D3D11_USAGE_DEFAULT;
+ d.BindFlags=D3D11_BIND_SHADER_RESOURCE|(mips?0:D3D11_BIND_RENDER_TARGET);d.MiscFlags=mips?0:D3D11_RESOURCE_MISC_GENERATE_MIPS;
+ ComPtr<ID3D11Texture2D> texture;HRESULT hr=device_->CreateTexture2D(&d,mips?data.data():nullptr,texture.GetAddressOf());if(FAILED(hr))return false;
+ ComPtr<ID3D11ShaderResourceView> srv;hr=device_->CreateShaderResourceView(texture.Get(),nullptr,srv.GetAddressOf());if(FAILED(hr))return false;
+ if(!mips){context_->UpdateSubresource(texture.Get(),0,nullptr,im.pixels.data(),im.w*4,0);context_->GenerateMips(srv.Get());}
+ out=srv;if(textureOut)*textureOut=texture;return true;
+}
+bool Renderer::SetPartBumpMipImages(size_t part,const std::vector<Image>& bump,const std::vector<Image>& bumpX){
+ if(part>=parts_.size()||bump.empty()||bump.size()!=bumpX.size()||bump[0].w!=bumpX[0].w||bump[0].h!=bumpX[0].h)return false;
+ ComPtr<ID3D11Texture2D> textures[2];ComPtr<ID3D11ShaderResourceView> views[2];
+ if(!makeTexture(bump[0],views[0],&textures[0],&bump)||!makeTexture(bumpX[0],views[1],&textures[1],&bumpX))return false;
+ for(int i=0;i<2;++i){parts_[part].textureResources[i+1]=std::move(textures[i]);parts_[part].textures[i+1]=std::move(views[i]);}parts_[part].hasBump=true;return true;
+}
 bool Renderer::SetPartImages(size_t part,const PartImages& images){
  if(part>=parts_.size()||!images.diffuse.valid())return false;
  const bool hasPair=images.bump.valid()&&images.bumpX.valid();
@@ -264,7 +288,7 @@ void Renderer::SelectPart(int part,bool withMirror){ClearSelection();if(part<0||
 bool Renderer::PickUV(int screenX,int screenY,PickHit& out){
  out={};out.part=-1;if(parts_.empty()||!width_||!height_||screenX<0||screenY<0||UINT(screenX)>=width_||UINT(screenY)>=height_)return false;
  const V3 cameraEye=camera_.eye();XMVECTOR target=XMVectorSet(camera_.pivot.x,camera_.pivot.y,camera_.pivot.z,1);XMVECTOR eye=XMVectorSet(cameraEye.x,cameraEye.y,cameraEye.z,1);
- XMMATRIX view=XMMatrixLookAtLH(eye,target,XMVectorSet(0,1,0,0));XMMATRIX proj=XMMatrixPerspectiveFovLH(XM_PIDIV4,float(width_)/std::max(1.f,float(height_)),.005f,100.f);XMMATRIX world=XMMatrixRotationX(modelPitch_)*XMMatrixRotationY(modelYaw_);
+ XMMATRIX view=XMMatrixLookAtLH(eye,target,XMVectorSet(camera_.up().x,camera_.up().y,camera_.up().z,0));XMMATRIX proj=XMMatrixPerspectiveFovLH(XM_PIDIV4,float(width_)/std::max(1.f,float(height_)),.005f,100.f);XMMATRIX world=XMMatrixRotationX(modelPitch_)*XMMatrixRotationY(modelYaw_);
  XMVECTOR n=XMVector3Unproject(XMVectorSet(float(screenX),float(screenY),0,1),0,0,float(width_),float(height_),0,1,proj,view,world);XMVECTOR f=XMVector3Unproject(XMVectorSet(float(screenX),float(screenY),1,1),0,0,float(width_),float(height_),0,1,proj,view,world);XMFLOAT3 nf,ff;XMStoreFloat3(&nf,n);XMStoreFloat3(&ff,f);V3 ro{nf.x,nf.y,nf.z},rd=normalize(V3{ff.x-nf.x,ff.y-nf.y,ff.z-nf.z});
  struct Candidate{float nearT;size_t part;};std::vector<Candidate> candidates;candidates.reserve(parts_.size());for(size_t pi=0;pi<parts_.size();++pi){const auto& p=parts_[pi];if(!p.visible||(alphaEnabled_&&p.alpha.invisible))continue;float nearT=0;if(rayAabb(ro,rd,p.center,p.half,nearT))candidates.push_back({nearT,pi});}std::sort(candidates.begin(),candidates.end(),[](const Candidate& a,const Candidate& b){return a.nearT<b.nearT;});
  float best=1e30f;
@@ -299,10 +323,10 @@ void Renderer::DrawScene(){
  // attaching the same texture as a render target for this frame.
  ID3D11ShaderResourceView* empty[3]{};context_->PSSetShaderResources(0,3,empty);
  context_->GSSetShader(nullptr,nullptr,0);context_->HSSetShader(nullptr,nullptr,0);context_->DSSetShader(nullptr,nullptr,0);
- float back[4]={.095f,.105f,.12f,1.f};context_->ClearRenderTargetView(rtv_.Get(),back);context_->ClearDepthStencilView(dsv_.Get(),D3D11_CLEAR_DEPTH,1.f,0);ID3D11RenderTargetView* rtv=rtv_.Get();context_->OMSetRenderTargets(1,&rtv,dsv_.Get());D3D11_VIEWPORT vp={0.f,0.f,float(width_),float(height_),0.f,1.f};context_->RSSetViewports(1,&vp);
- const V3 cameraEye=camera_.eye();XMVECTOR target=XMVectorSet(camera_.pivot.x,camera_.pivot.y,camera_.pivot.z,1);XMVECTOR eye=XMVectorSet(cameraEye.x,cameraEye.y,cameraEye.z,1);XMMATRIX view=XMMatrixLookAtLH(eye,target,XMVectorSet(0,1,0,0));XMMATRIX proj=XMMatrixPerspectiveFovLH(XM_PIDIV4,float(width_)/std::max(1.f,float(height_)),.005f,100.f);XMMATRIX world=XMMatrixRotationX(modelPitch_)*XMMatrixRotationY(modelYaw_);
- CB cb={};XMStoreFloat4x4(&cb.wvp,world*view*proj);XMStoreFloat4x4(&cb.world,world);XMFLOAT3 eye3;XMStoreFloat3(&eye3,eye);cb.eye={eye3.x,eye3.y,eye3.z,1};cb.ld={cosf(lightPitch_)*sinf(lightYaw_),sinf(lightPitch_),cosf(lightPitch_)*cosf(lightYaw_),0};cb.lc={light_[0],light_[1],light_[2],1};cb.ambient={ambient_[0],ambient_[1],ambient_[2],1};cb.tint={tint_[0],tint_[1],tint_[2],1};cb.outline={1.f,.65f,.16f,2.f};cb.viewport={1.f/float(width_),1.f/float(height_),0,0};
- ID3D11Buffer* c=cb_.Get();context_->VSSetConstantBuffers(0,1,&c);context_->PSSetConstantBuffers(0,1,&c);ID3D11SamplerState* sampler=sampler_.Get();context_->PSSetSamplers(0,1,&sampler);UINT stride=sizeof(GPUVertex),offset=0;bool anySelection=HasSelection();
+ float back[4]={background_[0],background_[1],background_[2],1.f};context_->ClearRenderTargetView(rtv_.Get(),back);context_->ClearDepthStencilView(dsv_.Get(),D3D11_CLEAR_DEPTH,1.f,0);ID3D11RenderTargetView* rtv=rtv_.Get();context_->OMSetRenderTargets(1,&rtv,dsv_.Get());D3D11_VIEWPORT vp={0.f,0.f,float(width_),float(height_),0.f,1.f};context_->RSSetViewports(1,&vp);
+ const V3 cameraEye=camera_.eye();XMVECTOR target=XMVectorSet(camera_.pivot.x,camera_.pivot.y,camera_.pivot.z,1);XMVECTOR eye=XMVectorSet(cameraEye.x,cameraEye.y,cameraEye.z,1);XMMATRIX view=XMMatrixLookAtLH(eye,target,XMVectorSet(camera_.up().x,camera_.up().y,camera_.up().z,0));XMMATRIX proj=XMMatrixPerspectiveFovLH(XM_PIDIV4,float(width_)/std::max(1.f,float(height_)),.005f,100.f);XMMATRIX world=XMMatrixRotationX(modelPitch_)*XMMatrixRotationY(modelYaw_);
+ CB cb={};XMStoreFloat4x4(&cb.wvp,world*view*proj);XMStoreFloat4x4(&cb.world,world);XMFLOAT3 eye3;XMStoreFloat3(&eye3,eye);cb.eye={eye3.x,eye3.y,eye3.z,1};cb.ld={cosf(lightPitch_)*sinf(lightYaw_),sinf(lightPitch_),cosf(lightPitch_)*cosf(lightYaw_),0};cb.lc={light_[0]*lightIntensity_,light_[1]*lightIntensity_,light_[2]*lightIntensity_,1};cb.ambient={ambient_[0],ambient_[1],ambient_[2],1};cb.tint={tint_[0],tint_[1],tint_[2],1};cb.outline={1.f,.65f,.16f,2.f};cb.viewport={1.f/float(width_),1.f/float(height_),0,0};
+ ID3D11Buffer* c=cb_.Get();context_->VSSetConstantBuffers(0,1,&c);context_->PSSetConstantBuffers(0,1,&c);ID3D11SamplerState* sampler=sampler_.Get();context_->PSSetSamplers(0,1,&sampler);ID3D11SamplerState* ms=materialSampler_.Get();context_->PSSetSamplers(1,1,&ms);ID3D11ShaderResourceView* lut=materialLut_.Get();context_->PSSetShaderResources(3,1,&lut);UINT stride=sizeof(GPUVertex),offset=0;bool anySelection=HasSelection();
  context_->IASetInputLayout(input_.Get());context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);context_->RSSetState(wireframeOn_?wireRaster_.Get():raster_.Get());context_->OMSetDepthStencilState(nullptr,0);context_->VSSetShader(vs_.Get(),nullptr,0);context_->PSSetShader(ps_.Get(),nullptr,0);
  auto drawable=[&](const RenderPart& part){return part.visible&&part.vb&&part.ib&&part.textures[0]&&!(alphaEnabled_&&part.alpha.invisible);};
  auto material=[&](RenderPart& part,size_t pi){
@@ -310,7 +334,8 @@ void Renderer::DrawScene(){
   cb.tint={tint_[0]*(hovered?1.12f:1.f),tint_[1]*(hovered?1.07f:1.f),tint_[2]*(hovered?.88f:1.f),1.f};
   // Selection limits editing, never the material being displayed. Selecting a
   // brush target must not flatten every other mesh or reset its normal gain.
-  cb.params={(bumpOn_&&part.hasBump)?1.f:0.f,normalStrength_,glossStrength_,invertNormalY_?1.f:0.f};
+  cb.params={(bumpOn_&&part.hasBump&&!part.flatShader)?1.f:0.f,normalStrength_,glossStrength_,invertNormalY_?1.f:0.f};
+  cb.lighting={materialClass_<0?part.materialClass:float(materialClass_),glossEnabled_?1.f:0.f,part.emissive,part.emissiveSpecular};
   cb.alpha={float(alphaMode(part)),alphaCutoff_,0,0};context_->UpdateSubresource(cb_.Get(),0,nullptr,&cb,0,0);
   ID3D11Buffer* vb=part.vb.Get();context_->IASetVertexBuffers(0,1,&vb,&stride,&offset);
   ID3D11ShaderResourceView* images[]={part.textures[0].Get(),part.textures[1].Get(),part.textures[2].Get()};context_->PSSetShaderResources(0,3,images);

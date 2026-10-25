@@ -23,6 +23,8 @@
 #include "Renderer.h"
 #include "MaterialDocument.h"
 #include "EditorUI.h"
+#include "EditorWorkflow.h"
+#include "EngineTexture.h"
 #include "imgui.h"
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"
@@ -33,7 +35,7 @@ namespace {
 using Microsoft::WRL::ComPtr;
 namespace fs=std::filesystem;
 constexpr uint32_t PreviewSize=768;
-constexpr const wchar_t* AppTitle=L"Kich-Ray Material Lab 0.10.0";
+constexpr const wchar_t* AppTitle=L"Kich-Ray Material Lab 0.11.0";
 
 std::string utf8(const std::wstring& text) {
     if(text.empty())return {};
@@ -74,9 +76,12 @@ std::vector<uint8_t> readBytes(const fs::path& path) {
 }
 std::wstring chooseFile(HWND owner,const wchar_t* filter,const wchar_t* extension,bool save=false,const fs::path& initial={}) {
     std::array<wchar_t,32768> path{};
-    if(!initial.empty())wcsncpy_s(path.data(),path.size(),initial.c_str(),_TRUNCATE);
+    std::error_code ec;const bool directory=!initial.empty()&&fs::is_directory(initial,ec);
+    if(!initial.empty()&&!directory)wcsncpy_s(path.data(),path.size(),initial.c_str(),_TRUNCATE);
+    const std::wstring initialDirectory=directory?initial.wstring():initial.parent_path().wstring();
     OPENFILENAMEW options{};options.lStructSize=sizeof(options);options.hwndOwner=owner;
     options.lpstrFilter=filter;options.lpstrFile=path.data();options.nMaxFile=DWORD(path.size());
+    options.lpstrInitialDir=initialDirectory.empty()?nullptr:initialDirectory.c_str();
     options.lpstrDefExt=extension;options.Flags=OFN_EXPLORER|OFN_PATHMUSTEXIST|OFN_NOCHANGEDIR;
     options.Flags|=save?OFN_OVERWRITEPROMPT:OFN_FILEMUSTEXIST;
     bool selected=save?GetSaveFileNameW(&options)!=FALSE:GetOpenFileNameW(&options)!=FALSE;
@@ -141,6 +146,18 @@ RECT monitorWorkArea(HWND window) {
     if(GetMonitorInfoW(MonitorFromWindow(window,MONITOR_DEFAULTTOPRIMARY),&info))return info.rcWork;
     return RECT{0,0,GetSystemMetrics(SM_CXSCREEN),GetSystemMetrics(SM_CYSCREEN)};
 }
+struct SmokePromptResponse {HWND owner;UINT answer;bool sent=false;};
+BOOL CALLBACK smokePromptWindow(HWND dialog,LPARAM data) {
+    auto& response=*reinterpret_cast<SmokePromptResponse*>(data);wchar_t klass[32]{};GetClassNameW(dialog,klass,32);
+    if(GetWindow(dialog,GW_OWNER)==response.owner&&std::wstring(klass)==L"#32770"){
+        PostMessageW(dialog,WM_COMMAND,response.answer,0);response.sent=true;return FALSE;
+    }return TRUE;
+}
+void CALLBACK smokePromptTimer(HWND owner,UINT,UINT_PTR id,DWORD) {
+    SmokePromptResponse response{owner,UINT(id-900)};
+    EnumThreadWindows(GetCurrentThreadId(),smokePromptWindow,reinterpret_cast<LPARAM>(&response));
+    if(response.sent)KillTimer(owner,id);
+}
 struct Material {
     std::wstring key;
     std::string label="material";
@@ -149,10 +166,13 @@ struct Material {
     lab::BumpPair loadedPair;
     std::unique_ptr<lab::MaterialDocument> document;
     std::vector<uint8_t> originalDDS,originalDDSX;
-    fs::path sessionPath;
+    fs::path sessionPath,modelTexturePath;
+    lab::EncodedBumpPair encoded;
+    bool encodedGloss=true,exactReady=false;
+    lab::EngineTextureMetadata metadata;
     bool hasBump()const{return document?document->Valid():loadedPair.bump.valid()&&loadedPair.bumpX.valid();}
 };
-struct MeshRow {std::string label;std::shared_ptr<Material> material;};
+struct MeshRow {std::string label;std::shared_ptr<Material> material;std::string shader;};
 enum class Drag {None,Orbit,Pan,Light,Model,Brush};
 
 class App {
@@ -160,11 +180,17 @@ class App {
     lab::Renderer renderer_;
     lab::EditorUIState ui_;
     std::vector<MeshRow> meshes_;
-    fs::path modelPath_;
+    fs::path modelPath_,lastModelDirectory_,lastExportDirectory_;
+    std::vector<size_t> animationOrder_;
+    std::unordered_map<std::wstring,std::string> lastAnimations_;
+    std::vector<std::shared_ptr<Material>> exactQueue_;
+    std::weak_ptr<Material> uiMaterial_;
+    ULONGLONG exactAfter_=0;
+    bool resolvingAdjustments_=false,focusResolution_=false;
     lab::Image preset_=lab::MakeDefaultNormalPreset();
     Drag drag_=Drag::None;
     int dragButton_=-1;
-    bool running_=true,imguiReady_=false,minimized_=false,viewportFocus_=false;
+    bool smoke_=false,running_=true,imguiReady_=false,minimized_=false,viewportFocus_=false;
     bool deviceLost_=false,recoveryAttempted_=false;
     int exitCode_=0;
     float dpiScale_=1.f,animationTime_=0.f;
@@ -174,7 +200,10 @@ class App {
     ULONGLONG lastTick_=0,lastBrushUpload_=0;
 
     void status(std::string message){ui_.status=std::move(message);}
-    void fail(const std::string& message){status(message);MessageBoxW(window_,wide(message).c_str(),AppTitle,MB_OK|MB_ICONERROR);}
+    void fail(const std::string& message){status(message);
+        if(smoke_){std::ofstream out(executableDirectory()/L"smoke-tests.txt",std::ios::app);out<<"FAIL "<<message<<'\n';}
+        else MessageBoxW(window_,wide(message).c_str(),AppTitle,MB_OK|MB_ICONERROR);
+    }
     int selectedPart()const {
         int part=renderer_.SelectedPart();
         if(part>=0&&size_t(part)<meshes_.size())return part;
@@ -183,6 +212,65 @@ class App {
     }
     std::shared_ptr<Material> selectedMaterial()const {
         int part=selectedPart();return part>=0?meshes_[size_t(part)].material:nullptr;
+    }
+    void rememberPath(const wchar_t* name,const fs::path& path) {
+        const auto ini=executableDirectory()/L"MaterialLab.ini";
+        WritePrivateProfileStringW(L"Paths",name,path.c_str(),ini.c_str());
+    }
+    bool ensureBase(const std::shared_ptr<Material>& material) {
+        if(!material)return false;if(material->hasBump())return true;
+        if(!material->sources.diffuse.valid())return false;
+        const auto pair=lab::GenerateBumpPreview(material->sources,lab::MinimalBaseSettings(),0);
+        auto document=std::make_unique<lab::MaterialDocument>();std::string error;
+        if(!document->Load(pair,error,true)){fail(error);return false;}
+        material->document=std::move(document);return true;
+    }
+    void queueExact(const std::shared_ptr<Material>& material) {
+        material->encoded={};material->exactReady=false;
+        if(material->hasBump()&&std::find(exactQueue_.begin(),exactQueue_.end(),material)==exactQueue_.end())exactQueue_.push_back(material);
+        exactAfter_=GetTickCount64()+250;
+    }
+    bool encodeMaterial(const std::shared_ptr<Material>& material) {
+        if(!material->encoded.bump.empty()&&material->encodedGloss==ui_.glossEnabled)return true;
+        material->encodedGloss=ui_.glossEnabled;
+        if(ui_.glossEnabled&&!material->originalDDS.empty()&&!material->originalDDSX.empty()&&(!material->document||!material->document->HasEdits())) {
+            material->encoded={material->originalDDS,material->originalDDSX};return true;
+        }
+        auto pair=material->document?material->document->Preview(0):material->loadedPair;
+        if(!ui_.glossEnabled)for(auto& pixel:pair.bump.pixels)pixel.r=0;
+        std::string error;if(!lab::EncodePackedBumpPair(pair,material->encoded,error)){fail(error);return false;}return true;
+    }
+    bool uploadExact(const std::shared_ptr<Material>& material) {
+        if(!material||!material->hasBump()||!encodeMaterial(material))return false;
+        std::string error;const auto a=lab::DecodeDDSMipChain(material->encoded.bump,error),b=lab::DecodeDDSMipChain(material->encoded.bumpX,error);
+        if(a.empty()||b.empty()){status("Проверочное DDS-превью недоступно: "+error);return false;}
+        int first=-1;
+        for(size_t i=0;i<meshes_.size();++i)if(meshes_[i].material==material){
+            if(first<0){if(!renderer_.SetPartBumpMipImages(i,a,b))return false;first=int(i);}
+            else if(!renderer_.CopyPartMaterial(i,size_t(first)))return false;
+        }
+        material->exactReady=first>=0;return material->exactReady;
+    }
+    bool resolveAdjustments() {
+        if(resolvingAdjustments_)return true;
+        auto material=selectedMaterial();if(!material||!material->document||!material->document->HasPendingAdjustments())return true;
+        endInteraction();resolvingAdjustments_=true;
+        const int answer=MessageBoxW(window_,L"Применить результат ползунков?\n\nДа — закрепить.\nНет — вернуть карты и мазки до правки.\nОтмена — продолжить редактирование.\n\nCtrl+S применяет без этого запроса.",AppTitle,MB_YESNOCANCEL|MB_ICONQUESTION);
+        resolvingAdjustments_=false;focusResolution_=false;
+        if(answer==IDCANCEL)return false;
+        if(answer==IDYES)material->document->CommitAdjustments();else material->document->CancelAdjustments();
+        ui_.adjustments={};upload(material);return true;
+    }
+    void applyAdjustments(bool discard=false) {
+        auto material=selectedMaterial();if(!material||!material->document)return;
+        endInteraction();if(discard)material->document->CancelAdjustments();else material->document->CommitAdjustments();
+        ui_.adjustments={};upload(material);
+        status(discard?"Правки ползунков отменены; прежние карты и мазки восстановлены.":"Правки закреплены одним шагом Undo. Экспорт DDS и сохранение сеанса доступны отдельно.");
+    }
+    void adjustMaterial() {
+        auto material=selectedMaterial();if(ui_.editingLocked||!ensureBase(material)||!ensureDocument(material))return;
+        endInteraction();
+        if(material->document->Adjust(ui_.adjustments)){upload(material);status("Предпросмотр правок. Ctrl+S — применить; переход к другому инструменту запросит решение.");}
     }
     bool ensureDocument(const std::shared_ptr<Material>& material) {
         if(!material)return false;if(material->document)return material->document->Valid();
@@ -197,9 +285,11 @@ class App {
     }
     bool upload(const std::shared_ptr<Material>& material,bool diffuse=false) {
         if(!material)return false;
+        if(!material->hasBump()&&!diffuse)return true;
+        queueExact(material);
         lab::BumpPair pair=materialPreview(material);
         lab::PartImages images;
-        if(diffuse){images.diffuse=material->sources.diffuse.valid()?lab::ResizeImageMax(material->sources.diffuse,PreviewSize):lab::DefaultChecker(128);images.bump=pair.bump;images.bumpX=pair.bumpX;images.hasBump=material->hasBump();}
+        if(diffuse){images.diffuse=material->sources.diffuse.valid()?material->sources.diffuse:lab::DefaultChecker(128);images.bump=pair.bump;images.bumpX=pair.bumpX;images.hasBump=material->hasBump();}
         bool success=true;
         for(size_t i=0;i<meshes_.size();++i)if(meshes_[i].material==material)
             success=(diffuse?renderer_.SetPartImages(i,images):renderer_.SetPartBumpImages(i,pair.bump,pair.bumpX,material->hasBump()))&&success;
@@ -213,7 +303,7 @@ class App {
             if(!renderer_.SetPartBumpImages(i,replacement.bump,replacement.bumpX,true)) {
                 bool restored=true;
                 for(size_t j=0;j<meshes_.size();++j)if(meshes_[j].material==material)
-                    restored=renderer_.SetPartBumpImages(j,previous.bump,previous.bumpX,material->hasBump())&&restored;
+                    restored=(material->hasBump()?renderer_.SetPartBumpImages(j,previous.bump,previous.bumpX,true):upload(material,true))&&restored;
                 fail(restored?"Видеокарта не приняла новую bump-пару. Предыдущий материал сохранён.":"Ошибка Direct3D. Документ сохранён, но сцену нужно открыть заново.");
                 return false;
             }
@@ -233,7 +323,7 @@ class App {
         return answer==IDNO||(answer==IDYES&&saveSession(material));
     }
     bool confirmAll() {
-        endInteraction();std::unordered_set<Material*> seen;
+        endInteraction();if(!resolveAdjustments())return false;std::unordered_set<Material*> seen;
         for(const auto& mesh:meshes_)if(seen.insert(mesh.material.get()).second&&!confirmDiscard(mesh.material))return false;
         return true;
     }
@@ -241,29 +331,43 @@ class App {
         ui_.meshes.clear();
         for(size_t i=0;i<meshes_.size();++i){auto& mesh=meshes_[i];ui_.meshes.push_back({mesh.label,renderer_.PartVisible(i),renderer_.PartSelected(i),mesh.material->sources.diffuse.valid(),mesh.material->hasBump()});}
         const auto material=selectedMaterial();
-        ui_.canBrush=material&&material->hasBump();ui_.canUndo=material&&material->document&&material->document->CanUndo();ui_.canRedo=material&&material->document&&material->document->CanRedo();
+        if(uiMaterial_.lock()!=material){ui_.adjustments={};uiMaterial_=material;}
+        ui_.canBrush=material&&(material->hasBump()||material->sources.diffuse.valid());ui_.canAdjust=ui_.canBrush;ui_.pendingAdjustments=material&&material->document&&material->document->HasPendingAdjustments();ui_.canUndo=material&&material->document&&material->document->CanUndo();ui_.canRedo=material&&material->document&&material->document->CanRedo();
         ui_.hasEdits=material&&material->document&&material->document->HasEdits();
         ui_.sourceNames={};ui_.documentInfo.clear();
         if(material){for(size_t i=0;i<6;++i)ui_.sourceNames[i]=utf8(material->paths[i].filename().wstring());if(material->document)ui_.documentInfo=std::to_string(material->document->Width())+" × "+std::to_string(material->document->HeightPixels())+" · Undo: "+std::to_string(material->document->UndoCount())+(material->document->IsDirty()?" · не сохранено":"");}
+        const int part=selectedPart();
+        if(part>=0&&!meshes_[size_t(part)].shader.empty())ui_.documentInfo+=" · shader: "+meshes_[size_t(part)].shader;
+        if(material&&material->hasBump()){
+            ui_.documentInfo+=material->exactReady?" · DDS + mipmaps":" · быстрое превью; DDS обновляется";
+            if(material->metadata.hasMaterial)ui_.documentInfo+=" · THM: "+std::to_string(material->metadata.material);
+            if(material->metadata.hasBumpMode&&!material->metadata.bumpEnabled)ui_.documentInfo+="\nВ THM bump выключен. Для результата в игре включите bump в настройках текстуры.";
+        }
         ui_.editingLocked=ui_.animationPlaying;ui_.isolated=!isolation_.empty();ui_.hasSkeleton=renderer_.HasSkeleton();
     }
     void applyPreviewSettings() {
-        renderer_.BumpEnabled(ui_.bump);renderer_.SetNormalSettings(ui_.previewNormal,ui_.invertNormalY);
-        renderer_.SetGlossStrength(ui_.previewGloss);renderer_.SetColor(0,colorRef(ui_.tint));
+        renderer_.BumpEnabled(ui_.bump);renderer_.SetNormalSettings(1.f,false);
+        renderer_.GlossEnabled(ui_.glossEnabled);renderer_.SetGlossStrength(.5f);renderer_.SetColor(0,colorRef(ui_.tint));
     }
     void applyAlphaSettings() {
         renderer_.AlphaEnabled(ui_.alpha);renderer_.SetAlphaPreview(lab::AlphaPreview(std::clamp(ui_.alphaMode,0,2)));renderer_.SetAlphaCutoff(ui_.alphaCutoff);
     }
     void applyLightSettings(bool save=true) {
-        renderer_.SetLightOrbitDegrees(ui_.lightAzimuth,ui_.lightElevation);renderer_.SetColor(1,colorRef(ui_.lightColor));renderer_.SetColor(2,colorRef(ui_.ambient));
-        if(save){const auto ini=executableDirectory()/L"MaterialLab.ini";auto az=std::to_wstring(int(ui_.lightAzimuth)),el=std::to_wstring(int(ui_.lightElevation));WritePrivateProfileStringW(L"Scene",L"LightAzimuth",az.c_str(),ini.c_str());WritePrivateProfileStringW(L"Scene",L"LightElevation",el.c_str(),ini.c_str());}
+        renderer_.SetLightIntensity(ui_.lightIntensity);renderer_.SetMaterialClass(ui_.materialClass-1);renderer_.SetLightOrbitDegrees(ui_.lightAzimuth,ui_.lightElevation);renderer_.SetColor(1,colorRef(ui_.lightColor));renderer_.SetColor(2,colorRef(ui_.ambient));
+        if(save){const auto ini=executableDirectory()/L"MaterialLab.ini";auto az=std::to_wstring(int(ui_.lightAzimuth)),el=std::to_wstring(int(ui_.lightElevation));WritePrivateProfileStringW(L"Scene",L"LightAzimuth",az.c_str(),ini.c_str());WritePrivateProfileStringW(L"Scene",L"LightElevation",el.c_str(),ini.c_str());
+            const auto intensity=std::to_wstring(ui_.lightIntensity);WritePrivateProfileStringW(L"Scene",L"LightIntensity",intensity.c_str(),ini.c_str());
+            const auto cls=std::to_wstring(ui_.materialClass);WritePrivateProfileStringW(L"Scene",L"MaterialClass",cls.c_str(),ini.c_str());
+            const auto color=std::to_wstring(colorRef(ui_.lightColor)),ambient=std::to_wstring(colorRef(ui_.ambient));
+            WritePrivateProfileStringW(L"Scene",L"LightColor",color.c_str(),ini.c_str());WritePrivateProfileStringW(L"Scene",L"AmbientColor",ambient.c_str(),ini.c_str());}
     }
     void setMode(lab::EditorMode mode) {
+        if((mode!=ui_.mode||(mode==lab::EditorMode::Brush&&ui_.tab!=lab::EditorTab::Brush))&&!resolveAdjustments())return;
         if(ui_.editingLocked&&(mode==lab::EditorMode::Brush||mode==lab::EditorMode::Choose||mode==lab::EditorMode::Model))return;
         if(mode==lab::EditorMode::Model&&ui_.tab==lab::EditorTab::Animation)return;
-        if(mode==lab::EditorMode::Brush&&(!selectedMaterial()||!selectedMaterial()->hasBump())){status("Сначала загрузите или создайте bump-пару.");return;}
+        const bool createBase=mode==lab::EditorMode::Brush&&selectedMaterial()&&!selectedMaterial()->hasBump();
+        if(mode==lab::EditorMode::Brush&&!ensureBase(selectedMaterial())){status("Сначала загрузите или создайте bump-пару.");return;}
         endInteraction();ui_.mode=mode;renderer_.FlyCameraEnabled(mode==lab::EditorMode::Fly);renderer_.ClearHover();renderer_.ClearBrushCursor();
-        if(mode==lab::EditorMode::Brush){stopAnimation(true);ui_.tab=lab::EditorTab::Brush;ui_.forceTab=true;}
+        if(mode==lab::EditorMode::Brush){if(createBase)upload(selectedMaterial());stopAnimation(true);ui_.tab=lab::EditorTab::Brush;ui_.forceTab=true;}
     }
     void restoreIsolation() {
         for(size_t i=0;i<isolation_.size()&&i<meshes_.size();++i)renderer_.SetPartVisible(i,isolation_[i]);isolation_.clear();
@@ -279,19 +383,41 @@ class App {
             if(!renderer_.SetBindPose(&error)){status(utf8(error));ui_.editingLocked=true;deviceLost_=true;exitCode_=1;}
         }
     }
+    size_t motionIndex()const {return ui_.animationIndex>=0&&size_t(ui_.animationIndex)<animationOrder_.size()?animationOrder_[size_t(ui_.animationIndex)]:size_t(-1);}
+    std::wstring animationKey()const {
+        uint64_t key=14695981039346656037ull;
+        for(wchar_t c:materialIdentity(modelPath_)){key^=uint32_t(c);key*=1099511628211ull;}
+        return std::to_wstring(key);
+    }
+    void rememberAnimation(){
+        if(modelPath_.empty())return;const auto* motion=renderer_.MotionAt(motionIndex());if(!motion)return;
+        lastAnimations_[materialIdentity(modelPath_)]=motion->name;
+        const auto name=wide(motion->name,CP_ACP);const auto ini=executableDirectory()/L"MaterialLab.ini";
+        WritePrivateProfileStringW(L"Animations",animationKey().c_str(),name.c_str(),ini.c_str());
+    }
     void refreshAnimations() {
         stopAnimation(true);ui_.animations.clear();ui_.animationIndex=0;
-        for(size_t i=0;i<renderer_.MotionCount();++i)ui_.animations.push_back(utf8(wide(renderer_.MotionAt(i)->name,CP_ACP)));
-        ui_.animationFrames=renderer_.MotionCount()?int(renderer_.MotionAt(0)->frames):1;
+        std::vector<std::string> names;for(size_t i=0;i<renderer_.MotionCount();++i)names.push_back(utf8(wide(renderer_.MotionAt(i)->name,CP_ACP)));
+        animationOrder_=lab::SortedAnimationIndices(names);
+        const auto identity=materialIdentity(modelPath_);
+        if(!modelPath_.empty()&&!lastAnimations_.count(identity)){
+            std::array<wchar_t,4096> saved{};const auto ini=executableDirectory()/L"MaterialLab.ini";
+            GetPrivateProfileStringW(L"Animations",animationKey().c_str(),L"",saved.data(),DWORD(saved.size()),ini.c_str());
+            for(size_t i=0;i<names.size();++i)if(names[i]==utf8(saved.data()))lastAnimations_[identity]=renderer_.MotionAt(i)->name;
+        }
+        const auto previous=lastAnimations_.find(identity);
+        for(size_t i=0;i<animationOrder_.size();++i){ui_.animations.push_back(names[animationOrder_[i]]);if(previous!=lastAnimations_.end()&&renderer_.MotionAt(animationOrder_[i])->name==previous->second)ui_.animationIndex=int(i);}
+        const auto* motion=renderer_.MotionAt(motionIndex());ui_.animationFrames=motion?int(motion->frames):1;
     }
     void setAnimationPose() {
-        const auto* motion=renderer_.MotionAt(size_t(std::max(0,ui_.animationIndex)));if(!motion)return;
+        const auto* motion=renderer_.MotionAt(motionIndex());if(!motion)return;
         std::wstring error;
-        if(!renderer_.SetAnimationPose(size_t(ui_.animationIndex),animationTime_,ui_.animationLoop,error)){stopAnimation(false);status(utf8(error));}
+        if(!renderer_.SetAnimationPose(motionIndex(),animationTime_,ui_.animationLoop,error)){stopAnimation(false);status(utf8(error));}
         ui_.animationFrames=int(motion->frames);ui_.animationFrame=std::clamp(int(animationTime_*motion->fps),0,std::max(0,ui_.animationFrames-1));
     }
     bool newCube(bool confirm=true) {
         if(confirm&&!confirmAll())return false;
+        rememberAnimation();exactQueue_.clear();ui_.adjustments={};
         lab::Mesh mesh=lab::MakeCube();std::wstring error;
         if(!renderer_.SetMesh(mesh,error)){fail(utf8(error));return false;}
         auto material=std::make_shared<Material>();material->key=L"manual";
@@ -301,7 +427,7 @@ class App {
         status("Тестовый куб. Загрузите diffuse или готовую bump-пару.");return true;
     }
     void openModel() {
-        endInteraction();const auto file=chooseFile(window_,L"X-Ray mesh (*.ogf)\0*.ogf\0",L"ogf");if(file.empty())return;
+        endInteraction();const auto file=chooseFile(window_,L"X-Ray mesh (*.ogf)\0*.ogf\0",L"ogf",false,lastModelDirectory_);if(file.empty())return;
         lab::Mesh mesh;std::string error;
         if(!lab::LoadOGFMesh(readBytes(file),mesh,error)){fail(error);return;}
         loadExternalMotions(file,mesh);
@@ -316,10 +442,15 @@ class App {
             else {
                 material=std::make_shared<Material>();material->key=key;material->label=relative.empty()?"material_"+std::to_string(rows.size()+1):utf8(relative.stem().wstring());
                 if(!diffuse.empty()) {
-                    material->sources.diffuse=loadImage(diffuse,error);material->paths[0]=diffuse;
+                    material->sources.diffuse=loadImage(diffuse,error);material->paths[0]=diffuse;material->modelTexturePath=diffuse;
                     if(!material->sources.diffuse.valid())++missing;
                     fs::path base=diffuse;base.replace_extension();
-                    fs::path bump=base.wstring()+L"_bump.dds",bumpX=base.wstring()+L"_bump#.dds";
+                    fs::path thm=diffuse;thm.replace_extension(L".thm");
+                    lab::ReadEngineTextureMetadata(readBytes(thm),material->metadata);
+                    fs::path bump=base.wstring()+L"_bump.dds";
+                    const auto named=relativeAsset(material->metadata.bumpName);
+                    if(material->metadata.bumpEnabled&&!named.empty()){bump=(root.empty()?fs::path(file).parent_path():root)/named;if(bump.extension().empty())bump+=L".dds";}
+                    fs::path bumpX=bump.parent_path()/(bump.stem().wstring()+L"#"+bump.extension().wstring());
                     std::error_code ec;
                     if(fs::exists(bump,ec)&&fs::exists(bumpX,ec)) {
                         auto a=readBytes(bump),b=readBytes(bumpX);auto image=lab::DecodeDDS(a,error),imageX=lab::DecodeDDS(b,error);
@@ -328,12 +459,15 @@ class App {
                 }
                 materials[key]=material;
             }
-            rows.push_back({std::to_string(rows.size()+1)+" · "+material->label,material});
+            rows.push_back({std::to_string(rows.size()+1)+" · "+material->label,material,utf8(wide(part.shader,CP_ACP))});
         }
         if(!confirmAll())return;
+        rememberAnimation();
         std::wstring renderError;if(!renderer_.SetMesh(mesh,renderError)){fail(utf8(renderError));return;}
-        meshes_=std::move(rows);modelPath_=file;isolation_.clear();
+        exactQueue_.clear();ui_.adjustments={};meshes_=std::move(rows);modelPath_=file;isolation_.clear();
+        lastModelDirectory_=modelPath_.parent_path();rememberPath(L"OGFDirectory",lastModelDirectory_);
         bool uploaded=true;for(const auto& entry:materials)uploaded=upload(entry.second,true)&&uploaded;
+        for(size_t i=0;i<meshes_.size();++i)renderer_.SetPartMaterialClass(i,meshes_[i].material->metadata.material);
         if(!meshes_.empty())renderer_.SelectPart(0);
         ui_.modelName=utf8(modelPath_.filename().wstring());refreshAnimations();setMode(lab::EditorMode::Fly);renderer_.ResetView();
         status(uploaded?"Модель загружена: "+std::to_string(meshes_.size())+" мешей"+(missing?". Не найден diffuse: "+std::to_string(missing):"."):"Модель открыта, но видеокарта не приняла часть текстур.");
@@ -356,12 +490,12 @@ class App {
         if(!confirmDiscard(material))return;
         lab::BumpPair preview{lab::ResizeImageMax(pair.bump,PreviewSize),lab::ResizeImageMax(pair.bumpX,PreviewSize)};
         if(!uploadReplacement(material,preview))return;
-        material->document.reset();material->loadedPair=std::move(pair);material->sessionPath.clear();
+        material->encoded={};material->document.reset();material->loadedPair=std::move(pair);material->sessionPath.clear();
         material->paths[4]=bump;material->paths[5]=bumpX;
         material->originalDDS=lower(bump.extension().wstring())==L".dds"?readBytes(bump):std::vector<uint8_t>{};
         material->originalDDSX=lower(bumpX.extension().wstring())==L".dds"?readBytes(bumpX):std::vector<uint8_t>{};
         if(material->paths[0].empty()){auto name=bump.stem().wstring();if(name.size()>5&&lower(name.substr(name.size()-5))==L"_bump")name.resize(name.size()-5);material->label=utf8(name);}
-        status("Bump-пара загружена без пересчёта нормалей.");
+        queueExact(material);status("Bump-пара загружена без пересчёта нормалей.");
     }
     void loadSource(lab::EditorAction action) {
         if(action==lab::EditorAction::LoadBump||action==lab::EditorAction::LoadBumpX){loadBump(action==lab::EditorAction::LoadBumpX);return;}
@@ -376,7 +510,9 @@ class App {
         if(index==0&&!upload(material,true)){*sources[index]=std::move(previous);upload(material,true);return;}
         material->paths[size_t(index)]=file;
         if(index==0)material->label=utf8(fs::path(file).stem().wstring());
-        status("Источник загружен. Для пересчёта bump нажмите «Создать bump».");
+        if(!material->hasBump()&&material->sources.diffuse.valid()){
+            if(ensureBase(material)){upload(material);status("Создана минимальная базовая нормаль. Ползунки регулируют эту карту.");}
+        }else status("Источник загружен. «Создать bump» строит новую мягкую базу с выбранными входными картами.");
     }
     void generateSelected() {
         endInteraction();std::vector<std::shared_ptr<Material>> targets;std::unordered_set<Material*> seen;
@@ -386,15 +522,15 @@ class App {
         // Build all replacements before committing any material.
         std::vector<std::unique_ptr<lab::MaterialDocument>> documents;
         for(const auto& material:targets) {
-            auto pair=lab::GenerateBumpPreview(material->sources,ui_.generation,0);
+            auto pair=lab::GenerateBumpPreview(material->sources,lab::MinimalBaseSettings(),0);
             auto document=std::make_unique<lab::MaterialDocument>();std::string error;
             if(!document->Load(pair,error,true)){fail(error);return;}documents.push_back(std::move(document));
         }
         for(size_t i=0;i<targets.size();++i)if(!uploadReplacement(targets[i],documents[i]->Preview(PreviewSize))) {
             for(size_t j=0;j<i;++j)upload(targets[j]);return;
         }
-        for(size_t i=0;i<targets.size();++i){auto& material=targets[i];material->document=std::move(documents[i]);material->loadedPair={};material->originalDDS.clear();material->originalDDSX.clear();material->sessionPath.clear();material->paths[4].clear();material->paths[5].clear();}
-        status("Новая база создана. Настройки генерации применены один раз; мазки можно отменять.");
+        for(size_t i=0;i<targets.size();++i){auto& material=targets[i];material->document=std::move(documents[i]);material->loadedPair={};material->originalDDS.clear();material->originalDDSX.clear();material->sessionPath.clear();material->paths[4].clear();material->paths[5].clear();queueExact(material);}
+        ui_.adjustments={};status("Минимальная база создана. Ползунки редактируют текущие карты; применение можно отменить через Undo.");
     }
     void openSession() {
         endInteraction();auto material=selectedMaterial();if(!material)return;
@@ -403,19 +539,22 @@ class App {
         if(!document->Open(file,error)){fail(error);return;}if(!confirmDiscard(material))return;
         if(!uploadReplacement(material,document->Preview(PreviewSize)))return;
         material->document=std::move(document);material->loadedPair={};material->originalDDS.clear();material->originalDDSX.clear();material->sessionPath=file;material->paths[4].clear();material->paths[5].clear();
-        status("Сеанс открыт; исходные каналы и слои восстановлены.");
+        ui_.adjustments={};queueExact(material);status("Сеанс открыт; исходные каналы и слои восстановлены.");
     }
     void exportPair() {
         endInteraction();auto material=selectedMaterial();if(!material||!material->hasBump()){status("Сначала загрузите или создайте bump-пару.");return;}
-        std::wstring name=ui_.useTextureName?wide(material->label):wide(ui_.exportName.data());
-        auto file=chooseFile(window_,L"X-Ray bump DDS pair\0*.dds\0",L"dds",true,safeName(name)+L"_bump.dds");if(file.empty())return;
+        std::wstring name=ui_.useTextureName?(material->modelTexturePath.empty()?wide(material->label):material->modelTexturePath.stem().wstring()):wide(ui_.exportName.data());
+        fs::path directory=lab::PreferredExportDirectory(material->modelTexturePath,lastExportDirectory_,modelPath_);
+        std::error_code ec;if(!directory.empty())fs::create_directories(directory,ec);
+        if(ec){status("Папка из модели недоступна; использован запасной путь.");directory=lab::PreferredExportDirectory({},lastExportDirectory_,modelPath_);}
+        auto file=chooseFile(window_,L"X-Ray bump DDS pair\0*.dds\0",L"dds",true,directory/(safeName(name)+L"_bump.dds"));if(file.empty())return;
         fs::path base=file;base.replace_extension();auto stem=base.filename().wstring(),normalized=lower(stem);
         if(normalized.size()>=6&&normalized.substr(normalized.size()-6)==L"_bump#")stem.resize(stem.size()-6);
         else if(normalized.size()>=5&&normalized.substr(normalized.size()-5)==L"_bump")stem.resize(stem.size()-5);
         base=base.parent_path()/safeName(stem);std::string error;bool success=false;
-        if(!material->originalDDS.empty()&&!material->originalDDSX.empty()&&(!material->document||!material->document->HasEdits()))success=lab::WriteBumpPairDDSBytesAtomic(base.wstring(),material->originalDDS,material->originalDDSX,error);
-        else if(ensureDocument(material))success=lab::ExportPackedBumpPair(material->document->Preview(0),base.wstring(),error);
+        if(encodeMaterial(material))success=lab::WriteBumpPairDDSBytesAtomic(base.wstring(),material->encoded.bump,material->encoded.bumpX,error);
         if(!success){fail(error.empty()?"Не удалось экспортировать материал.":error);return;}
+        lastExportDirectory_=base.parent_path();rememberPath(L"ExportDirectory",lastExportDirectory_);
         status("Экспортированы "+utf8(base.filename().wstring())+"_bump.dds и _bump#.dds. Сеанс сохраняется отдельно.");
     }
     void loadPreset() {
@@ -423,7 +562,7 @@ class App {
         std::string error;lab::Image preset;
         if(lower(fs::path(file).extension().wstring())==L".krnp"){if(!lab::LoadNormalPreset(file,preset,error)){fail(error);return;}}
         else preset=loadImage(file,error);
-        if(!preset.valid()){fail(error);return;}preset_=std::move(preset);ui_.presetName=utf8(fs::path(file).filename().wstring());
+        if(!preset.valid()){fail(error);return;}preset_=std::move(preset);ui_.surfacePreset=-1;ui_.presetName=utf8(fs::path(file).filename().wstring());
     }
     void savePreset() {
         auto file=chooseFile(window_,L"Normal preset (*.krnp)\0*.krnp\0",L"krnp",true,L"brush.krnp");if(file.empty())return;
@@ -450,11 +589,13 @@ class App {
         endInteraction();
     }
     bool beginStroke(int x,int y) {
-        if(ui_.editingLocked)return false;
+        if(ui_.editingLocked||!resolveAdjustments())return false;
         lab::Renderer::PickHit hit;if(!renderer_.PickUV(x,y,hit)||hit.part<0||size_t(hit.part)>=meshes_.size())return false;
         // A stroke has one document owner. Crossing another material never edits it.
         auto material=meshes_[size_t(hit.part)].material;
-        if(!material->hasBump()||!ensureDocument(material))return false;
+        const bool createBase=!material->hasBump();
+        if(!ensureBase(material)||!ensureDocument(material))return false;
+        if(createBase)upload(material);
         renderer_.SelectPart(hit.part);lab::BrushSettings settings;
         settings.radiusPixels=std::max(1.f,ui_.brushRadiusPercent*.01f*std::max(material->document->Width(),material->document->HeightPixels()));
         settings.strength=ui_.brushStrengthPercent*.01f;settings.hardness=ui_.brushHardnessPercent*.01f;
@@ -479,6 +620,8 @@ class App {
     }
     void action(lab::EditorAction kind,int value=0) {
         using A=lab::EditorAction;
+        if(kind!=A::AdjustMaterial&&kind!=A::ApplyAdjustments&&kind!=A::DiscardAdjustments&&kind!=A::SaveSession&&kind!=A::PreviewSettings&&kind!=A::LightSettings&&kind!=A::BackgroundSettings&&kind!=A::GlossSettings&&kind!=A::AlphaSettings)
+            if(!resolveAdjustments())return;
         if(ui_.editingLocked&&(kind==A::Isolate||kind==A::Visibility||kind==A::ShowAll||kind==A::HideSelected||kind==A::ClearSelection))return;
         switch(kind) {
         case A::OpenModel:openModel();break;
@@ -490,7 +633,15 @@ class App {
             ui_.requestGeneratePopup=true;break;
         case A::GenerateSelected:generateSelected();break;
         case A::Export:exportPair();break;
-        case A::SaveSession:saveSession(selectedMaterial());break;
+        case A::SaveSession:applyAdjustments();saveSession(selectedMaterial());break;
+        case A::AdjustMaterial:adjustMaterial();break;
+        case A::ApplyAdjustments:applyAdjustments();break;
+        case A::DiscardAdjustments:applyAdjustments(true);break;
+        case A::GlossSettings:{renderer_.GlossEnabled(ui_.glossEnabled);std::unordered_set<Material*> seen;for(const auto& row:meshes_)if(seen.insert(row.material.get()).second)upload(row.material);
+            const auto ini=executableDirectory()/L"MaterialLab.ini";WritePrivateProfileStringW(L"Scene",L"GlossEnabled",ui_.glossEnabled?L"1":L"0",ini.c_str());break;}
+        case A::BackgroundSettings:{renderer_.SetBackground(ui_.background);const auto ini=executableDirectory()/L"MaterialLab.ini";const auto value=std::to_wstring(colorRef(ui_.background));WritePrivateProfileStringW(L"Scene",L"Background",value.c_str(),ini.c_str());break;}
+        case A::AxisView:endInteraction();renderer_.AlignAxis(value);break;
+        case A::SurfacePreset:{endInteraction();auto next=lab::MakeSurfaceNormalPreset(lab::SurfacePreset(value));if(next.valid()){preset_=std::move(next);ui_.surfacePreset=value;const char* names[]={"Стекло","Ткань","Металл","Бетон","Кожа"};ui_.presetName=names[value];}break;}
         case A::OpenSession:openSession();break;
         case A::LoadPreset:loadPreset();break;
         case A::SavePreset:savePreset();break;
@@ -513,11 +664,11 @@ class App {
         case A::LightSettings:applyLightSettings();break;
         case A::AlphaSettings:applyAlphaSettings();break;
         case A::Skeleton:renderer_.SkeletonEnabled(ui_.skeleton);break;
-        case A::AnimationSelect:endInteraction();stopAnimation(false);animationTime_=0;setAnimationPose();break;
+        case A::AnimationSelect:rememberAnimation();endInteraction();stopAnimation(false);animationTime_=0;setAnimationPose();break;
         case A::AnimationPlay:
             if(renderer_.MotionCount()) {endInteraction();setMode(lab::EditorMode::Fly);ui_.animationPlaying=!ui_.animationPlaying;ui_.editingLocked=ui_.animationPlaying;setAnimationPose();}break;
         case A::AnimationSeek:
-            endInteraction();if(auto* motion=renderer_.MotionAt(size_t(std::max(0,ui_.animationIndex)))){animationTime_=float(ui_.animationFrame)/std::max(1.f,motion->fps);setAnimationPose();}break;
+            endInteraction();if(auto* motion=renderer_.MotionAt(motionIndex())){animationTime_=float(ui_.animationFrame)/std::max(1.f,motion->fps);setAnimationPose();}break;
         case A::AnimationSettings:setAnimationPose();break;
         }
     }
@@ -530,7 +681,7 @@ class App {
         if(io.KeyCtrl) {
             if(ImGui::IsKeyPressed(ImGuiKey_Z,false))action(io.KeyShift?lab::EditorAction::Redo:lab::EditorAction::Undo);
             if(ImGui::IsKeyPressed(ImGuiKey_Y,false))action(lab::EditorAction::Redo);
-            if(ImGui::IsKeyPressed(ImGuiKey_S,false))action(lab::EditorAction::SaveSession);
+            if(ImGui::IsKeyPressed(ImGuiKey_S,false))action(selectedMaterial()&&selectedMaterial()->document&&selectedMaterial()->document->HasPendingAdjustments()?lab::EditorAction::ApplyAdjustments:lab::EditorAction::SaveSession);
         }
         if(!viewportFocus_)return;
         auto pressed=[](ImGuiKey key){return ImGui::IsKeyPressed(key,false);};
@@ -547,9 +698,6 @@ class App {
             if(pressed(ImGuiKey_V))action(lab::EditorAction::Wireframe);
             if(pressed(ImGuiKey_H))action(io.KeyShift?lab::EditorAction::ShowAll:lab::EditorAction::HideSelected);
             if(pressed(ImGuiKey_Home))action(lab::EditorAction::ResetView);
-            if(pressed(ImGuiKey_X)){endInteraction();ui_.brushRemove=!ui_.brushRemove;}
-            if(pressed(ImGuiKey_LeftBracket)){endInteraction();ui_.brushRadiusPercent=std::max(.2f,ui_.brushRadiusPercent-.5f);}
-            if(pressed(ImGuiKey_RightBracket)){endInteraction();ui_.brushRadiusPercent=std::min(30.f,ui_.brushRadiusPercent+.5f);}
         }
         if(ui_.mode==lab::EditorMode::Fly) {
             auto down=[](ImGuiKey key){return ImGui::IsKeyDown(key)?1.f:0.f;};
@@ -575,7 +723,7 @@ class App {
             }
             else if(ImGui::IsMouseClicked(0)) {
                 using M=lab::EditorMode;
-                if(ui_.mode==M::Choose){int part=renderer_.PickGeometry(point.x,point.y);endInteraction();renderer_.SelectPart(part);}
+                if(ui_.mode==M::Choose){int part=renderer_.PickGeometry(point.x,point.y);if(resolveAdjustments()){endInteraction();renderer_.SelectPart(part);ui_.adjustments={};}}
                 else if(ui_.mode==M::Brush){if(beginStroke(point.x,point.y)){drag_=Drag::Brush;dragButton_=0;stampAt(point.x,point.y);}}
                 else {drag_=ui_.mode==M::Light?Drag::Light:ui_.mode==M::Model?Drag::Model:Drag::Orbit;dragButton_=0;}
             }
@@ -589,7 +737,7 @@ class App {
             if(ui_.viewportHovered)stampAt(point.x,point.y);else lastBrushValid_=false;
         }
         if(ui_.viewportHovered&&io.MouseWheel!=0) {
-            if(ui_.mode==lab::EditorMode::Brush&&io.KeyCtrl){endInteraction();ui_.brushRadiusPercent=std::clamp(ui_.brushRadiusPercent+io.MouseWheel*.5f,.2f,30.f);}
+            if(ui_.mode==lab::EditorMode::Brush){endInteraction();ui_.brushRadiusPercent=std::clamp(ui_.brushRadiusPercent+io.MouseWheel*.2f,.1f,20.f);}
             else renderer_.Zoom(io.MouseWheel);
         }
         if(ui_.viewportHovered&&(ui_.mode==lab::EditorMode::Choose||ui_.mode==lab::EditorMode::Brush)) {
@@ -608,7 +756,7 @@ class App {
     }
     void tickAnimation(float delta) {
         if(!ui_.animationPlaying)return;
-        auto* motion=renderer_.MotionAt(size_t(std::max(0,ui_.animationIndex)));if(!motion){stopAnimation(true);return;}
+        auto* motion=renderer_.MotionAt(motionIndex());if(!motion){stopAnimation(true);return;}
         animationTime_+=delta*ui_.animationSpeed*motion->speed;
         if(!ui_.animationLoop&&animationTime_>=motion->duration()){animationTime_=std::max(0.f,motion->duration()-1.f/std::max(1.f,motion->fps));stopAnimation(false);}
         else if(ui_.animationLoop&&motion->duration()>0)animationTime_=std::fmod(animationTime_,motion->duration());
@@ -642,10 +790,16 @@ class App {
         ImGui_ImplDX11_NewFrame();ImGui_ImplWin32_NewFrame();ImGui::NewFrame();
         std::vector<std::pair<lab::EditorAction,int>> actions;
         lab::DrawEditorUI(ui_,[&](lab::EditorAction kind,int value){actions.emplace_back(kind,value);});
-        // No callback can invalidate a mesh/animation vector while widgets iterate it.
+        // Resolve the old document before any queued action can change its owner.
+        if(ui_.tab!=oldTab&&!resolveAdjustments()){ui_.tab=oldTab;ui_.forceTab=true;actions.clear();}
         for(const auto& request:actions)action(request.first,request.second);
         if(ui_.tab!=oldTab){endInteraction();if(oldTab==lab::EditorTab::Animation)stopAnimation(true);if(ui_.tab==lab::EditorTab::Animation)setMode(lab::EditorMode::Fly);}
+        if(focusResolution_){focusResolution_=false;resolveAdjustments();}
         if(input)viewportInput(delta);tickAnimation(delta);
+        if(!exactQueue_.empty()&&GetTickCount64()>=exactAfter_&&!ImGui::IsMouseDown(0)&&drag_!=Drag::Brush){
+            auto material=exactQueue_.front();exactQueue_.erase(exactQueue_.begin());
+            if(!uploadExact(material))status("Не удалось обновить проверочное DDS-превью.");
+        }
         ImGui::Render();renderer_.DrawScene();renderer_.BeginUI();ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
         const HRESULT presented=renderer_.PresentUI();
         if(FAILED(presented)){status("Direct3D: устройство вывода потеряно.");deviceLost_=true;exitCode_=1;}
@@ -695,7 +849,7 @@ class App {
             if(reinterpret_cast<HWND>(lParam)!=window)app->finishPointerInteraction();
             return 0;
         case WM_CANCELMODE:app->endInteraction();return 0;
-        case WM_KILLFOCUS:app->endInteraction();app->viewportFocus_=false;return 0;
+        case WM_KILLFOCUS:app->endInteraction();app->viewportFocus_=false;if(!app->resolvingAdjustments_&&app->selectedMaterial()&&app->selectedMaterial()->document&&app->selectedMaterial()->document->HasPendingAdjustments())app->focusResolution_=true;return 0;
         case WM_CLOSE:
             if(app->confirmAll())DestroyWindow(window);return 0;
         case WM_DESTROY:app->running_=false;PostQuitMessage(0);return 0;
@@ -711,6 +865,7 @@ public:
         if(window_&&IsWindow(window_))DestroyWindow(window_);
     }
     bool create(HINSTANCE instance,bool software=false) {
+        smoke_=software;
         ImGui_ImplWin32_EnableDpiAwareness();
         WNDCLASSEXW klass{};klass.cbSize=sizeof(klass);klass.style=CS_CLASSDC;klass.lpfnWndProc=windowProc;klass.hInstance=instance;klass.hCursor=LoadCursorW(nullptr,IDC_ARROW);klass.lpszClassName=L"KichRayMaterialLabImGui";
         if(!RegisterClassExW(&klass)&&GetLastError()!=ERROR_CLASS_ALREADY_EXISTS)return false;
@@ -721,7 +876,7 @@ public:
         if(!window_)return false;
         std::wstring error;if(!renderer_.Init(window_,error,software)){fail(utf8(error));return false;}
         IMGUI_CHECKVERSION();ImGui::CreateContext();ImGuiIO& io=ImGui::GetIO();
-        io.ConfigFlags|=ImGuiConfigFlags_NavEnableKeyboard;io.IniFilename=nullptr;io.LogFilename=nullptr;
+        io.ConfigFlags&=~ImGuiConfigFlags_NavEnableKeyboard;io.IniFilename=nullptr;io.LogFilename=nullptr;
         applyDpi();ImGui::GetStyle().HoverDelayNormal=.6f;
         if(!ImGui_ImplWin32_Init(window_)){fail("Не удалось создать интерфейс Win32.");return false;}
         if(!ImGui_ImplDX11_Init(renderer_.Device(),renderer_.Context())){ImGui_ImplWin32_Shutdown();fail("Не удалось создать интерфейс Direct3D.");return false;}
@@ -730,6 +885,14 @@ public:
         const fs::path ini=executableDirectory()/L"MaterialLab.ini";
         ui_.lightAzimuth=float(GetPrivateProfileIntW(L"Scene",L"LightAzimuth",52,ini.c_str()));
         ui_.lightElevation=std::clamp(float(GetPrivateProfileIntW(L"Scene",L"LightElevation",37,ini.c_str())),-81.f,81.f);
+        std::array<wchar_t,32768> remembered{};
+        GetPrivateProfileStringW(L"Paths",L"OGFDirectory",L"",remembered.data(),DWORD(remembered.size()),ini.c_str());lastModelDirectory_=remembered.data();
+        GetPrivateProfileStringW(L"Paths",L"ExportDirectory",L"",remembered.data(),DWORD(remembered.size()),ini.c_str());lastExportDirectory_=remembered.data();
+        GetPrivateProfileStringW(L"Scene",L"LightIntensity",L"1",remembered.data(),DWORD(remembered.size()),ini.c_str());ui_.lightIntensity=std::clamp(float(wcstod(remembered.data(),nullptr)),0.f,8.f);if(!std::isfinite(ui_.lightIntensity))ui_.lightIntensity=1;
+        ui_.materialClass=std::clamp(int(GetPrivateProfileIntW(L"Scene",L"MaterialClass",0,ini.c_str())),0,4);
+        ui_.glossEnabled=GetPrivateProfileIntW(L"Scene",L"GlossEnabled",1,ini.c_str())!=0;
+        auto readColor=[&](const wchar_t* key,float* color){const COLORREF value=GetPrivateProfileIntW(L"Scene",key,colorRef(color),ini.c_str());color[0]=GetRValue(value)/255.f;color[1]=GetGValue(value)/255.f;color[2]=GetBValue(value)/255.f;};
+        readColor(L"Background",ui_.background);readColor(L"LightColor",ui_.lightColor);readColor(L"AmbientColor",ui_.ambient);renderer_.SetBackground(ui_.background);
         applyPreviewSettings();applyAlphaSettings();applyLightSettings(false);renderer_.OutlineEnabled(ui_.outline);renderer_.SkeletonEnabled(ui_.skeleton);
         ShowWindow(window_,SW_SHOWDEFAULT);UpdateWindow(window_);lastTick_=GetTickCount64();return true;
     }
@@ -782,6 +945,35 @@ public:
             check(material->document->CanUndo()&&!same(initial,painted),"stroke visibly changes scene and creates history");
             editHistory(lab::EditorAction::Undo);renderer_.CaptureFrame(undone);check(same(initial,undone),"undo restores exact rendered baseline");
             editHistory(lab::EditorAction::Redo);renderer_.CaptureFrame(redone);check(same(painted,redone),"redo restores exact rendered stroke");
+            // Real Win32 modal responses: apply/discard/cancel must preserve draft ownership.
+            auto answerPrompt=[&](int answer){
+                SetTimer(window_,UINT_PTR(900+answer),20,smokePromptTimer);
+            };
+            const auto beforeDraft=material->document->Preview(0);const size_t history=material->document->UndoCount();
+            ui_.adjustments.normalStrength=2;adjustMaterial();check(material->document->HasPendingAdjustments(),"slider creates live pending draft");
+            lab::Image draftFrame;renderer_.CaptureFrame(draftFrame);check(!same(draftFrame,redone),"slider draft visibly changes D3D scene");
+            answerPrompt(IDCANCEL);check(!resolveAdjustments()&&material->document->HasPendingAdjustments(),"Cancel keeps draft and blocks transition");
+            ui_.mode=lab::EditorMode::Brush;ui_.tab=lab::EditorTab::Material;answerPrompt(IDCANCEL);setMode(lab::EditorMode::Brush);
+            check(ui_.tab==lab::EditorTab::Material&&material->document->HasPendingAdjustments(),"brush hotkey must resolve draft even when brush mode was already active");
+            answerPrompt(IDNO);check(resolveAdjustments()&&!material->document->HasPendingAdjustments()&&same(beforeDraft.bump,material->document->Preview(0).bump),"No restores previous brushed material");
+            ui_.adjustments.normalStrength=2;adjustMaterial();answerPrompt(IDYES);
+            check(resolveAdjustments()&&!material->document->HasPendingAdjustments()&&material->document->UndoCount()==history+1,"Yes commits one history step");
+            editHistory(lab::EditorAction::Undo);check(same(beforeDraft.bump,material->document->Preview(0).bump),"native applied draft undoes to previous brush work");
+            check(uploadExact(material)&&material->exactReady,"full encoded DDS mip chain uploads to D3D11");
+            const auto cache=material->encoded;ui_.glossEnabled=false;action(lab::EditorAction::GlossSettings);
+            check(uploadExact(material),"gloss-disabled exact DDS preview uploads");
+            auto muted=lab::DecodeDDSMipChain(material->encoded.bump,error);bool zeroGloss=!muted.empty();
+            for(const auto& mip:muted)for(auto pixel:mip.pixels)zeroGloss=zeroGloss&&pixel.r==0;
+            check(zeroGloss,"disabled export cache contains zero gloss in every mip");
+            ui_.glossEnabled=true;action(lab::EditorAction::GlossSettings);check(uploadExact(material)&&material->encoded.bump==cache.bump,"gloss re-enable restores encoded material");
+            renderer_.ClearBrushCursor();renderer_.SetColor(2,RGB(0,0,0));renderer_.SetLightIntensity(0);lab::Image dark,lit;renderer_.CaptureFrame(dark);
+            const size_t center=size_t(dark.h/2)*dark.w+dark.w/2;
+            check(dark.pixels[center].r==0&&dark.pixels[center].g==0&&dark.pixels[center].b==0,"zero lighting produces no fake glow");
+            renderer_.SetLightIntensity(1);renderer_.CaptureFrame(lit);check(!same(lit,dark),"light intensity changes rendered lighting");applyLightSettings(false);
+            const float redBackground[3]={.5f,0,0};renderer_.SetBackground(redBackground);lab::Image background;renderer_.CaptureFrame(background);
+            check(background.pixels[0].r>=127&&background.pixels[0].g==0&&background.pixels[0].b==0,"background color reaches viewport render target");renderer_.SetBackground(ui_.background);
+            for(int axis=0;axis<3;++axis){renderer_.AlignAxis(axis);check(renderer_.PickGeometry(int(renderer_.SceneWidth()/2),int(renderer_.SceneHeight()/2))==0,"X/Y/Z centering retains a finite pickable view");}
+            renderer_.ResetView();
             const fs::path session=fs::temp_directory_path()/(L"MaterialLab-smoke-"+std::to_wstring(GetCurrentProcessId())+L".krlab");
             check(material->document->Save(session,error)&&material->document->CanUndo(),"saving retains undo history");
             lab::MaterialDocument reopened;check(reopened.Open(session,error)&&same(reopened.Preview(0).bump,material->document->Preview(0).bump),"session round trip preserves edited packed channels");
@@ -813,8 +1005,8 @@ public:
 }
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,LPWSTR args,int) {
     const HRESULT com=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);if(FAILED(com))return 2;
-    int result=3;
-    try {const bool smoke=args&&std::wstring(args)==L"--smoke-test";App app;if(app.create(instance,smoke))result=smoke?app.smokeTest():app.run();}
-    catch(const std::exception& error){MessageBoxW(nullptr,wide(error.what()).c_str(),AppTitle,MB_OK|MB_ICONERROR);}
+    int result=3;const bool smoke=args&&std::wstring(args)==L"--smoke-test";
+    try {App app;if(app.create(instance,smoke))result=smoke?app.smokeTest():app.run();}
+    catch(const std::exception& error){if(smoke){std::ofstream log(executableDirectory()/L"smoke-tests.txt",std::ios::app);log<<"FAIL exception: "<<error.what()<<'\n';}else MessageBoxW(nullptr,wide(error.what()).c_str(),AppTitle,MB_OK|MB_ICONERROR);}
     CoUninitialize();return result;
 }

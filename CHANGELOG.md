@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.11.0
+
+- Create a gentle normal baseline when missing and apply sliders live to a committed snapshot. Add Apply/Discard/Cancel transitions, Ctrl+S apply, and one-step undo without losing brush strokes.
+- Use SoC R2 direct lighting, exact material lookup values, THM class/weight and custom bump references. Remove fake zero-gloss highlights; support authored model selflight shaders.
+- Share BC3 export bytes and complete mip chains with settled viewport rendering. Add a reversible Gloss enable switch for preview and export.
+- Use the mouse wheel for all sliders and brush radius. Add light intensity, background color, X/Y/Z views, remembered folders and model texture export destinations.
+- Add glass/fabric/metal/concrete/leather normal brush presets. Sort and scroll animations, reopening at the last per-model selection.
+- Add workflow, real ImGui wheel/popup and native modal/render regressions; package successful Windows CI builds.
+
 ## 0.10.0
 
 - Replaced overlapping native tab/control windows with vendored Dear ImGui v1.91.9b, one clipped inspector pane and an offscreen D3D11 viewport with its own toolbar. Added per-monitor DPI handling and independent page scrolling.

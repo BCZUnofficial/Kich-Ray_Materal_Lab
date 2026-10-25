@@ -58,8 +58,17 @@ struct Mesh {
     size_t indexCount()const{size_t n=0;for(const auto& p:parts)n+=p.indices.size();return n;}
 };
 struct Settings {float normalStrength=1.f,gloss=0.45f,height=0.5f,blur=0.12f,sharpness=0.35f;bool invertY=false;};
+// Relative to an immutable, committed layer snapshot; identity changes no bytes.
+struct MaterialAdjustments {float normalStrength=1.f,gloss=1.f,height=1.f,blur=0.f,sharpness=0.f;bool invertY=false;};
+Settings MinimalBaseSettings();
+enum class SurfacePreset { Glass, Fabric, Metal, Concrete, Leather };
+Image MakeSurfaceNormalPreset(SurfacePreset kind,uint32_t size=128);
 struct Sources {Image diffuse,normal,gloss,height;};
 struct BumpPair {Image bump,bumpX;};
+struct EncodedBumpPair {std::vector<uint8_t> bump,bumpX;};
+// The viewport and disk export consume the same compressed bytes and mip chain.
+bool EncodePackedBumpPair(const BumpPair& pair,EncodedBumpPair& output,std::string& error);
+std::vector<Image> DecodeDDSMipChain(const std::vector<uint8_t>& bytes,std::string& error);
 struct PartImages {Image diffuse,bump,bumpX;bool hasBump=false;};
 Image DefaultChecker(uint32_t size=256);
 Image DecodeDDS(const std::vector<uint8_t>& bytes,std::string& error);

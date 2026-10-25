@@ -40,6 +40,8 @@ class Renderer {
     bool selected=false;
     bool skeletal=false;
     bool visible=true;
+    float emissive=0.f,emissiveSpecular=0.f,materialClass=1.f;
+    bool flatShader=false;
     AlphaProfile alpha;
     std::shared_ptr<GrayImage> opacity;
     Microsoft::WRL::ComPtr<ID3D11Buffer> sortedIB;
@@ -62,6 +64,8 @@ class Renderer {
   Microsoft::WRL::ComPtr<ID3D11DepthStencilState> alphaDepth_;
   Microsoft::WRL::ComPtr<ID3D11BlendState> alphaBlend_,depthOnlyBlend_;
   Microsoft::WRL::ComPtr<ID3D11SamplerState> sampler_;
+  Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> materialLut_;
+  Microsoft::WRL::ComPtr<ID3D11SamplerState> materialSampler_;
   std::vector<RenderPart> parts_;
   std::vector<Bone> bones_;
   std::vector<Motion> motions_;
@@ -71,6 +75,10 @@ class Renderer {
   float lightYaw_=0.9f,lightPitch_=0.65f;
   float modelYaw_=0.f,modelPitch_=0.f;
   float normalStrength_=1.f,glossStrength_=0.5f;
+  float lightIntensity_=1.f;
+  int materialClass_=-1;
+  bool glossEnabled_=true;
+  float background_[3]={.095f,.105f,.12f};
   float tint_[3]={1.f,1.f,1.f},light_[3]={1.f,0.93f,0.78f},ambient_[3]={0.21f,0.24f,0.29f};
   bool invertNormalY_=false,bumpOn_=true,skeletonOn_=true,outlineOn_=true,wireframeOn_=false;
   int selectedPrimary_=-1,hoverPart_=-1;
@@ -80,7 +88,7 @@ class Renderer {
   AlphaMode alphaMode(const RenderPart& part)const{return ResolveAlpha(part.alpha,alphaEnabled_,alphaPreview_);}
   ID3D11Buffer* sortedAlphaIndices(RenderPart& part,const DirectX::XMMATRIX& modelView);
   bool createViews(UINT w,UINT h,std::wstring& error);
-  bool makeTexture(const Image& img,Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>& out,Microsoft::WRL::ComPtr<ID3D11Texture2D>* textureOut=nullptr);
+  bool makeTexture(const Image& img,Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>& out,Microsoft::WRL::ComPtr<ID3D11Texture2D>* textureOut=nullptr,const std::vector<Image>* mips=nullptr);
   bool uploadBindPose(std::wstring* error=nullptr);
 public:
   bool Init(HWND hwnd,std::wstring& error,bool software=false);
@@ -98,6 +106,7 @@ public:
   bool SetMesh(Mesh& mesh,std::wstring& error);
   bool SetPartImages(size_t part,const PartImages& images);
   bool SetPartBumpImages(size_t part,const Image& bump,const Image& bumpX,bool hasBump=true);
+  bool SetPartBumpMipImages(size_t part,const std::vector<Image>& bump,const std::vector<Image>& bumpX);
   bool CopyPartMaterial(size_t dst,size_t src);
   bool SetImages(const Image& diffuse,const Image& bump,const Image& bumpX);
   bool SetBumpImages(const Image& bump,const Image& bumpX,bool hasBump=true);
@@ -114,6 +123,12 @@ public:
   void MoveCamera(float right,float up,float forward){camera_.move(right,up,forward);}
   void PanCamera(float dx,float dy){camera_.pan(dx,dy);}
   void FrameSelection();
+  void AlignAxis(int axis){camera_.alignAxis(axis);FrameSelection();}
+  void SetLightIntensity(float intensity){lightIntensity_=std::clamp(intensity,0.f,8.f);}
+  void SetMaterialClass(int material){materialClass_=std::clamp(material,-1,3);}
+  void SetPartMaterialClass(size_t part,float material){if(part<parts_.size()&&std::isfinite(material))parts_[part].materialClass=std::clamp(material,0.f,4.f);}
+  void SetBackground(const float* rgb){for(int i=0;i<3;++i)background_[i]=std::clamp(rgb[i],0.f,1.f);}
+  void GlossEnabled(bool enabled){glossEnabled_=enabled;}
   void RotateModel(float dx,float dy);
   void ResetModelRotation(){modelYaw_=0.f;modelPitch_=0.f;}
   void PanVertical(float dy);
