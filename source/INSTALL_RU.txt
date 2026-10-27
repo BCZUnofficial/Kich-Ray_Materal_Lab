@@ -1,0 +1,26 @@
+Material Lab 0.13.0 — сборка и запуск
+
+1. Откройте KichRay_MaterialLab.sln в Visual Studio 2022 с установленными
+   компонентами разработки классических приложений на C++ и Windows SDK.
+2. Выберите Release | x64 и выполните «Пересобрать решение».
+   Проект также содержит конфигурации Debug и Win32.
+3. Запустите bin/Release/x64/MaterialLab.exe.
+   При переносе EXE сохраните рядом каталог assets с Preview.hlsl.
+   Иконка и заставка встроены в EXE.
+
+Корень репозитория и source/ содержат одинаковые исходники. Собирайте
+одну из этих копий. Старые INSTALL_0.* и MaterialLab_0.12.0.patch относятся
+к предыдущим версиям; применять их к 0.13.0 не требуется.
+
+Если скачивается готовый artifact из GitHub Actions, распакуйте его целиком
+и запускайте MaterialLab.exe с сохранённой структурой assets/Preview.hlsl.
+Отчёт smoke-tests.txt в таком artifact относится к приложенному EXE.
+
+Настройки сцены хранятся в MaterialLab.ini рядом с приложением.
+История предметов: %LOCALAPPDATA%/KichRay/MaterialLab/AttachmentHistory.txt.
+Если LOCALAPPDATA недоступна, используется MaterialLab.attachments рядом
+с EXE. История содержит пути к исходным OGF и настройки крепления;
+сами модели и текстуры в неё не копируются.
+
+Новые функции и границы соответствия DX11: UPDATE_0.13.0_RU.md.
+Фактические результаты тестов: verification/ и GitHub Actions.

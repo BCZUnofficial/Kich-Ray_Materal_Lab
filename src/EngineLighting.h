@@ -4,7 +4,8 @@
 #include <cmath>
 
 namespace lab {
-// SoC R2 r2_rendertarget.cpp s_material / KichR4MaterialLut.h (01b239e).
+// SoC R2 r2_rendertarget.cpp s_material / KichR4MaterialLut.h.
+// Verified unchanged in BCZUnofficial/kichray DX11/R4 8f34fb7a0fbf8c5633494545130153031a78f953.
 // Four quantized slices, not a gloss-dependent, invented Blinn exponent.
 inline Image MakeR2MaterialLut() {
     Image image;image.w=128;image.h=1024;image.pixels.resize(size_t(image.w)*image.h);

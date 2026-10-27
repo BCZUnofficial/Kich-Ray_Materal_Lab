@@ -12,7 +12,7 @@
 
 namespace lab {
 namespace {
-constexpr uint32_t OGF_HEADER=1,OGF_TEXTURE=2,OGF_VERTICES=3,OGF_INDICES=4,OGF_CHILDREN=9,OGF_CHILDREN_L=10;
+constexpr uint32_t OGF_HEADER=1,OGF_TEXTURE=2,OGF_VERTICES=3,OGF_INDICES=4,OGF_SWIDATA=6,OGF_CHILDREN=9,OGF_CHILDREN_L=10;
 constexpr uint32_t OGF_S_BONE_NAMES=13,OGF_S_MOTIONS=14,OGF_S_SMPARAMS=15,OGF_S_IKDATA=16,OGF_S_MOTION_REFS=19;
 constexpr unsigned MT_NORMAL=0,MT_HIERRARHY=1,MT_PROGRESSIVE=2,MT_SKELETON_ANIM=3,MT_SKELETON_GEOMDEF_PM=4,MT_SKELETON_GEOMDEF_ST=5,MT_SKELETON_RIGID=10;
 constexpr uint32_t OGF_VERTEXFORMAT_FVF_1L=0x12071980u,OGF_VERTEXFORMAT_FVF_2L=0x240e3300u;
@@ -52,13 +52,100 @@ struct Reader{
     bool rf(float& v){if(!need(4))return false;v=f32(b.ptr+at);at+=4;return sane(v);}
     bool rv3(V3& v){return rf(v.x)&&rf(v.y)&&rf(v.z);}
     bool rz(std::string& s){return zstr(b,at,s);}
+    bool rline(){
+        // motion_marks::Save uses IWriter::w_string (CR/LF), not stringZ.
+        const size_t start=at;
+        while(need(1)&&b.ptr[at]!='\r'&&b.ptr[at]!='\n'){
+            if(!b.ptr[at]||at-start>=4096)return false;
+            ++at;
+        }
+        if(!need(1))return false;
+        const uint8_t terminator=b.ptr[at++];
+        if(need(1)&&((terminator=='\r'&&b.ptr[at]=='\n')||(terminator=='\n'&&b.ptr[at]=='\r')))++at;
+        return true;
+    }
     bool skip(size_t n){if(!need(n))return false;at+=n;return true;}
 };
 
 bool readMaterial(Block src,MeshPart& part,std::string& error){Block t{};if(!chunk(src,OGF_TEXTURE,t))return true;size_t at=0;if(!zstr(t,at,part.texture)||!zstr(t,at,part.shader)){error="OGF material strings are truncated";return false;}return true;}
 bool appendIndices(Block ib,uint32_t nv,MeshPart& part,std::string& error){if(ib.size<4){error="OGF index chunk truncated";return false;}const uint32_t ni=u32(ib.ptr);if(!ni||ni>3000000||(ni%3)!=0||size_t(ni)*2>ib.size-4){error="OGF index bounds invalid";return false;}part.indices.reserve(ni);for(uint32_t i=0;i<ni;++i){uint16_t ix=u16(ib.ptr+4+size_t(i)*2);if(ix>=nv){error="OGF index out of bounds";return false;}part.indices.push_back(ix);}return true;}
 bool appendStatic(Block vb,Block ib,MeshPart& part,std::string& error){if(vb.size<8){error="OGF vertex chunk truncated";return false;}const uint32_t fvf=u32(vb.ptr),nv=u32(vb.ptr+4);if(fvf!=0x112u){error="Unsupported OGF static FVF (expected 0x112)";return false;}constexpr size_t stride=32;if(!nv||nv>1000000||size_t(nv)*stride>vb.size-8){error="OGF static vertex bounds invalid";return false;}part.vertices.reserve(nv);for(uint32_t i=0;i<nv;++i){const uint8_t* p=vb.ptr+8+size_t(i)*stride;Vertex v;v.p={f32(p),f32(p+4),f32(p+8)};v.n={f32(p+12),f32(p+16),f32(p+20)};v.u=f32(p+24);v.v=f32(p+28);if(!saneVertex(v)){error="OGF static vertex contains invalid floats";return false;}part.vertices.push_back(v);}return appendIndices(ib,nv,part,error);}
-bool appendSkeletal(Block vb,Block ib,MeshPart& part,std::string& error){if(vb.size<8){error="OGF skeletal vertex chunk truncated";return false;}const uint32_t fmt=u32(vb.ptr),nv=u32(vb.ptr+4);if(!nv||nv>1000000){error="OGF skeletal vertex count invalid";return false;}size_t stride=0,pos=0,norm=0,uv=0;if(fmt==OGF_VERTEXFORMAT_FVF_1L){stride=60;pos=0;norm=12;uv=48;}else if(fmt==OGF_VERTEXFORMAT_FVF_2L){stride=64;pos=4;norm=16;uv=56;}else{error="Unsupported SoC skeletal vertex format (1-link/2-link only)";return false;}if(size_t(nv)*stride>vb.size-8){error="OGF skeletal vertex data truncated";return false;}part.vertices.reserve(nv);for(uint32_t i=0;i<nv;++i){const uint8_t* p=vb.ptr+8+size_t(i)*stride;Vertex v;v.p={f32(p+pos),f32(p+pos+4),f32(p+pos+8)};v.n={f32(p+norm),f32(p+norm+4),f32(p+norm+8)};v.u=f32(p+uv);v.v=f32(p+uv+4);if(fmt==OGF_VERTEXFORMAT_FVF_1L){uint32_t bone=u32(p+56);if(bone>65535u){error="OGF 1-link bone id out of range";return false;}v.bone0=uint16_t(bone);v.bone1=v.bone0;v.weight=0.f;v.links=1;}else{v.bone0=u16(p);v.bone1=u16(p+2);v.weight=f32(p+52);v.links=2;if(!sane(v.weight)){error="OGF 2-link weight is not finite";return false;}/* Some SoC exporters write tiny or even visible overshoot outside 0..1. The engine does not reject the vertex; clamp for preview instead of refusing the whole model. */v.weight=std::max(0.f,std::min(1.f,v.weight));}if(!saneVertex(v)){error="OGF skeletal vertex contains invalid floats";return false;}part.vertices.push_back(v);}part.skeletal=true;return appendIndices(ib,nv,part,error);}
+bool appendSkeletal(Block vb,Block ib,MeshPart& part,std::string& error){
+ if(vb.size<8){error="OGF skeletal vertex chunk truncated";return false;}
+ const uint32_t fmt=u32(vb.ptr),nv=u32(vb.ptr+4);
+ if(!nv||nv>1000000){error="OGF skeletal vertex count invalid";return false;}
+ size_t stride=0,pos=0,norm=0,uv=0;
+ if(fmt==OGF_VERTEXFORMAT_FVF_1L){stride=60;pos=0;norm=12;uv=48;}
+ else if(fmt==OGF_VERTEXFORMAT_FVF_2L){stride=64;pos=4;norm=16;uv=56;}
+ else{error="Unsupported SoC skeletal vertex format (1-link/2-link only)";return false;}
+ if(size_t(nv)*stride>vb.size-8){error="OGF skeletal vertex data truncated";return false;}
+ part.vertices.reserve(nv);
+ for(uint32_t i=0;i<nv;++i){
+  const uint8_t* p=vb.ptr+8+size_t(i)*stride;Vertex v;
+  v.p={f32(p+pos),f32(p+pos+4),f32(p+pos+8)};
+  v.n={f32(p+norm),f32(p+norm+4),f32(p+norm+8)};
+  v.tangent={f32(p+pos+24),f32(p+pos+28),f32(p+pos+32)};
+  v.binormal={f32(p+pos+36),f32(p+pos+40),f32(p+pos+44)};
+  v.u=f32(p+uv);v.v=f32(p+uv+4);
+  const auto validDirection=[](V3 d){return sane(d.x)&&sane(d.y)&&sane(d.z);};
+  if(!validDirection(v.tangent)||!validDirection(v.binormal)){error="OGF skeletal tangent basis contains invalid floats";return false;}
+  // SoC's vertBoned1W/2W stores the exporter's tangent basis. Rebuilding it
+  // from triangles can change mirrored UV seams and the normal-map response.
+  // Some exporters omit T/B (all zero); those vertices use the renderer's
+  // derived basis instead, without claiming the absent data is authoritative.
+  const V3 cross{v.n.y*v.tangent.z-v.n.z*v.tangent.y,
+                 v.n.z*v.tangent.x-v.n.x*v.tangent.z,
+                 v.n.x*v.tangent.y-v.n.y*v.tangent.x};
+  v.hasTangentBasis=std::fabs(cross.x*v.binormal.x+cross.y*v.binormal.y+cross.z*v.binormal.z)>1e-8f;
+  if(fmt==OGF_VERTEXFORMAT_FVF_1L){
+   uint32_t bone=u32(p+56);
+   if(bone>65535u){error="OGF 1-link bone id out of range";return false;}
+   v.bone0=uint16_t(bone);v.bone1=v.bone0;v.weight=0.f;v.links=1;
+  }else{
+   v.bone0=u16(p);v.bone1=u16(p+2);v.weight=f32(p+52);v.links=2;
+   // xrSkin2W / KichR4 VSModelGPU ignores the unused weight when both
+   // links address the same bone; an uninitialized value must not deform it.
+   if(v.bone0==v.bone1)v.weight=0.f;
+   if(!sane(v.weight)){error="OGF 2-link weight is not finite";return false;}
+   // Preserve the previous preview policy for exporters with out-of-range weights.
+   v.weight=std::clamp(v.weight,0.f,1.f);
+  }
+  if(!saneVertex(v)){error="OGF skeletal vertex contains invalid floats";return false;}
+  part.vertices.push_back(v);
+ }
+ part.skeletal=true;return appendIndices(ib,nv,part,error);
+}
+
+bool selectProgressiveWindow(Block src,MeshPart& part,std::string& error){
+ Block swi{};
+ if(!chunk(src,OGF_SWIDATA,swi)){error="Progressive OGF is missing OGF_SWIDATA";return false;}
+ // Fmesh.h: reserved[4], u32 count, then {u32 offset,u16 num_tris,u16 num_verts}.
+ // FProgressive and CSkeletonX_PM render sw[0] for LOD=1 (maximum detail).
+ // OGF_INDICES includes several overlapping LOD windows, not one triangle list.
+ if(swi.size<20){error="OGF sliding-window header truncated";return false;}
+ const uint32_t count=u32(swi.ptr+16);
+ if(!count||count>1000000||size_t(count)>(swi.size-20)/8||swi.size-20!=size_t(count)*8){
+  error="OGF sliding-window record count invalid";return false;
+ }
+ uint32_t selectedOffset=0,selectedIndices=0,selectedVertices=0;
+ for(uint32_t i=0;i<count;++i){
+  const uint8_t* p=swi.ptr+20+size_t(i)*8;
+  const uint32_t offset=u32(p),triangles=u16(p+4),vertices=u16(p+6);
+  const size_t indices=size_t(triangles)*3;
+  if(offset>part.indices.size()||indices>part.indices.size()-offset||vertices>part.vertices.size()||(triangles&&!vertices)){
+   error="OGF sliding-window index or vertex range invalid";return false;
+  }
+  if(i==0){selectedOffset=offset;selectedIndices=uint32_t(indices);selectedVertices=vertices;}
+ }
+ if(!selectedIndices||!selectedVertices){error="OGF maximum-detail window has no triangles";return false;}
+ for(size_t i=selectedOffset;i<size_t(selectedOffset)+selectedIndices;++i){
+  if(part.indices[i]>=selectedVertices){error="OGF maximum-detail index exceeds its vertex window";return false;}
+ }
+ std::vector<uint32_t> selected(part.indices.begin()+selectedOffset,part.indices.begin()+selectedOffset+selectedIndices);
+ part.indices=std::move(selected);
+ part.vertices.resize(selectedVertices);
+ return true;
+}
 
 struct Mat{float m[4][4];};
 Mat identity(){Mat r={};for(int i=0;i<4;++i)r.m[i][i]=1;return r;}
@@ -113,19 +200,46 @@ bool parseBones(Block src,Mesh& mesh,std::string& error){
 
 void parseMotionRefs(Block src,Mesh& mesh){Block refs{};if(!chunk(src,OGF_S_MOTION_REFS,refs)||!refs.size)return;size_t at=0;std::string all;if(!zstr(refs,at,all))return;std::stringstream ss(all);std::string item;while(std::getline(ss,item,',')){while(!item.empty()&&std::isspace(static_cast<unsigned char>(item.front())))item.erase(item.begin());while(!item.empty()&&std::isspace(static_cast<unsigned char>(item.back())))item.pop_back();if(!item.empty())mesh.motionRefs.push_back(item);}}
 
-struct MotionDef{std::string name;float speed=1.f;bool stopAtEnd=false;};
+struct MotionDef{std::string name;float speed=1.f;bool stopAtEnd=false;uint16_t motionId=0;};
 Quat readQuat(const uint8_t* p){return {float(s16(p))/32767.f,float(s16(p+2))/32767.f,float(s16(p+4))/32767.f,float(s16(p+6))/32767.f};}
 
 bool parseMotionContainer(Block src,Mesh& mesh,std::string& error,bool append){
  if(!validChunks(src,error))return false;
  Block params{},motions{};if(!chunk(src,OGF_S_SMPARAMS,params)||!chunk(src,OGF_S_MOTIONS,motions))return false;if(mesh.bones.empty()||mesh.bones.size()>256){error="Motion data requires 1..256 skeleton bones";return false;}if(!validChunks(motions,error))return false;
- Reader p{params};uint16_t version=0,partCount=0;if(!p.ru16(version)||!p.ru16(partCount)){error="SMPARAMS truncated";return false;}if(version<1||version>3){error="Unsupported SoC SMPARAMS version: "+std::to_string(version);return false;}if(partCount>16){error="SMPARAMS partition count invalid";return false;}
+ Reader p{params};uint16_t version=0,partCount=0;if(!p.ru16(version)||!p.ru16(partCount)){error="SMPARAMS truncated";return false;}if(version<1||version>4){error="Unsupported SoC SMPARAMS version: "+std::to_string(version);return false;}if(partCount>16){error="SMPARAMS partition count invalid";return false;}
  std::unordered_map<std::string,uint16_t> boneByName;for(uint16_t i=0;i<mesh.bones.size();++i)boneByName[lowerAscii(mesh.bones[i].name)]=i;std::vector<int32_t> remap(mesh.bones.size(),-1);
  for(uint16_t part=0;part<partCount;++part){std::string partName;uint16_t bc=0;if(!p.rz(partName)||!p.ru16(bc)){error="SMPARAMS partition truncated";return false;}if(bc>mesh.bones.size()){error="SMPARAMS partition bone count invalid";return false;}for(uint16_t j=0;j<bc;++j){std::string bn;uint32_t motionIndex=0;if(!p.rz(bn)||!p.ru32(motionIndex)){error="SMPARAMS bone map truncated";return false;}auto it=boneByName.find(lowerAscii(bn));if(it==boneByName.end()||motionIndex>=remap.size()){error="SMPARAMS bone map does not match OGF skeleton";return false;}if(remap[motionIndex]>=0&&remap[motionIndex]!=it->second){error="SMPARAMS bone remap conflicts";return false;}remap[motionIndex]=it->second;}}
  std::vector<bool> mappedBone(mesh.bones.size(),false);
  for(size_t i=0;i<remap.size();++i){if(remap[i]<0||mappedBone[size_t(remap[i])]){error="SMPARAMS bone map is incomplete or duplicated";return false;}mappedBone[size_t(remap[i])]=true;}
- uint16_t defCount=0;if(!p.ru16(defCount)){error="SMPARAMS motion count missing";return false;}std::vector<MotionDef> defs(defCount);for(uint16_t i=0;i<defCount;++i){std::string name;uint32_t flags=0;uint16_t boneOrPart=0,motionId=0;float speed=1,power=1,accrue=0,falloff=0;if(!p.rz(name)||!p.ru32(flags)||!p.ru16(boneOrPart)||!p.ru16(motionId)||!p.rf(speed)||!p.rf(power)||!p.rf(accrue)||!p.rf(falloff)){error="SMPARAMS motion definition truncated";return false;}(void)motionId;defs[i]={name,speed,(flags&(1u<<1))!=0};}
+ uint16_t defCount=0;if(!p.ru16(defCount)){error="SMPARAMS motion count missing";return false;}
+ std::vector<MotionDef> defs(defCount);
+ for(uint16_t i=0;i<defCount;++i){
+  std::string name;uint32_t flags=0;uint16_t boneOrPart=0,motionId=0;float speed=1,power=1,accrue=0,falloff=0;
+  if(!p.rz(name)||!p.ru32(flags)||!p.ru16(boneOrPart)||!p.ru16(motionId)||!p.rf(speed)||!p.rf(power)||!p.rf(accrue)||!p.rf(falloff)){error="SMPARAMS motion definition truncated";return false;}
+  defs[i]={name,speed,(flags&(1u<<1))!=0,motionId};
+  if(version>=4){
+   // The viewer does not execute gameplay marks, but must consume their exact
+   // layout before reading the next definition (KichRay CMotionDef::Load).
+   uint32_t marks=0;
+   if(!p.ru32(marks)||marks>4096){error="SMPARAMS motion mark count invalid";return false;}
+   for(uint32_t mark=0;mark<marks;++mark){
+    uint32_t intervals=0;
+    if(!p.rline()||!p.ru32(intervals)||intervals>1000000||size_t(intervals)>(p.b.size-p.at)/8){error="SMPARAMS motion mark is truncated";return false;}
+    for(uint32_t interval=0;interval<intervals;++interval){
+     float begin=0,end=0;
+     if(!p.rf(begin)||!p.rf(end)||end<begin){error="SMPARAMS motion mark interval invalid";return false;}
+    }
+   }
+  }
+ }
  Block countBlock{};if(!chunk(motions,0,countBlock)||countBlock.size<4){error="MOTIONS count chunk missing";return false;}const uint32_t motionCount=u32(countBlock.ptr);if(!motionCount||motionCount>16383){error="MOTIONS count invalid";return false;}
+ std::vector<int32_t> definitionByMotion(motionCount,-1);
+ std::unordered_map<std::string,size_t> definitionByName;
+ for(size_t i=0;i<defs.size();++i){
+  if(defs[i].motionId>=motionCount){error="SMPARAMS motion id is out of range";return false;}
+  if(definitionByMotion[defs[i].motionId]<0)definitionByMotion[defs[i].motionId]=int32_t(i);
+  definitionByName.emplace(lowerAscii(defs[i].name),i);
+ }
  // Index once: repeatedly rescanning the MOTIONS chunk is quadratic for a
  // large OMF. Limit decoded key memory before allocating any individual track.
  std::vector<Block> motionBlocks(size_t(motionCount)+1);
@@ -134,7 +248,13 @@ bool parseMotionContainer(Block src,Mesh& mesh,std::string& error,bool append){
  auto account=[&](size_t bytes){if(bytes>maxDecodedBytes-decodedBytes){error="Decoded animation exceeds the 256 MiB limit";return false;}decodedBytes+=bytes;return true;};
  if(append)for(const auto& existing:mesh.motions){if(!account(existing.tracks.size()*sizeof(MotionTrack)))return false;for(const auto& track:existing.tracks)if(!account(track.rotations.size()*sizeof(Quat)+track.translations.size()*sizeof(V3)))return false;}
  std::vector<Motion> loaded;loaded.reserve(motionCount);
- for(uint32_t mi=0;mi<motionCount;++mi){Block mb=motionBlocks[mi+1];if(!mb.ptr){error="MOTIONS entry missing: "+std::to_string(mi);return false;}Reader r{mb};Motion motion;if(!r.rz(motion.name)||!r.ru32(motion.frames)){error="Motion header truncated";return false;}if(!motion.frames||motion.frames>100000){error="Motion frame count invalid";return false;}motion.fps=30.f;if(mi<defs.size()){if(motion.name.empty())motion.name=defs[mi].name;motion.speed=defs[mi].speed;motion.stopAtEnd=defs[mi].stopAtEnd;}if(!account(mesh.bones.size()*sizeof(MotionTrack)))return false;motion.tracks.resize(mesh.bones.size());
+ for(uint32_t mi=0;mi<motionCount;++mi){Block mb=motionBlocks[mi+1];if(!mb.ptr){error="MOTIONS entry missing: "+std::to_string(mi);return false;}Reader r{mb};Motion motion;if(!r.rz(motion.name)||!r.ru32(motion.frames)){error="Motion header truncated";return false;}if(!motion.frames||motion.frames>100000){error="Motion frame count invalid";return false;}motion.fps=30.f;
+  int32_t definition=definitionByMotion[mi];
+  const auto named=definitionByName.find(lowerAscii(motion.name));
+  if(named!=definitionByName.end()&&defs[named->second].motionId==mi)definition=int32_t(named->second);
+  if(definition>=0){const auto& def=defs[size_t(definition)];if(motion.name.empty())motion.name=def.name;motion.speed=def.speed;motion.stopAtEnd=def.stopAtEnd;}
+  if(!account(mesh.bones.size()*sizeof(MotionTrack)))return false;
+  motion.tracks.resize(mesh.bones.size());
   for(size_t srcBone=0;srcBone<mesh.bones.size();++srcBone){uint8_t flags=0;if(!r.ru8(flags)){error="Motion bone flags truncated";return false;}if(flags&~(flTKeyPresent|flRKeyAbsent)){error="Unsupported SoC motion key flags";return false;}const int32_t mapped=remap[srcBone];if(mapped<0||size_t(mapped)>=motion.tracks.size()){error="Motion bone remap invalid";return false;}MotionTrack track;
    if(flags&flRKeyAbsent){if(!r.need(8)){error="Motion constant rotation truncated";return false;}if(!account(sizeof(Quat)))return false;track.rotations.push_back(readQuat(r.b.ptr+r.at));r.at+=8;}else{uint32_t crc=0;if(!r.ru32(crc)||!r.need(size_t(motion.frames)*8)){error="Motion rotation keys truncated";return false;}if(!account(size_t(motion.frames)*sizeof(Quat)))return false;track.rotations.resize(motion.frames);for(uint32_t k=0;k<motion.frames;++k)track.rotations[k]=readQuat(r.b.ptr+r.at+size_t(k)*8);r.at+=size_t(motion.frames)*8;}
    if(flags&flTKeyPresent){uint32_t crc=0;if(!r.ru32(crc)||!r.need(size_t(motion.frames)*3+24)){error="Motion translation keys truncated";return false;}const uint8_t* keys=r.b.ptr+r.at;r.at+=size_t(motion.frames)*3;V3 scale{},init{};if(!r.rv3(scale)||!r.rv3(init)){error="Motion translation quantizer truncated";return false;}if(!account(size_t(motion.frames)*sizeof(V3)))return false;track.translations.resize(motion.frames);for(uint32_t k=0;k<motion.frames;++k){const int8_t x=int8_t(keys[size_t(k)*3]),y=int8_t(keys[size_t(k)*3+1]),z=int8_t(keys[size_t(k)*3+2]);track.translations[k]={float(x)*scale.x+init.x,float(y)*scale.y+init.y,float(z)*scale.z+init.z};const auto& value=track.translations[k];if(!sane(value.x)||!sane(value.y)||!sane(value.z)){error="Decoded motion translation is out of range";return false;}}}else{V3 init{};if(!r.rv3(init)){error="Motion constant translation truncated";return false;}if(!account(sizeof(V3)))return false;track.translations.push_back(init);}
@@ -154,7 +274,7 @@ bool parseMotionContainer(Block src,Mesh& mesh,std::string& error,bool append){
 }
 
 bool parse(Block src,Mesh& mesh,std::string& error,int level){const size_t partsBefore=mesh.parts.size();if(level>16){error="OGF nesting too deep";return false;}if(!validChunks(src,error))return false;Block hdr{};if(!chunk(src,OGF_HEADER,hdr)||hdr.size<44||hdr.ptr[0]!=4){error="Expected OGF version 4 header";return false;}const unsigned typ=hdr.ptr[1];const bool known=typ==MT_NORMAL||typ==MT_HIERRARHY||typ==MT_PROGRESSIVE||typ==MT_SKELETON_ANIM||typ==MT_SKELETON_GEOMDEF_PM||typ==MT_SKELETON_GEOMDEF_ST||typ==MT_SKELETON_RIGID;if(!known){error="Unsupported OGF v4 visual type: "+std::to_string(typ);return false;}if(typ==MT_SKELETON_ANIM||typ==MT_SKELETON_GEOMDEF_PM||typ==MT_SKELETON_GEOMDEF_ST||typ==MT_SKELETON_RIGID)mesh.skeletalSource=true;if(level==0&&mesh.skeletalSource){if(!parseBones(src,mesh,error))return false;parseMotionRefs(src,mesh);Block motions{},params{};const bool hasMotions=chunk(src,OGF_S_MOTIONS,motions),hasParams=chunk(src,OGF_S_SMPARAMS,params);if(hasMotions||hasParams){if(!hasMotions||!hasParams){error="Embedded motion chunks are incomplete";return false;}if(!parseMotionContainer(src,mesh,error,false))return false;}}
- Block vb{},ib{};const bool hasV=chunk(src,OGF_VERTICES,vb),hasI=chunk(src,OGF_INDICES,ib);if(hasV!=hasI){error="OGF has vertices without indices (or indices without vertices)";return false;}if(hasV&&hasI){if(mesh.parts.size()>=4096){error="OGF mesh part limit exceeded";return false;}MeshPart part;if(!readMaterial(src,part,error))return false;const bool skeletal=typ==MT_SKELETON_GEOMDEF_PM||typ==MT_SKELETON_GEOMDEF_ST||typ==MT_SKELETON_RIGID;if(skeletal){if(!appendSkeletal(vb,ib,part,error))return false;}else{if(!appendStatic(vb,ib,part,error))return false;}mesh.parts.push_back(std::move(part));++mesh.sourceParts;}
+ Block vb{},ib{};const bool hasV=chunk(src,OGF_VERTICES,vb),hasI=chunk(src,OGF_INDICES,ib);if(hasV!=hasI){error="OGF has vertices without indices (or indices without vertices)";return false;}if(hasV&&hasI){if(mesh.parts.size()>=4096){error="OGF mesh part limit exceeded";return false;}MeshPart part;if(!readMaterial(src,part,error))return false;const bool skeletal=typ==MT_SKELETON_GEOMDEF_PM||typ==MT_SKELETON_GEOMDEF_ST||typ==MT_SKELETON_RIGID;if(skeletal){if(!appendSkeletal(vb,ib,part,error))return false;}else{if(!appendStatic(vb,ib,part,error))return false;}if((typ==MT_PROGRESSIVE||typ==MT_SKELETON_GEOMDEF_PM)&&!selectProgressiveWindow(src,part,error))return false;mesh.parts.push_back(std::move(part));++mesh.sourceParts;}
  Block children{};if(chunk(src,OGF_CHILDREN,children)){if(!validChunks(children,error))return false;size_t off=0;while(off+8<=children.size){const uint32_t length=u32(children.ptr+off+4);off+=8;if(length>children.size-off){error="OGF child size out of range";return false;}if(!parse({children.ptr+off,length},mesh,error,level+1))return false;off+=length;}if(off!=children.size){error="OGF children chunk has trailing bytes";return false;}}
  if(mesh.parts.size()>partsBefore) return true;
  Block links{};

@@ -230,6 +230,16 @@ GrayImage ToGrayImage(const Image& src,uint32_t maxDimension){
  for(size_t i=0;i<resized.pixels.size();++i)out.pixels[i]=b8(lum(resized.pixels[i]));
  return out;
 }
+GrayImage MakeDiffuseHeightLift(const Image& diffuse,uint32_t width,uint32_t height){
+ if(!diffuse.valid()||!width||!height||width>4096||height>4096)return {};
+ // Premultiply BEFORE resampling: hidden RGB under a transparent texel must
+ // never bleed into the raised surface when diffuse and bump sizes differ.
+ // Use the same luminance weights as the material generator. This is an
+ // artistic height source, not an estimate of physical geometry from colour.
+ GrayImage source;source.w=diffuse.w;source.h=diffuse.h;source.pixels.resize(diffuse.pixels.size());
+ for(size_t i=0;i<diffuse.pixels.size();++i){const Pixel p=diffuse.pixels[i];source.pixels[i]=b8(lum(p)*(p.a/255.f));}
+ return resizeGrayExact(source,width,height);
+}
 Image GrayToImage(const GrayImage& src,uint32_t maxDimension){
  if(!src.valid())return {};
  uint32_t w=src.w,h=src.h;

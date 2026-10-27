@@ -195,6 +195,10 @@ copy /Y "$(ProjectDir)assets\Preview.hlsl" "$(OutDir)assets\Preview.hlsl" &gt;nu
     <ClInclude Include="src\EngineLighting.h" />
     <ClInclude Include="src\EngineTexture.h" />
     <ClInclude Include="src\EditorWorkflow.h" />
+    <ClInclude Include="src\FlightInput.h" />
+    <ClInclude Include="src\AttachmentPreview.h" />
+    <ClInclude Include="src\AttachmentHistory.h" />
+    <ClInclude Include="src\RendererSmoke.h" />
     <ClInclude Include="src\EditorUI.h" />
     <ClInclude Include="src\MaterialDocument.h" />
     <ClInclude Include="third_party\imgui\imgui.h" />

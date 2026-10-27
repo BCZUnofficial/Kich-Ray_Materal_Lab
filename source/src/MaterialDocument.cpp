@@ -397,10 +397,18 @@ void MaterialDocument::SetHistoryBudget(size_t bytes, size_t maximumSteps) {
 }
 void MaterialDocument::MarkSaved() { EndStroke(); CommitAdjustments(); savedState_ = state_; }
 
-bool MaterialDocument::Adjust(const MaterialAdjustments& s) {
+bool MaterialDocument::Adjust(const MaterialAdjustments& s, const Image* diffuse) {
     if (!Valid() || InStroke()) return false;
-    for (float value : {s.normalStrength,s.gloss,s.height,s.blur,s.sharpness})
+    for (float value : {s.normalStrength,s.gloss,s.height,s.blur,s.sharpness,s.diffuseHeightStrength})
         if (!std::isfinite(value) || value < 0) return false;
+    // Validate the optional source before capturing or replacing a pending
+    // draft. A missing/failed diffuse load must leave that draft intact.
+    if (s.heightFromDiffuse && (!diffuse || !diffuse->valid())) return false;
+    GrayImage lift;
+    if (s.heightFromDiffuse && s.diffuseHeightStrength > 0) {
+        lift = MakeDiffuseHeightLift(*diffuse, Width(), HeightPixels());
+        if (!lift.valid()) return false;
+    }
     if (!adjustmentNormal_.valid()) {
         // Allocate all snapshots before installing them.
         Image n=normal_; GrayImage g=gloss_,h=height_;
@@ -427,6 +435,7 @@ bool MaterialDocument::Adjust(const MaterialAdjustments& s) {
         }
         if(s.gloss!=1)gloss.pixels[i]=byte(adjustmentGloss_.pixels[i]*std::min(s.gloss,2.f));
         if(s.height!=1)height.pixels[i]=byte(128+(int(adjustmentHeight_.pixels[i])-128)*std::min(s.height,2.f));
+        if(lift.valid())height.pixels[i]=byte(height.pixels[i]+lift.pixels[i]*std::min(s.diffuseHeightStrength,1.f));
     }
     adjustmentChanged_=!equal(next.pixels,adjustmentNormal_.pixels)||gloss.pixels!=adjustmentGloss_.pixels||height.pixels!=adjustmentHeight_.pixels;
     normal_=std::move(next);gloss_=std::move(gloss);height_=std::move(height);

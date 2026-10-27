@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
@@ -135,6 +136,96 @@ void persistence(const std::filesystem::path& directory) {
     for (const auto& entry : std::filesystem::directory_iterator(directory))
         check(entry.path().filename().string().find(".writing-") == std::string::npos, "staging files cleaned after both success and failure");
 }
+void diffuseHeightLift(const std::filesystem::path& directory) {
+    std::string error;
+    auto original=material(6,1);
+    const uint8_t heights[]={30,50,70,90,110,230};
+    for(size_t i=0;i<6;++i)original.bumpX.pixels[i].a=heights[i];
+    lab::MaterialDocument document;
+    check(document.Load(original,error),"load diffuse height fixture");
+    const auto normal=document.Normal();const auto gloss=document.Gloss().pixels;
+    lab::Image diffuse;diffuse.w=6;diffuse.h=1;
+    diffuse.pixels={{0,0,0,255},{64,64,64,255},{128,128,128,255},
+                    {255,255,255,255},{255,255,255,0},{255,255,255,128}};
+    lab::MaterialAdjustments settings;
+    settings.heightFromDiffuse=true;settings.diffuseHeightStrength=.5f;
+    check(!document.Adjust(settings)&&same(document.Preview(0),original)&&!document.HasPendingAdjustments(),
+          "height lift requires diffuse without opening or changing a draft");
+    check(document.Adjust(settings,&diffuse)&&document.HasPendingAdjustments(),"diffuse height lift creates a live draft");
+    const std::vector<uint8_t> expected{30,82,134,218,110,255};
+    check(document.Height().pixels==expected,"height lift adds masked luminance to existing height and clamps saturation");
+    check(same(document.Normal(),normal)&&document.Gloss().pixels==gloss,"height lift preserves authored normal and gloss layers");
+    check(document.UndoCount()==0&&!document.BeginStroke(lab::BrushOperation::HeightAdd,{2,.1f,.5f}),
+          "pending height lift keeps ordinary draft and stroke rules");
+    const auto first=document.Preview(0);
+    check(document.Adjust(settings,&diffuse)&&same(document.Preview(0),first),"repeated height previews cannot accumulate");
+    lab::Image invalid;
+    check(!document.Adjust(settings,&invalid)&&same(document.Preview(0),first),"invalid diffuse leaves an existing draft intact");
+    auto bad=settings;bad.diffuseHeightStrength=std::numeric_limits<float>::quiet_NaN();
+    check(!document.Adjust(bad,&diffuse)&&same(document.Preview(0),first),"NaN lift cannot corrupt a pending draft");
+    bad=settings;bad.diffuseHeightStrength=-1;
+    check(!document.Adjust(bad,&diffuse)&&same(document.Preview(0),first),"negative lift cannot lower a height map accidentally");
+    settings.diffuseHeightStrength=.25f;
+    check(document.Adjust(settings,&diffuse)&&document.Height().pixels==std::vector<uint8_t>({30,66,102,154,110,255}),
+          "lowering lift strength recomputes from the immutable pre-adjustment height");
+    settings.heightFromDiffuse=false;
+    check(document.Adjust(settings)&&!document.HasPendingAdjustments()&&same(document.Preview(0),original),
+          "unchecking height lift restores the baseline without requiring diffuse or consuming history");
+    settings.heightFromDiffuse=true;settings.diffuseHeightStrength=.5f;
+    check(document.Adjust(settings,&diffuse),"restart lift after checkbox cancellation");
+    document.CancelAdjustments();
+    check(!document.HasPendingAdjustments()&&!document.IsDirty()&&same(document.Preview(0),original),
+          "Discard restores all original packed channels");
+    check(document.Adjust(settings,&diffuse)&&document.CommitAdjustments()&&document.UndoCount()==1,
+          "Apply stores one complete lift edit");
+    check(document.Undo()&&same(document.Preview(0),original),"height lift undo restores pre-adjustment height");
+    check(document.Redo()&&document.Height().pixels==expected&&same(document.Normal(),normal)&&document.Gloss().pixels==gloss,
+          "height lift redo restores only its intended layer changes");
+    const auto applied=document.Preview(0);
+    const auto path=directory/"diffuse-height.krlab";
+    check(document.Save(path,error),"lifted height saves in the ordinary material session");
+    lab::MaterialDocument reopened;
+    check(reopened.Open(path,error)&&same(reopened.Preview(0),applied),"lifted material reopens without needing the diffuse source");
+    // The authored height multiplier and the new positive lift are independent:
+    // a multiplier of zero first flattens at 128, then adds texture-derived lift.
+    check(document.Load(original,error),"reload fixture for combined height controls");
+    settings.height=0;settings.diffuseHeightStrength=.25f;
+    check(document.Adjust(settings,&diffuse)&&document.Height().pixels==std::vector<uint8_t>({128,144,160,192,128,160}),
+          "texture lift applies after the existing height-range multiplier");
+    document.CancelAdjustments();
+    settings.height=1;settings.diffuseHeightStrength=0;
+    check(document.Adjust(settings,&diffuse)&&!document.HasPendingAdjustments()&&!document.IsDirty(),
+          "zero lift is byte-exact and consumes no history");
+
+    lab::Image edge;edge.w=2;edge.h=1;
+    edge.pixels={{0,0,0,255},{255,255,255,0}};
+    auto field=lab::MakeDiffuseHeightLift(edge,1,1);
+    check(field.valid()&&field.pixels[0]==0,"transparent white RGB cannot create relief after downsampling");
+    edge.pixels={{255,255,255,255},{0,0,0,0}};
+    field=lab::MakeDiffuseHeightLift(edge,1,1);
+    check(field.valid()&&field.pixels[0]==128,"opaque light contributes its coverage exactly once during downsampling");
+    field=lab::MakeDiffuseHeightLift(edge,4,1);
+    check(field.valid()&&field.w==4&&field.h==1&&field.pixels==std::vector<uint8_t>({255,191,64,0}),
+          "diffuse-to-bump upsampling aligns texel centres with bilinear filtering");
+    edge.pixels={{255,255,255,0},{200,100,30,0}};
+    field=lab::MakeDiffuseHeightLift(edge,3,5);
+    check(field.valid()&&std::all_of(field.pixels.begin(),field.pixels.end(),[](uint8_t p){return p==0;}),
+          "fully transparent diffuse remains a no-op at a different resolution");
+    check(!lab::MakeDiffuseHeightLift(edge,0,1).valid()&&!lab::MakeDiffuseHeightLift(edge,4097,1).valid(),
+          "invalid height output dimensions are rejected before allocation");
+
+    // Existing brush height, not the originally imported height, is the baseline
+    // for a later slider adjustment and must survive both Discard and Undo.
+    check(document.Load(material(),error)&&stroke(document,lab::BrushOperation::HeightAdd),"paint height before a lift");
+    const auto painted=document.Preview(0);const auto paintedHeight=document.Height().pixels;
+    diffuse.w=diffuse.h=1;diffuse.pixels={{128,128,128,255}};
+    settings.diffuseHeightStrength=.125f;
+    check(document.Adjust(settings,&diffuse),"lift a material with existing brush edits");
+    for(size_t i=0;i<paintedHeight.size();++i)
+        check(document.Height().pixels[i]==std::min(255,int(paintedHeight[i])+16),"diffuse lift preserves prior per-pixel brush height");
+    check(document.CommitAdjustments()&&document.UndoCount()==2&&document.Undo()&&same(document.Preview(0),painted),
+          "undoing a later lift retains the earlier height brush stroke");
+}
 }
 
 int main() {
@@ -143,9 +234,9 @@ int main() {
         ("material-lab-document-tests-" + std::to_string(suffix));
     try {
         std::filesystem::create_directories(directory);
-        losslessAndNoOp(); strokesAndHistory(); strokeCancelAndCoverage(); memoryBudget(); persistence(directory);
+        losslessAndNoOp(); strokesAndHistory(); strokeCancelAndCoverage(); memoryBudget(); persistence(directory); diffuseHeightLift(directory);
         std::filesystem::remove_all(directory);
-        std::cout << "PASS: material document, native dimensions, per-stroke undo/redo, no-op, clear/cancel, history budget, transactional sessions\n";
+        std::cout << "PASS: material document, native dimensions, per-stroke undo/redo, no-op, clear/cancel, history budget, transactional sessions, diffuse-derived height lift\n";
         return 0;
     } catch (const std::exception& exception) {
         std::cerr << "FAIL: " << exception.what() << '\n'; return 1;

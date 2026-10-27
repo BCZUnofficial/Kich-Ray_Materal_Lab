@@ -1,0 +1,115 @@
+Start testing: Oct 25 22:58 IST
+----------------------------------------------------------
+1/7 Testing: viewport-tests
+1/7 Test: viewport-tests
+Command: "/workspace/scratch/c2bdda914441/material-lab/build-sanitizers/viewport-tests"
+Directory: /workspace/scratch/c2bdda914441/material-lab/build-sanitizers
+"viewport-tests" start time: Oct 25 22:58 IST
+Output:
+----------------------------------------------------------
+PASS: camera, framing, 16 periodic undo cases, surface stroke sampling, diffuse alpha
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"viewport-tests" end time: Oct 25 22:58 IST
+"viewport-tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/7 Testing: brush-tests
+2/7 Test: brush-tests
+Command: "/workspace/scratch/c2bdda914441/material-lab/build-sanitizers/brush-tests"
+Directory: /workspace/scratch/c2bdda914441/material-lab/build-sanitizers
+"brush-tests" start time: Oct 25 22:58 IST
+Output:
+----------------------------------------------------------
+PASS: brush direction, stroke coverage, zero-strength, bounds, height identity/resolution, packed-channel preservation, BC3 correction, SoC convention, area mipmaps, paired export
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"brush-tests" end time: Oct 25 22:58 IST
+"brush-tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/7 Testing: parser-tests
+3/7 Test: parser-tests
+Command: "/workspace/scratch/c2bdda914441/material-lab/build-sanitizers/parser-tests"
+Directory: /workspace/scratch/c2bdda914441/material-lab/build-sanitizers
+"parser-tests" start time: Oct 25 22:58 IST
+Output:
+----------------------------------------------------------
+PASS: DDS metadata/pitch/masks/4K, OGF chunk hierarchy/bones, OMF mapping/transactionality and mutation corpus
+<end of output>
+Test time =   0.38 sec
+----------------------------------------------------------
+Test Passed.
+"parser-tests" end time: Oct 25 22:58 IST
+"parser-tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/7 Testing: document-tests
+4/7 Test: document-tests
+Command: "/workspace/scratch/c2bdda914441/material-lab/build-sanitizers/document-tests"
+Directory: /workspace/scratch/c2bdda914441/material-lab/build-sanitizers
+"document-tests" start time: Oct 25 22:58 IST
+Output:
+----------------------------------------------------------
+PASS: material document, native dimensions, per-stroke undo/redo, no-op, clear/cancel, history budget, transactional sessions
+<end of output>
+Test time =   0.13 sec
+----------------------------------------------------------
+Test Passed.
+"document-tests" end time: Oct 25 22:58 IST
+"document-tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/7 Testing: workflow-tests
+5/7 Test: workflow-tests
+Command: "/workspace/scratch/c2bdda914441/material-lab/build-sanitizers/workflow-tests"
+Directory: /workspace/scratch/c2bdda914441/material-lab/build-sanitizers
+"workflow-tests" start time: Oct 25 22:58 IST
+Output:
+----------------------------------------------------------
+PASS: minimal baseline, live draft/apply/discard, exact DDS mip preview, gloss toggle, engine LUT/THM, paths, animations and axis views
+<end of output>
+Test time =   0.21 sec
+----------------------------------------------------------
+Test Passed.
+"workflow-tests" end time: Oct 25 22:58 IST
+"workflow-tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+6/7 Testing: surface-relief-tests
+6/7 Test: surface-relief-tests
+Command: "/workspace/scratch/c2bdda914441/material-lab/build-sanitizers/surface-relief-tests"
+Directory: /workspace/scratch/c2bdda914441/material-lab/build-sanitizers
+"surface-relief-tests" start time: Oct 25 22:58 IST
+Output:
+----------------------------------------------------------
+PASS: texture-derived relief, texel alignment, one-click undo, alpha, guard cases and BC3 export
+<end of output>
+Test time =   0.36 sec
+----------------------------------------------------------
+Test Passed.
+"surface-relief-tests" end time: Oct 25 22:58 IST
+"surface-relief-tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/7 Testing: editor-ui-tests
+7/7 Test: editor-ui-tests
+Command: "/workspace/scratch/c2bdda914441/material-lab/build-sanitizers/editor-ui-tests"
+Directory: /workspace/scratch/c2bdda914441/material-lab/build-sanitizers
+"editor-ui-tests" start time: Oct 25 22:58 IST
+Output:
+----------------------------------------------------------
+PASS: 672 actual UI frames, six tabs, four sizes, four DPI scales; isolated pane and viewport/toolbar bounds; real mouse input, disabled actions and independent scrolling
+<end of output>
+Test time =   0.33 sec
+----------------------------------------------------------
+Test Passed.
+"editor-ui-tests" end time: Oct 25 22:58 IST
+"editor-ui-tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Oct 25 22:58 IST

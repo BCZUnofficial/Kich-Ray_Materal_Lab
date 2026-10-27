@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(MaterialLabChecks VERSION 0.12.0 LANGUAGES CXX)
+project(MaterialLabChecks VERSION 0.13.0 LANGUAGES CXX)
 
 # Portable checks use production code. Build the Windows application with
 # KichRay_MaterialLab.sln (Visual Studio 2022).
@@ -49,6 +49,9 @@ materiallab_test(document-tests tests/MaterialDocumentTests.cpp)
 materiallab_test(workflow-tests tests/WorkflowTests.cpp)
 materiallab_test(surface-relief-tests tests/SurfaceReliefTests.cpp)
 materiallab_test(editor-ui-tests tests/EditorUITests.cpp)
+materiallab_test(flight-input-tests tests/FlightInputTests.cpp)
+materiallab_test(attachment-history-tests tests/AttachmentHistoryTests.cpp)
+materiallab_test(renderer-preview-tests tests/RendererPreviewTests.cpp)
 target_link_libraries(editor-ui-tests PRIVATE editor_ui)
 add_executable(reference-audit tools/MaterialReferenceAudit.cpp)
 target_link_libraries(reference-audit PRIVATE material_core)

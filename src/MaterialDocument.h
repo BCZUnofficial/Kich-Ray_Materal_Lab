@@ -45,7 +45,9 @@ public:
     bool Undo();
     bool Redo();
     bool Clear();
-    bool Adjust(const MaterialAdjustments& settings);
+    // Height lift reads diffuse colour/alpha at the material's texel scale;
+    // every preview is relative to the pre-adjustment snapshot, never itself.
+    bool Adjust(const MaterialAdjustments& settings, const Image* diffuse = nullptr);
     bool CommitAdjustments();
     void CancelAdjustments();
     bool HasPendingAdjustments() const { return adjustmentChanged_; }

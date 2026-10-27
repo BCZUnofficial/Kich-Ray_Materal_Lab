@@ -1,9 +1,10 @@
 # Kich-Ray Material Lab
 
-Standalone Windows / DirectX 11 material editor and OGF viewer for **S.T.A.L.K.E.R.: Shadow of Chernobyl**. Version **0.12.0**.
+Standalone Windows / DirectX 11 material editor and OGF viewer for **S.T.A.L.K.E.R.: Shadow of Chernobyl**. Version **0.13.0**.
 
 See [AUDIT_0.11.0_RU.md](AUDIT_0.11.0_RU.md) for the Russian audit, engine references and actual validation limits.
 The startup and surface-stamp update is described in [UPDATE_0.12.0_RU.md](UPDATE_0.12.0_RU.md).
+The camera, DX11 lighting, progressive OGF and animation-prop update is described in [UPDATE_0.13.0_RU.md](UPDATE_0.13.0_RU.md).
 
 ## Build and run
 
@@ -41,6 +42,8 @@ Toolbar buttons have delayed Russian tooltips. Active buttons are blue; unavaila
 
 In flight mode, drag to look and use WASD/QE to move; Shift accelerates and Ctrl slows movement. Middle drag pans. In brush, light and model modes, right drag controls the camera. The wheel changes distance outside Brush mode. In Brush mode, the wheel over the model changes brush size. Hover any slider and turn the wheel to change its value; arrow keys and numeric keyboard entry do not adjust sliders. Choose brush direction with the Add/Remove controls. `H` hides the selected mesh; Shift+H shows all. Shortcuts do not interfere with text entry.
 
+Flight reads physical key state. Keys consumed by Ctrl+S, a dialog, text entry or focus loss must be released before they can move the camera again. Opening another model or the test cube preserves the camera, scene light and model rotation; use **FT/F** to fit deliberately or **RS/Home** to reset.
+
 ## Material workflow
 
 1. Open an OGF or use the test cube. OGF texture references are resolved relative to the sibling `textures` directory; shared texture references share their material.
@@ -68,6 +71,8 @@ The separate **Нанесение рельефа поверхности** subtab
 
 A `.krlab` session stores the original decoded bump pair, baseline layers and current edited layers with a checksum. It does not store the mesh, diffuse image, animation, or undo history. Open the corresponding model/material before loading the session. Saves use a temporary file and atomic replacement; failed loads keep the current document intact. Old `.krlt` temporary snapshots are not automatically imported. On a graphics-device failure, the application attempts to save dirty materials under `%TEMP%/MaterialLab-recovery` and reports the path.
 
+**Материал → Поднять по базовой текстуре** adds an optional, separately adjustable height lift from diffuse luminance and opacity. It works relative to the committed height snapshot, so moving the slider does not accumulate changes. Black/transparent texels add nothing; the result is clamped to the height channel range. Apply, Discard and Undo/Redo include this lift. It affects bump relief and export, not mesh positions or the silhouette; diffuse color contrast is an artistic height cue, not measured depth.
+
 ### SoC DDS convention
 
 `_bump`: R = encoded gloss, G = normal Z, B = normal Y, A = normal X. `_bump#`: RGB = normal correction, A = height. The SoC preview reconstructs `bump.abg + bumpX.rgb - 1`, then applies the engine's intentional `normal.z *= 0.5` boost once. Gloss is squared in the shader.
@@ -76,9 +81,9 @@ With Gloss enabled, an untouched DDS pair imported during the current session is
 
 ### Engine lighting and paths
 
-Direct light uses the pinned KichRay/SoC R2 material lookup table and `u_diffuse2s` intensity formula, with no minimum fake specular contribution. Light color, intensity and viewport background are editable and remembered in `MaterialLab.ini`. The directional source has no distance attenuation, as in R2 `plight_infinity`.
+Lighting follows KichRay **DX11/R4** at `8f34fb7a0fbf8c5633494545130153031a78f953`: its material lookup table, `DirectLight`, gloss factor, opaque GBuffer gloss/material precision, `Hemisphere`, forward indirect light and fixed exposure. Exported skeletal tangent/binormal data is retained with its handedness. Gloss can be inspected independently of the normal-preview toggle. Light direction/color/intensity, ambient, uniform environment color, hemisphere visibility, exposure and gloss factor are editable and remembered in `MaterialLab.ini`.
 
-The diffuse `.thm`, when available beside its texture, supplies the material class plus blend weight and optional custom bump filename. A Scene override is available for inspection; the editor does not rewrite THM. A THM with bump disabled produces a warning: exporting a pair alone does not activate it in the engine. `models\selflight` and `models\selflightl` receive the source shader's flat-normal emission. Other shader variants, `textures.ltx` overrides, level environment maps, shadows, parallax, detail textures, exposure and bloom are not reproduced. Gloss is a highlight mask, not an emission map.
+The diffuse `.thm`, when available beside its texture, supplies the material class plus blend weight and optional custom bump filename. A Scene override is available for inspection; the editor does not rewrite THM. A THM with bump disabled produces a warning: exporting a pair alone does not activate it in the engine. `models\selflight` and `models\selflightl` receive the source shader's flat-normal emission. Environment is represented by one uniform color; actual weather cubemaps, level shadows, fog, automatic exposure adaptation, bloom, parallax, detail textures, `textures.ltx` overrides and all shader variants are not reproduced. Matching the material-light formulas alone does not reproduce an entire in-game scene. Gloss is a highlight mask, not an emission map.
 
 OGF selection remembers its folder. Export starts in the model's resolved texture-reference folder, then falls back to the last successful export folder, then the OGF folder. Automatic naming uses the model texture name even when a different diffuse was loaded manually. A custom bump name in THM still needs to match the selected export name.
 
@@ -88,13 +93,19 @@ Alpha is enabled by default. **Авто** selects cutout for binary alpha and bl
 
 ## Models and animation
 
-Supported target: OGF v4 static meshes and SoC 1-link / 2-link skeletal geometry, embedded child meshes, material references, bind skeleton and individual motion preview. OMF is searched beside the OGF and one directory above it. Animation uses 30 FPS keys, quaternion interpolation and quantized translations. Clips are sorted alphabetically (including Cyrillic case folding), retain their original engine index, scroll, and reopen around the last selected clip. Selection is remembered per model across restarts. Leaving the Animation tab stops playback and restores bind pose; playback locks material editing.
+Supported target: OGF v4 static meshes and SoC 1-link / 2-link skeletal geometry, embedded child meshes, material references, bind skeleton and individual motion preview. Progressive meshes use their maximum-detail `OGF_SWIDATA` window instead of drawing overlapping LOD windows together. All external OMF references are considered; the search includes the model folder, its parent and the actual ancestor `meshes` folder. SMPARAMS versions 1–4 and explicit motion IDs are supported; v4 motion marks are validated but do not execute gameplay events. Animation uses 30 FPS keys, quaternion interpolation and quantized translations. Clips are sorted alphabetically (including Cyrillic case folding), retain their engine names, scroll, and reopen around the last selected clip. Selection is remembered per model across restarts. The Animation tab locks material editing while playing and paused; leaving it stops playback and restores bind pose.
+
+**Анимация → Показывать точки biped** displays clickable `bip*` bones. Click a point or choose a bone to load a prop OGF or select one of up to 12 recent props for that bone. Props retain their authored units and bind geometry; local XYZ translation, rotation in degrees and scale let you fit a weapon, bottle or food model to a hand. One prop per bone is supported, with multiple occupied bones at once. A prop follows the current actor bone pose and uses its own diffuse/bump/THM material; it never joins the editable material list or mesh picking. The prop's own animation clips are not played or blended with the actor.
+
+Leaving Animation or replacing the actor unloads all active props. Recent paths and transforms remain in `%LOCALAPPDATA%/KichRay/MaterialLab/AttachmentHistory.txt` (with a portable fallback next to the executable when LOCALAPPDATA is unavailable). They are loaded again after restart and selected explicitly from the bone's menu. The history stores references; moving or deleting a referenced OGF does not move or delete the original asset.
+
+**Анимация → Сохранить PNG с прозрачным фоном…** captures the current model, props, pose and lighting. The larger image dimension is at most **1024**, retaining the viewport aspect ratio. A separate render target and 2× supersampling produce straight-alpha PNG without a background, UI, bone markers, wireframe, brush cursor, hover or selection outlines. The live viewport, camera and light are preserved. This button is also available for a model without animation clips.
 
 External `OGF_CHILDREN_L` references, runtime animation mixing, gameplay IK, FX blending and the complete engine lighting pipeline are not implemented. The viewer is an inspection tool, not an exact in-game screenshot renderer.
 
 ## Validation
 
-Portable tests cover minimal baselines, live slider apply/discard, export/preview mip parity, gloss switching, five texture-derived surface profiles, radius-independent UV alignment, one-click history and alpha, pinned R2 lookup values, THM metadata, animation/path selection, camera/framing, brush mathematics, native-size document state and undo/redo, transactional sessions, malformed DDS/OGF/OMF inputs, and the production ImGui layout with mouse input and scrolling. They can run without Windows:
+Portable tests cover minimal baselines, live slider apply/discard, diffuse-derived height, export/preview mip parity, gloss switching, five texture-derived surface profiles, radius-independent UV alignment, one-click history and alpha, pinned material lookup values, THM metadata, animation/path selection, camera/framing and physical-key latches, persistent prop history, transparent-capture sizing/alpha resolution, brush mathematics, native-size document state and undo/redo, transactional sessions, malformed DDS/OGF/OMF inputs including progressive windows, and the production ImGui layout with mouse input and scrolling. They can run without Windows:
 
 ```sh
 cmake -S . -B build-tests -DCMAKE_BUILD_TYPE=Debug
@@ -111,4 +122,4 @@ The GitHub workflow packages verified x64/Win32 executables and their shader und
 - Dear ImGui: https://github.com/ocornut/imgui/tree/v1.91.9b — included under MIT, see `third_party/imgui/LICENSE.txt`.
 - X-Ray SoC shader and format reference: https://github.com/OpenXRay/xray/tree/d7b23596a70374d8a7ffda0e98852f93ce985182/trunk — `resources/shaders/r2/sload.h`, `xrDXT/NormalMapGen.cpp`, `xr_3da/SkeletonMotions.cpp`.
 
-The Kich-Ray engine repository is maintained separately from this standalone editor. This audit uses `BCZUnofficial/kichray` commit `01b239eec4f3b612089a198f13ebfea88ef981ca`; exact source links and preset formulas are in `AUDIT_0.11.0_RU.md`.
+The Kich-Ray engine repository is maintained separately from this standalone editor. The older audit uses `BCZUnofficial/kichray` commit `01b239eec4f3b612089a198f13ebfea88ef981ca`; the 0.13.0 lighting comparison uses the DX11/R4 branch at `8f34fb7a0fbf8c5633494545130153031a78f953`. Exact references and validation limits are documented in the corresponding audit/update files.

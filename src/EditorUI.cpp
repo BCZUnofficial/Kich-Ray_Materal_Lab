@@ -85,7 +85,7 @@ void exportPane(EditorUIState& s,const EditorUICallback& action) {
     if(!s.documentInfo.empty())ImGui::TextWrapped("%s",s.documentInfo.c_str());
 }
 void materialPane(EditorUIState& s,const EditorUICallback& action) {
-    section("Материал ТЧ / Kich-Ray R2");
+    section("Материал ТЧ / Kich-Ray DX11");
     if(!s.documentInfo.empty())ImGui::TextWrapped("%s",s.documentInfo.c_str());
     bool preview=ImGui::Checkbox("Показывать bump",&s.bump);
     preview|=ImGui::ColorEdit3("Цвет материала (просмотр)",s.tint,ImGuiColorEditFlags_NoInputs);
@@ -98,6 +98,12 @@ void materialPane(EditorUIState& s,const EditorUICallback& action) {
     changed|=wheelSlider("Сила нормалей",&s.adjustments.normalStrength,0,4,"%.2fx",.05f);
     changed|=wheelSlider("Блеск",&s.adjustments.gloss,0,2,"%.2fx",.02f);
     changed|=wheelSlider("Высота",&s.adjustments.height,0,2,"%.2fx",.02f);
+    ImGui::BeginDisabled(!s.hasDiffuse);
+    changed|=ImGui::Checkbox("Поднять по базовой текстуре",&s.adjustments.heightFromDiffuse);
+    ImGui::BeginDisabled(!s.adjustments.heightFromDiffuse);
+    changed|=wheelSlider("Подъём из diffuse",&s.adjustments.diffuseHeightStrength,0,1,"%.2f",.01f);
+    ImGui::EndDisabled();ImGui::EndDisabled();
+    if(s.adjustments.heightFromDiffuse)ImGui::TextWrapped("Светлые непрозрачные участки diffuse поднимаются сильнее. Это интерпретация рисунка текстуры; силуэт модели не меняется.");
     changed|=wheelSlider("Сглаживание",&s.adjustments.blur,0,1,"%.2f",.02f);
     changed|=wheelSlider("Резкость",&s.adjustments.sharpness,0,2,"%.2f",.02f);
     changed|=ImGui::Checkbox("Инверсия Y",&s.adjustments.invertY);
@@ -129,12 +135,16 @@ void scenePane(EditorUIState& s,const EditorUICallback& action) {
     changed|=wheelSlider("Высота света",&s.lightElevation,-80,80,"%.0f°");
     changed|=wheelSlider("Сила света",&s.lightIntensity,0,8,"%.2fx",.05f);
     changed|=ImGui::ColorEdit3("Свет",s.lightColor,ImGuiColorEditFlags_NoInputs);
-    changed|=ImGui::ColorEdit3("Окружение",s.ambient,ImGuiColorEditFlags_NoInputs);
+    changed|=ImGui::ColorEdit3("Фоновый свет (ambient)",s.ambient,ImGuiColorEditFlags_NoInputs);
+    changed|=ImGui::ColorEdit3("Небо / отражённый свет",s.environment,ImGuiColorEditFlags_NoInputs);
+    changed|=wheelSlider("Доля полусферы",&s.hemisphere,0,1,"%.2f",.02f);
+    changed|=wheelSlider("Экспозиция R4",&s.exposure,0,4,"%.2fx",.05f);
+    changed|=wheelSlider("Множитель gloss R4",&s.glossFactor,0,4,"%.2fx",.05f);
     const char* materials[]={"Авто · из THM","0 · Oren–Nayar","1 · Blinn","2 · Phong","3 · Metal"};
     changed|=ImGui::Combo("Класс THM (просмотр)",&s.materialClass,materials,5);
     if(changed)action(EditorAction::LightSettings,0);
     if(ImGui::ColorEdit3("Фон",s.background,ImGuiColorEditFlags_NoInputs))action(EditorAction::BackgroundSettings,0);
-    ImGui::TextWrapped("Прямой свет: таблица R2. Класс материала берётся из THM; без THM — Blinn. Погода, окружение уровня и bloom здесь не воспроизводятся.");
+    ImGui::TextWrapped("Свет и материал — по DX11/R4 Kich-Ray. Цвет неба задаёт однородное окружение. Карты окружения уровня, тени и погода требуют данных игровой сцены.");
     ImGui::BeginDisabled(!s.hasSkeleton);
     if(ImGui::Checkbox("Показывать скелет",&s.skeleton))action(EditorAction::Skeleton,0);
     ImGui::EndDisabled();
@@ -211,8 +221,9 @@ void brushPane(EditorUIState& s,const EditorUICallback& action) {
 }
 void animationPane(EditorUIState& s,const EditorUICallback& action) {
     section("Анимация");
-    if(s.animations.empty()){ImGui::TextWrapped("У модели нет совместимых анимаций. OMF ищется рядом с OGF.");return;}
-    if(ImGui::BeginCombo("Клип",s.animations[size_t(std::clamp(s.animationIndex,0,int(s.animations.size())-1))].c_str(),ImGuiComboFlags_HeightLarge)) {
+    if(s.animations.empty())ImGui::TextWrapped("У модели нет совместимых анимаций. OMF ищется рядом с OGF. Снимок и доступные точки скелета можно использовать в исходной позе.");
+    else {
+      if(ImGui::BeginCombo("Клип",s.animations[size_t(std::clamp(s.animationIndex,0,int(s.animations.size())-1))].c_str(),ImGuiComboFlags_HeightLarge)) {
         const bool opening=ImGui::IsWindowAppearing();
         for(size_t i=0;i<s.animations.size();++i){ImGui::PushID(int(i));const bool selected=int(i)==s.animationIndex;
             if(ImGui::Selectable(s.animations[i].c_str(),selected)){s.animationIndex=int(i);action(EditorAction::AnimationSelect,int(i));}
@@ -224,7 +235,52 @@ void animationPane(EditorUIState& s,const EditorUICallback& action) {
     settings|=wheelSlider("Скорость",&s.animationSpeed,.25f,2.f,"%.2fx");
     if(settings)action(EditorAction::AnimationSettings,0);
     if(wheelSliderInt("Кадр",&s.animationFrame,0,std::max(0,s.animationFrames-1)))action(EditorAction::AnimationSeek,0);
-    ImGui::TextWrapped("Во время воспроизведения редактирование материала заблокировано. При уходе со вкладки модель возвращается в исходную позу.");
+    }
+    section("Предметы на костях biped");
+    ImGui::BeginDisabled(!s.hasSkeleton||s.attachmentBones.empty());
+    if(ImGui::Checkbox("Показывать точки biped",&s.showBipedBones))action(EditorAction::BipedBones,0);
+    if(ImGui::BeginCombo("Кость",s.attachmentBoneName.empty()?"Выберите кость":s.attachmentBoneName.c_str(),ImGuiComboFlags_HeightLarge)) {
+        for(const auto& bone:s.attachmentBones){ImGui::PushID(bone.index);
+            if(ImGui::Selectable(bone.name.c_str(),bone.index==s.attachmentBone))action(EditorAction::SelectAttachmentBone,bone.index);
+            if(bone.index==s.attachmentBone)ImGui::SetItemDefaultFocus();ImGui::PopID();}
+        ImGui::EndCombo();
+    }
+    if(fullButton("Загрузить предмет / недавние…"))action(EditorAction::SelectAttachmentBone,s.attachmentBone);
+    ImGui::EndDisabled();
+    if(s.attachmentBones.empty())ImGui::TextWrapped("В этой модели не найдены кости с именами bip / biped.");
+    else ImGui::TextWrapped("Щёлкните по точке в сцене: откроется список предметов для этой кости. Путь и посадка сохраняются между запусками.");
+    if(s.attachmentActive) {
+        ImGui::TextWrapped("Предмет: %s",s.attachmentName.c_str());
+        float position[]={s.attachmentTransform.position.x,s.attachmentTransform.position.y,s.attachmentTransform.position.z};
+        float rotation[]={s.attachmentTransform.rotation.x,s.attachmentTransform.rotation.y,s.attachmentTransform.rotation.z};
+        bool changed=ImGui::DragFloat3("Смещение XYZ",position,.001f,-1000.f,1000.f,"%.3f",ImGuiSliderFlags_AlwaysClamp);
+        changed|=ImGui::DragFloat3("Поворот XYZ",rotation,.5f,-360.f,360.f,"%.1f°",ImGuiSliderFlags_AlwaysClamp);
+        changed|=ImGui::DragFloat("Масштаб",&s.attachmentTransform.scale,.01f,.0001f,1000.f,"%.4f",ImGuiSliderFlags_AlwaysClamp);
+        if(changed){s.attachmentTransform.position={position[0],position[1],position[2]};s.attachmentTransform.rotation={rotation[0],rotation[1],rotation[2]};action(EditorAction::AttachmentTransform,0);}
+        if(fullButton("Сбросить посадку предмета"))action(EditorAction::ResetAttachmentTransform,0);
+        if(fullButton("Убрать предмет с этой кости"))action(EditorAction::RemoveAttachment,0);
+    }
+    section("Снимок модели");
+    if(fullButton("Сохранить PNG с прозрачным фоном…"))action(EditorAction::CaptureAnimation,0);
+    ImGui::TextWrapped("Текущая поза, предметы и освещение. Длинная сторона — до 1024 px. Кости, контуры и интерфейс в снимок не попадают.");
+    ImGui::TextWrapped("Во вкладке анимации материалы заблокированы. При выходе предметы выгружаются, модель возвращается в исходную позу; список недавних остаётся.");
+}
+void attachmentPopup(EditorUIState& s,const EditorUICallback& action) {
+    if(s.tab!=EditorTab::Animation){s.requestAttachmentPopup=false;return;}
+    if(s.requestAttachmentPopup){ImGui::OpenPopup("Предмет на кость");s.requestAttachmentPopup=false;}
+    ImGui::SetNextWindowSizeConstraints(ImVec2(std::min(360.f*s.uiScale,ImGui::GetIO().DisplaySize.x-24.f),0),
+        ImVec2(std::max(100.f,ImGui::GetIO().DisplaySize.x-24.f),std::max(100.f,ImGui::GetIO().DisplaySize.y-24.f)));
+    if(ImGui::BeginPopup("Предмет на кость")) {
+        ImGui::TextWrapped("Кость: %s",s.attachmentBoneName.c_str());
+        if(fullButton("Загрузить OGF…")){action(EditorAction::LoadAttachment,0);ImGui::CloseCurrentPopup();}
+        ImGui::SeparatorText("Недавние предметы");
+        if(s.recentAttachments.empty())ImGui::TextWrapped("Для этой кости ещё нет сохранённых предметов.");
+        for(size_t i=0;i<s.recentAttachments.size();++i){ImGui::PushID(int(i));const auto& path=s.recentAttachments[i];
+            const auto slash=path.find_last_of("/\\");const auto name=slash==std::string::npos?path:path.substr(slash+1);
+            if(ImGui::Selectable(name.c_str())){action(EditorAction::UseRecentAttachment,int(i));ImGui::CloseCurrentPopup();}
+            tooltip(path.c_str());ImGui::PopID();}
+        ImGui::EndPopup();
+    }
 }
 void toolbar(EditorUIState& s,const EditorUICallback& action) {
     struct Tool{const char* name;const char* help;EditorAction action;int arg;bool active;bool enabled;};
@@ -277,10 +333,10 @@ void generatePopup(EditorUIState& s,const EditorUICallback& action) {
 }
 }
 void DrawEditorUI(EditorUIState& s,const EditorUICallback& action) {
-    ImGuiIO& io=ImGui::GetIO();s.renderedPaneCount=0;s.viewportHovered=false;s.viewportClicked=false;
+    ImGuiIO& io=ImGui::GetIO();s.renderedPaneCount=0;s.viewportHovered=false;s.viewportClicked=false;s.viewportActive=false;s.bonePointerCaptured=false;
     ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(io.DisplaySize);
     ImGui::Begin("Material Lab workspace",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoBringToFrontOnFocus);
-    ImGui::TextUnformatted("KICH-RAY  /  MATERIAL LAB");ImGui::SameLine();ImGui::TextDisabled("0.12.0");
+    ImGui::TextUnformatted("KICH-RAY  /  MATERIAL LAB");ImGui::SameLine();ImGui::TextDisabled("0.13.0");
     ImGui::Separator();
     const float statusHeight=ImGui::GetTextLineHeightWithSpacing()*2.f;
     const ImVec2 room=ImGui::GetContentRegionAvail();
@@ -315,15 +371,29 @@ void DrawEditorUI(EditorUIState& s,const EditorUICallback& action) {
     s.viewportRect={viewPos.x,viewPos.y,viewSize.x,viewSize.y};
     ImGui::InvisibleButton("Viewport input",viewSize,ImGuiButtonFlags_MouseButtonLeft|ImGuiButtonFlags_MouseButtonRight|ImGuiButtonFlags_MouseButtonMiddle);
     s.viewportHovered=ImGui::IsItemHovered();s.viewportClicked=ImGui::IsItemClicked(0)||ImGui::IsItemClicked(1)||ImGui::IsItemClicked(2);
+    s.viewportActive=ImGui::IsItemActive();
     ImDrawList* draw=ImGui::GetWindowDrawList();
     if(s.viewportTexture)draw->AddImage(s.viewportTexture,viewPos,ImVec2(viewPos.x+viewSize.x,viewPos.y+viewSize.y));
     else draw->AddRectFilled(viewPos,ImVec2(viewPos.x+viewSize.x,viewPos.y+viewSize.y),IM_COL32(24,27,31,255));
+    if(s.tab==EditorTab::Animation&&s.showBipedBones){
+        draw->PushClipRect(viewPos,ImVec2(viewPos.x+viewSize.x,viewPos.y+viewSize.y),true);
+        const EditorBoneMarker* hovered=nullptr;float nearest=100.f*s.uiScale*s.uiScale;
+        for(const auto& bone:s.boneMarkers){const ImVec2 p(viewPos.x+bone.x*viewSize.x,viewPos.y+bone.y*viewSize.y);
+            const float dx=io.MousePos.x-p.x,dy=io.MousePos.y-p.y,distance=dx*dx+dy*dy;
+            if(s.viewportHovered&&distance<nearest){nearest=distance;hovered=&bone;}
+            const ImU32 color=bone.index==s.attachmentBone?IM_COL32(255,198,76,255):bone.occupied?IM_COL32(96,224,140,255):IM_COL32(77,188,255,255);
+            draw->AddCircleFilled(p,4.5f*s.uiScale,color);draw->AddCircle(p,6.f*s.uiScale,IM_COL32(12,20,30,230),0,1.5f*s.uiScale);
+        }
+        draw->PopClipRect();
+        if(hovered){ImGui::BeginTooltip();ImGui::TextUnformatted(hovered->name.c_str());ImGui::TextUnformatted("ЛКМ — предметы для этой кости");ImGui::EndTooltip();
+            if(ImGui::IsMouseClicked(0)){s.bonePointerCaptured=true;action(EditorAction::SelectAttachmentBone,hovered->index);}}
+    }
     const ImVec2 toolPos=ImGui::GetCursorScreenPos();s.toolbarRect={toolPos.x,toolPos.y,available,toolHeight};
     toolbar(s,action);
     static const char* modeNames[]={"Полёт камеры","Орбита","Выбор меша","Вращение света","Кисть","Вращение модели"};
     ImGui::TextDisabled("%s%s",modeNames[int(s.mode)],s.hasEdits?"  ·  материал изменён":"");
     ImGui::EndChild();
     ImGui::Separator();ImGui::TextWrapped("%s",s.status.c_str());
-    generatePopup(s,action);ImGui::End();
+    generatePopup(s,action);attachmentPopup(s,action);ImGui::End();
 }
 }

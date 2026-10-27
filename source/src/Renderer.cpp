@@ -6,14 +6,17 @@
 #include <filesystem>
 #include <vector>
 #include <cstring>
+#include <exception>
 #pragma comment(lib,"d3d11.lib")
 namespace lab {
 using namespace DirectX;
 namespace {
 using Microsoft::WRL::ComPtr;
+template<class F>struct ScopeExit {F apply;~ScopeExit(){apply();}};
+template<class F>ScopeExit<F> onExit(F apply){return {std::move(apply)};}
 struct GPUVertex{XMFLOAT3 p,n;XMFLOAT2 uv;XMFLOAT3 t,b;};
 struct BoneGPU{XMFLOAT3 p;XMFLOAT4 c;};
-struct alignas(16) CB{XMFLOAT4X4 wvp,world;XMFLOAT4 eye,ld,lc,ambient,tint,params,outline,viewport,alpha,lighting;};
+struct alignas(16) CB{XMFLOAT4X4 wvp,world;XMFLOAT4 eye,ld,lc,ambient,tint,params,outline,viewport,alpha,lighting,environment,lightingOptions;};
 V3 sub(V3 a,V3 b){return {a.x-b.x,a.y-b.y,a.z-b.z};}
 V3 add(V3 a,V3 b){return {a.x+b.x,a.y+b.y,a.z+b.z};}
 V3 mul(V3 a,float s){return {a.x*s,a.y*s,a.z*s};}
@@ -132,17 +135,101 @@ void Renderer::BeginUI(){
 }
 HRESULT Renderer::PresentUI(){return swap_?swap_->Present(1,0):E_FAIL;}
 
-bool Renderer::SetMesh(Mesh& mesh,std::wstring& error){
- if(!device_||!context_||!mesh.valid()){error=L"Empty mesh";return false;}bool first=true;V3 lo{},hi{};for(const auto& part:mesh.parts)for(const auto& v:part.vertices){if(!std::isfinite(v.p.x)||!std::isfinite(v.p.y)||!std::isfinite(v.p.z)||!std::isfinite(v.n.x)||!std::isfinite(v.n.y)||!std::isfinite(v.n.z)||!std::isfinite(v.u)||!std::isfinite(v.v)){error=L"Mesh contains invalid vertex values";return false;}if(first){lo=hi=v.p;first=false;}else{lo.x=std::min(lo.x,v.p.x);lo.y=std::min(lo.y,v.p.y);lo.z=std::min(lo.z,v.p.z);hi.x=std::max(hi.x,v.p.x);hi.y=std::max(hi.y,v.p.y);hi.z=std::max(hi.z,v.p.z);}}if(first){error=L"Mesh has no vertices";return false;}const V3 newCenter={(lo.x+hi.x)*.5f,(lo.y+hi.y)*.5f,(lo.z+hi.z)*.5f};float dx=hi.x-lo.x,dy=hi.y-lo.y,dz=hi.z-lo.z;const float newScale=2.f/std::max(.001f,std::max(dx,std::max(dy,dz)));
- std::vector<RenderPart> built;built.reserve(mesh.parts.size());
- for(const auto& part:mesh.parts){if(!part.valid()||part.indices.size()%3){error=L"Mesh part has incomplete triangles";return false;}RenderPart rp;rp.skeletal=part.skeletal;
+bool Renderer::buildParts(const Mesh& mesh,V3 center,float scale,std::vector<RenderPart>& built,std::wstring& error,bool animate) {
+ built.clear();built.reserve(mesh.parts.size());
+ auto vector=[](V3 v){return XMVectorSet(v.x,v.y,v.z,0);};
+ auto finite=[](V3 v){return std::isfinite(v.x)&&std::isfinite(v.y)&&std::isfinite(v.z);};
+ for(const auto& part:mesh.parts){
+  if(!part.valid()||part.indices.size()%3){error=L"Mesh part has incomplete triangles";return false;}
+  if(part.vertices.size()>UINT32_MAX/sizeof(GPUVertex)||part.indices.size()>UINT32_MAX/sizeof(uint32_t)){error=L"Mesh part too large";return false;}
+  RenderPart rp;rp.skeletal=animate&&part.skeletal;
   std::string shader=part.shader;std::replace(shader.begin(),shader.end(),'/',char(92));
   if(shader=="models\\selflight"||shader=="models_selflight"){rp.emissive=8;rp.emissiveSpecular=8;rp.flatShader=true;}
   else if(shader=="models\\selflightl"||shader=="models_selflightl"){rp.emissive=.5f;rp.flatShader=true;}
-  rp.source.resize(part.vertices.size());std::vector<XMVECTOR> tan(part.vertices.size(),XMVectorZero()),bit(part.vertices.size(),XMVectorZero());for(size_t k=0;k<part.vertices.size();++k){rp.source[k].p=part.vertices[k].p;rp.source[k].n=part.vertices[k].n;rp.source[k].u=part.vertices[k].u;rp.source[k].v=part.vertices[k].v;rp.source[k].bone0=part.vertices[k].bone0;rp.source[k].bone1=part.vertices[k].bone1;rp.source[k].weight=part.vertices[k].weight;rp.source[k].links=part.vertices[k].links;}
-  for(size_t i=0;i+2<part.indices.size();i+=3){uint32_t ia=part.indices[i],ib=part.indices[i+1],ic=part.indices[i+2];if(ia>=rp.source.size()||ib>=rp.source.size()||ic>=rp.source.size()){error=L"Invalid mesh index";return false;}const auto& a=rp.source[ia];const auto& b=rp.source[ib];const auto& c=rp.source[ic];XMVECTOR d1=XMLoadFloat3(reinterpret_cast<const XMFLOAT3*>(&b.p))-XMLoadFloat3(reinterpret_cast<const XMFLOAT3*>(&a.p));XMVECTOR d2=XMLoadFloat3(reinterpret_cast<const XMFLOAT3*>(&c.p))-XMLoadFloat3(reinterpret_cast<const XMFLOAT3*>(&a.p));float s1=b.u-a.u,t1=b.v-a.v,s2=c.u-a.u,t2=c.v-a.v;float det=s1*t2-s2*t1;if(std::fabs(det)<1e-7f)continue;float inv=1.f/det;XMVECTOR tv=(d1*t2-d2*t1)*inv,bv=(d2*s1-d1*s2)*inv;for(auto idx:{ia,ib,ic}){tan[idx]+=tv;bit[idx]+=bv;}}
-  std::vector<GPUVertex> gpu(rp.source.size());V3 plo{},phi{};bool pfirst=true;for(size_t k=0;k<rp.source.size();++k){XMVECTOR nv=XMVectorSet(rp.source[k].n.x,rp.source[k].n.y,rp.source[k].n.z,0);if(XMVectorGetX(XMVector3LengthSq(nv))<.01f)nv=XMVectorSet(0,0,1,0);nv=XMVector3Normalize(nv);XMVECTOR tv=tan[k]-nv*XMVector3Dot(tan[k],nv);if(XMVectorGetX(XMVector3LengthSq(tv))<.001f)tv=XMVector3Cross(std::fabs(XMVectorGetY(nv))<.9f?XMVectorSet(0,1,0,0):XMVectorSet(1,0,0,0),nv);tv=XMVector3Normalize(tv);XMVECTOR bv=bit[k]-nv*XMVector3Dot(bit[k],nv)-tv*XMVector3Dot(bit[k],tv);if(XMVectorGetX(XMVector3LengthSq(bv))<.001f)bv=XMVector3Cross(nv,tv);rp.source[k].n={XMVectorGetX(nv),XMVectorGetY(nv),XMVectorGetZ(nv)};rp.source[k].t={XMVectorGetX(tv),XMVectorGetY(tv),XMVectorGetZ(tv)};rp.source[k].b={XMVectorGetX(bv),XMVectorGetY(bv),XMVectorGetZ(bv)};V3 np=mul(sub(rp.source[k].p,newCenter),newScale);gpu[k].p=vec(np);gpu[k].n=vec(rp.source[k].n);gpu[k].uv={rp.source[k].u,rp.source[k].v};gpu[k].t=vec(rp.source[k].t);gpu[k].b=vec(rp.source[k].b);if(pfirst){plo=phi=np;pfirst=false;}else{plo.x=std::min(plo.x,np.x);plo.y=std::min(plo.y,np.y);plo.z=std::min(plo.z,np.z);phi.x=std::max(phi.x,np.x);phi.y=std::max(phi.y,np.y);phi.z=std::max(phi.z,np.z);}}
-  if(gpu.size()>UINT32_MAX/sizeof(GPUVertex)||part.indices.size()>UINT32_MAX/sizeof(uint32_t)){error=L"Mesh part too large";return false;}D3D11_BUFFER_DESC bd={};bd.ByteWidth=UINT(gpu.size()*sizeof(GPUVertex));bd.BindFlags=D3D11_BIND_VERTEX_BUFFER;bd.Usage=rp.skeletal?D3D11_USAGE_DYNAMIC:D3D11_USAGE_DEFAULT;bd.CPUAccessFlags=rp.skeletal?D3D11_CPU_ACCESS_WRITE:0;D3D11_SUBRESOURCE_DATA dat={gpu.data(),0,0};HRESULT hr=device_->CreateBuffer(&bd,&dat,rp.vb.GetAddressOf());if(FAILED(hr)){error=hrtext(L"Vertex buffer",hr);return false;}bd={};bd.ByteWidth=UINT(part.indices.size()*sizeof(uint32_t));bd.Usage=D3D11_USAGE_DEFAULT;bd.BindFlags=D3D11_BIND_INDEX_BUFFER;dat={part.indices.data(),0,0};hr=device_->CreateBuffer(&bd,&dat,rp.ib.GetAddressOf());if(FAILED(hr)){error=hrtext(L"Index buffer",hr);return false;}rp.indexCount=UINT(part.indices.size());rp.cpuIndices=part.indices;rp.cpuPositions.resize(gpu.size());rp.cpuUV.resize(gpu.size());for(size_t k=0;k<gpu.size();++k){rp.cpuPositions[k]={gpu[k].p.x,gpu[k].p.y,gpu[k].p.z};rp.cpuUV[k]={gpu[k].uv.x,gpu[k].uv.y,0.f};}rp.center={(plo.x+phi.x)*.5f,(plo.y+phi.y)*.5f,(plo.z+phi.z)*.5f};rp.half={(phi.x-plo.x)*.5f,(phi.y-plo.y)*.5f,(phi.z-plo.z)*.5f};if(!rp.skeletal){rp.source.clear();rp.source.shrink_to_fit();}built.push_back(std::move(rp));}
+  rp.source.resize(part.vertices.size());
+  std::vector<XMVECTOR> tan(part.vertices.size(),XMVectorZero()),bit(part.vertices.size(),XMVectorZero()),geometric(part.vertices.size(),XMVectorZero());
+  for(size_t k=0;k<part.vertices.size();++k){
+   const auto& src=part.vertices[k];
+   if(!finite(src.p)||!finite(src.n)||!std::isfinite(src.u)||!std::isfinite(src.v)){error=L"Mesh contains invalid vertex values";return false;}
+   auto& dst=rp.source[k];dst.p=src.p;dst.n=src.n;dst.u=src.u;dst.v=src.v;
+   dst.bone0=src.bone0;dst.bone1=src.bone1;dst.weight=src.weight;dst.links=src.links;
+  }
+  for(size_t i=0;i<part.indices.size();i+=3){
+   const uint32_t ia=part.indices[i],ib=part.indices[i+1],ic=part.indices[i+2];
+   if(ia>=rp.source.size()||ib>=rp.source.size()||ic>=rp.source.size()){error=L"Invalid mesh index";return false;}
+   const auto& a=rp.source[ia];const auto& b=rp.source[ib];const auto& c=rp.source[ic];
+   const XMVECTOR d1=vector(sub(b.p,a.p)),d2=vector(sub(c.p,a.p)),face=XMVector3Cross(d1,d2);
+   for(auto idx:{ia,ib,ic})geometric[idx]+=face;
+   const float s1=b.u-a.u,t1=b.v-a.v,s2=c.u-a.u,t2=c.v-a.v,det=s1*t2-s2*t1;
+   if(std::fabs(det)<1e-7f)continue;
+   const XMVECTOR tv=(d1*t2-d2*t1)/det,bv=(d2*s1-d1*s2)/det;
+   for(auto idx:{ia,ib,ic}){tan[idx]+=tv;bit[idx]+=bv;}
+  }
+  std::vector<GPUVertex> gpu(rp.source.size());V3 lo{},hi{};bool first=true;
+  for(size_t k=0;k<rp.source.size();++k){
+   auto& src=rp.source[k];const auto& authored=part.vertices[k];
+   XMVECTOR nv=vector(src.n);
+   if(XMVectorGetX(XMVector3LengthSq(nv))<1e-12f)nv=geometric[k];
+   if(XMVectorGetX(XMVector3LengthSq(nv))<1e-12f)nv=XMVectorSet(0,0,1,0);
+   nv=XMVector3Normalize(nv);
+   XMVECTOR rawT=tan[k],rawB=bit[k];
+   if(authored.hasTangentBasis&&finite(authored.tangent)&&finite(authored.binormal)){
+    const XMVECTOR at=vector(authored.tangent),ab=vector(authored.binormal);
+    if(XMVectorGetX(XMVector3LengthSq(at))>1e-10f&&std::fabs(XMVectorGetX(XMVector3Dot(XMVector3Cross(nv,at),ab)))>1e-8f){rawT=at;rawB=ab;}
+   }
+   // R4 NormalWithTerrain orthogonalizes T and reconstructs B with the
+   // authored handedness. Recomputing a valid exported basis changes shading.
+   XMVECTOR tv=rawT-nv*XMVector3Dot(rawT,nv);
+   if(XMVectorGetX(XMVector3LengthSq(tv))<1e-10f)tv=XMVector3Cross(std::fabs(XMVectorGetY(nv))<.9f?XMVectorSet(0,1,0,0):XMVectorSet(1,0,0,0),nv);
+   tv=XMVector3Normalize(tv);XMVECTOR bv=XMVector3Cross(nv,tv);
+   if(XMVectorGetX(XMVector3Dot(bv,rawB))<0)bv=-bv;
+   src.n={XMVectorGetX(nv),XMVectorGetY(nv),XMVectorGetZ(nv)};
+   src.t={XMVectorGetX(tv),XMVectorGetY(tv),XMVectorGetZ(tv)};
+   src.b={XMVectorGetX(bv),XMVectorGetY(bv),XMVectorGetZ(bv)};
+   const V3 position=mul(sub(src.p,center),scale);
+   gpu[k]={vec(position),vec(src.n),{src.u,src.v},vec(src.t),vec(src.b)};
+   if(first){lo=hi=position;first=false;}else{lo.x=std::min(lo.x,position.x);lo.y=std::min(lo.y,position.y);lo.z=std::min(lo.z,position.z);hi.x=std::max(hi.x,position.x);hi.y=std::max(hi.y,position.y);hi.z=std::max(hi.z,position.z);}
+  }
+  D3D11_BUFFER_DESC bd{};bd.ByteWidth=UINT(gpu.size()*sizeof(GPUVertex));bd.BindFlags=D3D11_BIND_VERTEX_BUFFER;
+  bd.Usage=rp.skeletal?D3D11_USAGE_DYNAMIC:D3D11_USAGE_DEFAULT;bd.CPUAccessFlags=rp.skeletal?D3D11_CPU_ACCESS_WRITE:0;
+  D3D11_SUBRESOURCE_DATA data{gpu.data(),0,0};HRESULT hr=device_->CreateBuffer(&bd,&data,rp.vb.GetAddressOf());
+  if(FAILED(hr)){error=hrtext(L"Vertex buffer",hr);return false;}
+  bd={};bd.ByteWidth=UINT(part.indices.size()*sizeof(uint32_t));bd.Usage=D3D11_USAGE_DEFAULT;bd.BindFlags=D3D11_BIND_INDEX_BUFFER;
+  data={part.indices.data(),0,0};hr=device_->CreateBuffer(&bd,&data,rp.ib.GetAddressOf());
+  if(FAILED(hr)){error=hrtext(L"Index buffer",hr);return false;}
+  rp.indexCount=UINT(part.indices.size());rp.cpuIndices=part.indices;rp.cpuPositions.resize(gpu.size());rp.cpuUV.resize(gpu.size());
+  for(size_t k=0;k<gpu.size();++k){rp.cpuPositions[k]={gpu[k].p.x,gpu[k].p.y,gpu[k].p.z};rp.cpuUV[k]={gpu[k].uv.x,gpu[k].uv.y,0};}
+  rp.center=mul(add(lo,hi),.5f);rp.half=mul(sub(hi,lo),.5f);
+  if(!rp.skeletal){rp.source.clear();rp.source.shrink_to_fit();}
+  built.push_back(std::move(rp));
+ }
+ return !built.empty();
+}
+
+void Renderer::cacheBindTransforms() {
+ boneTransforms_.resize(bones_.size());
+ for(size_t i=0;i<bones_.size();++i){
+  const auto& bone=bones_[i];XMMATRIX matrix=XMMatrixTranslation(bone.position.x,bone.position.y,bone.position.z);
+  if(bone.hasBind){
+   XMFLOAT4X4 inverse{};std::memcpy(&inverse,bone.inverseBind.data(),sizeof(inverse));
+   XMVECTOR determinant;const auto global=XMMatrixInverse(&determinant,XMLoadFloat4x4(&inverse));
+   if(std::isfinite(XMVectorGetX(determinant))&&std::fabs(XMVectorGetX(determinant))>1e-12f)matrix=global;
+  }
+  XMStoreFloat4x4(&boneTransforms_[i],matrix);
+ }
+}
+
+bool Renderer::SetMesh(Mesh& mesh,std::wstring& error){
+ error.clear();if(!device_||!context_||!mesh.valid()){error=L"Empty mesh";return false;}
+ bool first=true;V3 lo{},hi{};
+ for(const auto& part:mesh.parts)for(const auto& vertex:part.vertices){const V3 p=vertex.p;
+  if(!std::isfinite(p.x)||!std::isfinite(p.y)||!std::isfinite(p.z)){error=L"Mesh contains invalid vertex values";return false;}
+  if(first){lo=hi=p;first=false;}else{lo.x=std::min(lo.x,p.x);lo.y=std::min(lo.y,p.y);lo.z=std::min(lo.z,p.z);hi.x=std::max(hi.x,p.x);hi.y=std::max(hi.y,p.y);hi.z=std::max(hi.z,p.z);}
+ }
+ if(first){error=L"Mesh has no vertices";return false;}
+ const V3 newCenter=mul(add(lo,hi),.5f);const float newScale=2.f/std::max(.001f,std::max({hi.x-lo.x,hi.y-lo.y,hi.z-lo.z}));
+ std::vector<RenderPart> built;
+ if(!buildParts(mesh,newCenter,newScale,built,error,true))return false;
  ComPtr<ID3D11Buffer> skeletonBuffer;UINT skeletonCount=0;
  if(!mesh.bones.empty()){
   if(mesh.bones.size()>UINT32_MAX/(2*sizeof(BoneGPU))){error=L"Skeleton is too large";return false;}
@@ -154,19 +241,19 @@ bool Renderer::SetMesh(Mesh& mesh,std::wstring& error){
    lines[skeletonCount++]={position(bone.position),{.15f,1.f,.55f,1.f}};
   }
   D3D11_BUFFER_DESC bd{};bd.ByteWidth=maxVerts*sizeof(BoneGPU);bd.Usage=D3D11_USAGE_DYNAMIC;bd.BindFlags=D3D11_BIND_VERTEX_BUFFER;bd.CPUAccessFlags=D3D11_CPU_ACCESS_WRITE;
-  D3D11_SUBRESOURCE_DATA data{lines.data(),0,0};HRESULT hr=device_->CreateBuffer(&bd,&data,skeletonBuffer.GetAddressOf());
+  D3D11_SUBRESOURCE_DATA data{lines.data(),0,0};const HRESULT hr=device_->CreateBuffer(&bd,&data,skeletonBuffer.GetAddressOf());
   if(FAILED(hr)){error=hrtext(L"Skeleton vertex buffer",hr);return false;}
  }
- // Only now replace the live model and consume input geometry. A failed upload
- // leaves the previous model, pick bounds, materials and caller data intact.
+ // Commit the new model only after all GPU resources exist. Camera, light and
+ // model rotation belong to the scene, so opening a model never resets them.
  parts_=std::move(built);bones_=std::move(mesh.bones);motions_=std::move(mesh.motions);
  modelCenter_=newCenter;modelScale_=newScale;skeletonVB_=std::move(skeletonBuffer);skeletonVertexCount_=skeletonCount;
- selectedPrimary_=hoverPart_=-1;ClearBrushCursor();
+ selectedPrimary_=hoverPart_=-1;ClearBrushCursor();ClearAttachments();cacheBindTransforms();
  for(auto& part:mesh.parts){part.vertices.clear();part.vertices.shrink_to_fit();part.indices.clear();part.indices.shrink_to_fit();}
  return !parts_.empty();
 }
 
-bool Renderer::uploadBindPose(std::wstring* error){for(auto& part:parts_){if(!part.skeletal)continue;std::vector<GPUVertex> gpu(part.source.size());for(size_t k=0;k<part.source.size();++k){const auto& s=part.source[k];V3 p=mul(sub(s.p,modelCenter_),modelScale_);gpu[k].p=vec(p);gpu[k].n=vec(s.n);gpu[k].uv={s.u,s.v};gpu[k].t=vec(s.t);gpu[k].b=vec(s.b);}D3D11_MAPPED_SUBRESOURCE map{};HRESULT hr=context_->Map(part.vb.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&map);if(FAILED(hr)){if(error)*error=hrtext(L"Map skeletal vertex buffer",hr);return false;}std::memcpy(map.pData,gpu.data(),gpu.size()*sizeof(GPUVertex));context_->Unmap(part.vb.Get(),0);part.alphaSortValid=false;
+bool Renderer::uploadBindPose(std::wstring* error){cacheBindTransforms();for(auto& part:parts_){if(!part.skeletal)continue;std::vector<GPUVertex> gpu(part.source.size());for(size_t k=0;k<part.source.size();++k){const auto& s=part.source[k];V3 p=mul(sub(s.p,modelCenter_),modelScale_);gpu[k].p=vec(p);gpu[k].n=vec(s.n);gpu[k].uv={s.u,s.v};gpu[k].t=vec(s.t);gpu[k].b=vec(s.b);}D3D11_MAPPED_SUBRESOURCE map{};HRESULT hr=context_->Map(part.vb.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&map);if(FAILED(hr)){if(error)*error=hrtext(L"Map skeletal vertex buffer",hr);return false;}std::memcpy(map.pData,gpu.data(),gpu.size()*sizeof(GPUVertex));context_->Unmap(part.vb.Get(),0);part.alphaSortValid=false;
   for(size_t k=0;k<gpu.size();++k)part.cpuPositions[k]={gpu[k].p.x,gpu[k].p.y,gpu[k].p.z};
   if(!part.cpuPositions.empty()){V3 lo=part.cpuPositions.front(),hi=lo;for(const auto& p:part.cpuPositions){lo.x=std::min(lo.x,p.x);lo.y=std::min(lo.y,p.y);lo.z=std::min(lo.z,p.z);hi.x=std::max(hi.x,p.x);hi.y=std::max(hi.y,p.y);hi.z=std::max(hi.z,p.z);}part.center=mul(add(lo,hi),.5f);part.half=mul(sub(hi,lo),.5f);}
  }
@@ -192,7 +279,7 @@ bool Renderer::SetAnimationPose(size_t motionIndex,float seconds,bool loop,std::
  for(size_t i=0;i<bones_.size();++i)if(!solve(solve,i)){error=L"Animation bone hierarchy contains a cycle";return false;}
  for(auto& part:parts_){if(!part.skeletal)continue;D3D11_MAPPED_SUBRESOURCE map{};HRESULT hr=context_->Map(part.vb.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&map);if(FAILED(hr)){error=hrtext(L"Map animated vertex buffer",hr);return false;}auto* gpu=reinterpret_cast<GPUVertex*>(map.pData);V3 lo{},hi{};bool first=true;
   for(size_t k=0;k<part.source.size();++k){const auto& s=part.source[k];auto transform=[&](V3 v,bool point,uint16_t bone)->V3{if(bone>=skin.size())return v;return point?xrPoint(skin[bone],v):xrDir(skin[bone],v);};V3 p,n,t,b;
-   if(s.links==1){p=transform(s.p,true,s.bone0);n=transform(s.n,false,s.bone0);t=transform(s.t,false,s.bone0);b=transform(s.b,false,s.bone0);}
+   if(s.links==1||(s.links==2&&s.bone0==s.bone1)){p=transform(s.p,true,s.bone0);n=transform(s.n,false,s.bone0);t=transform(s.t,false,s.bone0);b=transform(s.b,false,s.bone0);}
    else if(s.links==2){const V3 p0=transform(s.p,true,s.bone0),p1=transform(s.p,true,s.bone1),n0=transform(s.n,false,s.bone0),n1=transform(s.n,false,s.bone1),t0=transform(s.t,false,s.bone0),t1=transform(s.t,false,s.bone1),b0=transform(s.b,false,s.bone0),b1=transform(s.b,false,s.bone1);const float w=std::clamp(s.weight,0.f,1.f);p=add(mul(p0,1-w),mul(p1,w));n=add(mul(n0,1-w),mul(n1,w));t=add(mul(t0,1-w),mul(t1,w));b=add(mul(b0,1-w),mul(b1,w));}
    else{p=s.p;n=s.n;t=s.t;b=s.b;}
    n=normalize(n);t=normalize(t);b=normalize(b);p=mul(sub(p,modelCenter_),modelScale_);gpu[k].p=vec(p);gpu[k].n=vec(n);gpu[k].uv={s.u,s.v};gpu[k].t=vec(t);gpu[k].b=vec(b);part.cpuPositions[k]=p;
@@ -201,6 +288,8 @@ bool Renderer::SetAnimationPose(size_t motionIndex,float seconds,bool loop,std::
   context_->Unmap(part.vb.Get(),0);part.alphaSortValid=false;if(!first){part.center={(lo.x+hi.x)*.5f,(lo.y+hi.y)*.5f,(lo.z+hi.z)*.5f};part.half={(hi.x-lo.x)*.5f,(hi.y-lo.y)*.5f,(hi.z-lo.z)*.5f};}
  }
  if(skeletonVB_){std::vector<BoneGPU> lines;lines.reserve(bones_.size()*2);for(size_t i=0;i<bones_.size();++i){const int parent=bones_[i].parent;if(parent<0||parent>=int(bones_.size()))continue;auto pos=[&](size_t id){V3 q{global[id].m[3][0],global[id].m[3][1],global[id].m[3][2]};q=mul(sub(q,modelCenter_),modelScale_);return XMFLOAT3{q.x,q.y,q.z};};lines.push_back({pos(size_t(parent)),{1.f,.75f,.15f,1.f}});lines.push_back({pos(i),{.15f,1.f,.55f,1.f}});}skeletonVertexCount_=UINT(lines.size());if(!lines.empty()){D3D11_MAPPED_SUBRESOURCE map{};HRESULT hr=context_->Map(skeletonVB_.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&map);if(FAILED(hr)){error=hrtext(L"Map animated skeleton buffer",hr);return false;}std::memcpy(map.pData,lines.data(),lines.size()*sizeof(BoneGPU));context_->Unmap(skeletonVB_.Get(),0);}}
+ boneTransforms_.resize(global.size());
+ for(size_t i=0;i<global.size();++i)std::memcpy(&boneTransforms_[i],global[i].m,sizeof(XMFLOAT4X4));
  return true;
 }
 
@@ -223,7 +312,10 @@ bool Renderer::SetPartBumpMipImages(size_t part,const std::vector<Image>& bump,c
  for(int i=0;i<2;++i){parts_[part].textureResources[i+1]=std::move(textures[i]);parts_[part].textures[i+1]=std::move(views[i]);}parts_[part].hasBump=true;return true;
 }
 bool Renderer::SetPartImages(size_t part,const PartImages& images){
- if(part>=parts_.size()||!images.diffuse.valid())return false;
+ return part<parts_.size()&&setPartImages(parts_[part],images);
+}
+bool Renderer::setPartImages(RenderPart& rp,const PartImages& images){
+ if(!images.diffuse.valid())return false;
  const bool hasPair=images.bump.valid()&&images.bumpX.valid();
  if(images.hasBump&&(!hasPair||images.bump.w!=images.bumpX.w||images.bump.h!=images.bumpX.h))return false;
  const AlphaProfile profile=InspectAlpha(images.diffuse);std::shared_ptr<GrayImage> opacity;
@@ -235,7 +327,7 @@ bool Renderer::SetPartImages(size_t part,const PartImages& images){
  if(!makeTexture(hasPair?images.bump:flat,views[1],&textures[1])||!makeTexture(hasPair?images.bumpX:errorMap,views[2],&textures[2]))return false;
  // Commit all channels together. A failed allocation cannot mix a new normal
  // map with an old correction map, or corrupt another part sharing the SRV.
- auto& rp=parts_[part];for(int i=0;i<3;++i){rp.textureResources[i]=std::move(textures[i]);rp.textures[i]=std::move(views[i]);}
+ for(int i=0;i<3;++i){rp.textureResources[i]=std::move(textures[i]);rp.textures[i]=std::move(views[i]);}
  rp.hasBump=images.hasBump&&hasPair;rp.alpha=profile;rp.opacity=std::move(opacity);return true;
 }
 bool Renderer::SetPartBumpImages(size_t part,const Image& bump,const Image& bumpX,bool hasBump){
@@ -257,6 +349,68 @@ bool Renderer::SetBumpImages(const Image& bump,const Image& bumpX,bool hasBump){
  const bool selected=HasSelection();for(auto& part:parts_){if(selected&&!part.selected)continue;
   part.textureResources[1]=normalTexture;part.textures[1]=normalView;part.textureResources[2]=errorTexture;part.textures[2]=errorView;part.hasBump=hasBump;
  }return true;
+}
+bool Renderer::HasAttachment(size_t bone)const {
+ return std::any_of(attachments_.begin(),attachments_.end(),[&](const Attachment& a){return a.bone==bone;});
+}
+void Renderer::RemoveAttachment(size_t bone) {
+ attachments_.erase(std::remove_if(attachments_.begin(),attachments_.end(),[&](const Attachment& a){return a.bone==bone;}),attachments_.end());
+}
+bool Renderer::SetAttachment(size_t bone,const Mesh& mesh,const std::vector<PartImages>& images,const AttachmentTransform& transform,std::wstring& error) {
+ error.clear();
+ if(bone>=bones_.size()||bone>=boneTransforms_.size()){error=L"Attachment bone does not exist in the current model";return false;}
+ if(!device_||!context_||!mesh.valid()||images.size()!=mesh.parts.size()){error=L"Attachment requires a mesh and one material per part";return false;}
+ if(!ValidAttachmentTransform(transform)){error=L"Attachment transform is outside supported bounds (scale 0.0001..1000)";return false;}
+ Attachment built;built.bone=bone;built.transform=transform;
+ // A prop is a rigid preview in its authored bind pose. Its skeleton, if any,
+ // does not replace the actor skeleton and never enters material editing.
+ if(!buildParts(mesh,{},1.f,built.parts,error,false))return false;
+ for(size_t i=0;i<built.parts.size();++i)if(!setPartImages(built.parts[i],images[i])){error=L"Cannot upload attachment material";return false;}
+ for(auto& current:attachments_)if(current.bone==bone){current=std::move(built);return true;}
+ attachments_.push_back(std::move(built));return true;
+}
+bool Renderer::SetAttachmentTransform(size_t bone,const AttachmentTransform& transform,std::wstring& error) {
+ error.clear();if(!ValidAttachmentTransform(transform)){error=L"Invalid attachment transform";return false;}
+ for(auto& attachment:attachments_)if(attachment.bone==bone){attachment.transform=transform;return true;}
+ error=L"No preview mesh is attached to this bone";return false;
+}
+void Renderer::SetAttachmentMaterialClass(size_t bone,size_t part,float material) {
+ if(!std::isfinite(material))return;
+ for(auto& attachment:attachments_)if(attachment.bone==bone&&part<attachment.parts.size())attachment.parts[part].materialClass=std::clamp(material,0.f,3.f);
+}
+XMMATRIX Renderer::attachmentWorld(const Attachment& attachment)const {
+ if(attachment.bone>=boneTransforms_.size())return XMMatrixIdentity();
+ const auto& t=attachment.transform;const float degrees=XM_PI/180.f;
+ const XMMATRIX local=XMMatrixScaling(t.scale,t.scale,t.scale)
+     *XMMatrixRotationX(t.rotation.x*degrees)*XMMatrixRotationY(t.rotation.y*degrees)*XMMatrixRotationZ(t.rotation.z*degrees)
+     *XMMatrixTranslation(t.position.x,t.position.y,t.position.z);
+ const XMMATRIX normalizeModel=XMMatrixTranslation(-modelCenter_.x,-modelCenter_.y,-modelCenter_.z)*XMMatrixScaling(modelScale_,modelScale_,modelScale_);
+ return local*XMLoadFloat4x4(&boneTransforms_[attachment.bone])*normalizeModel*XMMatrixRotationX(modelPitch_)*XMMatrixRotationY(modelYaw_);
+}
+std::vector<Renderer::BonePoint> Renderer::BonePoints()const {
+ std::vector<BonePoint> points;if(!width_||!height_||boneTransforms_.size()!=bones_.size())return points;
+ const V3 eye=camera_.eye(),up=camera_.up();
+ const XMMATRIX view=XMMatrixLookAtLH(XMVectorSet(eye.x,eye.y,eye.z,1),XMVectorSet(camera_.pivot.x,camera_.pivot.y,camera_.pivot.z,1),XMVectorSet(up.x,up.y,up.z,0));
+ const XMMATRIX projection=XMMatrixPerspectiveFovLH(XM_PIDIV4,float(width_)/float(height_),.005f,100.f);
+ const XMMATRIX model=XMMatrixTranslation(-modelCenter_.x,-modelCenter_.y,-modelCenter_.z)*XMMatrixScaling(modelScale_,modelScale_,modelScale_)*XMMatrixRotationX(modelPitch_)*XMMatrixRotationY(modelYaw_);
+ const XMMATRIX transform=model*view*projection;points.reserve(bones_.size());
+ for(size_t i=0;i<bones_.size();++i){
+  const auto& bone=boneTransforms_[i];XMFLOAT4 clip;
+  XMStoreFloat4(&clip,XMVector4Transform(XMVectorSet(bone._41,bone._42,bone._43,1),transform));
+  BonePoint point;point.index=i;point.name=bones_[i].name;
+  if(std::isfinite(clip.w)&&clip.w>1e-6f){
+   const float x=clip.x/clip.w,y=clip.y/clip.w,z=clip.z/clip.w;
+   point.x=(x*.5f+.5f)*width_;point.y=(.5f-y*.5f)*height_;
+   point.visible=std::isfinite(x)&&std::isfinite(y)&&std::isfinite(z)&&x>=-1&&x<=1&&y>=-1&&y<=1&&z>=0&&z<=1;
+  }
+  points.push_back(std::move(point));
+ }
+ return points;
+}
+void Renderer::SetEnvironmentLighting(V3 environment,float hemisphere,float exposure,float glossFactor) {
+ auto value=[](float v,float fallback,float high){return std::isfinite(v)?std::clamp(v,0.f,high):fallback;};
+ environment_={value(environment.x,0,4),value(environment.y,0,4),value(environment.z,0,4)};
+ hemisphere_=value(hemisphere,1,1);exposure_=value(exposure,1,4);r4GlossFactor_=value(glossFactor,1,4);
 }
 void Renderer::SetColor(int which,COLORREF c){float* a=(which==0?tint_:which==1?light_:ambient_);a[0]=GetRValue(c)/255.f;a[1]=GetGValue(c)/255.f;a[2]=GetBValue(c)/255.f;}
 COLORREF Renderer::GetColor(int which)const{const float* a=(which==0?tint_:which==1?light_:ambient_);return RGB(int(a[0]*255),int(a[1]*255),int(a[2]*255));}
@@ -317,53 +471,99 @@ ID3D11Buffer* Renderer::sortedAlphaIndices(RenderPart& part,const XMMATRIX& mode
  D3D11_MAPPED_SUBRESOURCE map{};if(FAILED(context_->Map(part.sortedIB.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&map)))return part.ib.Get();
  std::memcpy(map.pData,indices.data(),indices.size()*sizeof(uint32_t));context_->Unmap(part.sortedIB.Get(),0);part.alphaSortView=transform;part.alphaSortValid=true;return part.sortedIB.Get();
 }
-void Renderer::DrawScene(){
- if(!device_||!rtv_||!dsv_||!width_||!height_)return;
- // The previous UI frame sampled sceneView_. Explicitly unbind it before
- // attaching the same texture as a render target for this frame.
+void Renderer::DrawScene(){drawScene(false,false);}
+void Renderer::drawScene(bool clean,bool transparentBackground){
+ if(!device_||!context_||!rtv_||!dsv_||!width_||!height_)return;
+ // The previous UI frame sampled sceneView_. Unbind it before reusing a target.
  ID3D11ShaderResourceView* empty[3]{};context_->PSSetShaderResources(0,3,empty);
  context_->GSSetShader(nullptr,nullptr,0);context_->HSSetShader(nullptr,nullptr,0);context_->DSSetShader(nullptr,nullptr,0);
- float back[4]={background_[0],background_[1],background_[2],1.f};context_->ClearRenderTargetView(rtv_.Get(),back);context_->ClearDepthStencilView(dsv_.Get(),D3D11_CLEAR_DEPTH,1.f,0);ID3D11RenderTargetView* rtv=rtv_.Get();context_->OMSetRenderTargets(1,&rtv,dsv_.Get());D3D11_VIEWPORT vp={0.f,0.f,float(width_),float(height_),0.f,1.f};context_->RSSetViewports(1,&vp);
- const V3 cameraEye=camera_.eye();XMVECTOR target=XMVectorSet(camera_.pivot.x,camera_.pivot.y,camera_.pivot.z,1);XMVECTOR eye=XMVectorSet(cameraEye.x,cameraEye.y,cameraEye.z,1);XMMATRIX view=XMMatrixLookAtLH(eye,target,XMVectorSet(camera_.up().x,camera_.up().y,camera_.up().z,0));XMMATRIX proj=XMMatrixPerspectiveFovLH(XM_PIDIV4,float(width_)/std::max(1.f,float(height_)),.005f,100.f);XMMATRIX world=XMMatrixRotationX(modelPitch_)*XMMatrixRotationY(modelYaw_);
- CB cb={};XMStoreFloat4x4(&cb.wvp,world*view*proj);XMStoreFloat4x4(&cb.world,world);XMFLOAT3 eye3;XMStoreFloat3(&eye3,eye);cb.eye={eye3.x,eye3.y,eye3.z,1};cb.ld={cosf(lightPitch_)*sinf(lightYaw_),sinf(lightPitch_),cosf(lightPitch_)*cosf(lightYaw_),0};cb.lc={light_[0]*lightIntensity_,light_[1]*lightIntensity_,light_[2]*lightIntensity_,1};cb.ambient={ambient_[0],ambient_[1],ambient_[2],1};cb.tint={tint_[0],tint_[1],tint_[2],1};cb.outline={1.f,.65f,.16f,2.f};cb.viewport={1.f/float(width_),1.f/float(height_),0,0};
- ID3D11Buffer* c=cb_.Get();context_->VSSetConstantBuffers(0,1,&c);context_->PSSetConstantBuffers(0,1,&c);ID3D11SamplerState* sampler=sampler_.Get();context_->PSSetSamplers(0,1,&sampler);ID3D11SamplerState* ms=materialSampler_.Get();context_->PSSetSamplers(1,1,&ms);ID3D11ShaderResourceView* lut=materialLut_.Get();context_->PSSetShaderResources(3,1,&lut);UINT stride=sizeof(GPUVertex),offset=0;bool anySelection=HasSelection();
- context_->IASetInputLayout(input_.Get());context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);context_->RSSetState(wireframeOn_?wireRaster_.Get():raster_.Get());context_->OMSetDepthStencilState(nullptr,0);context_->VSSetShader(vs_.Get(),nullptr,0);context_->PSSetShader(ps_.Get(),nullptr,0);
+ const float back[4]={transparentBackground?0.f:background_[0],transparentBackground?0.f:background_[1],transparentBackground?0.f:background_[2],transparentBackground?0.f:1.f};
+ context_->ClearRenderTargetView(rtv_.Get(),back);context_->ClearDepthStencilView(dsv_.Get(),D3D11_CLEAR_DEPTH,1.f,0);
+ ID3D11RenderTargetView* target=rtv_.Get();context_->OMSetRenderTargets(1,&target,dsv_.Get());
+ const D3D11_VIEWPORT viewport={0,0,float(width_),float(height_),0,1};context_->RSSetViewports(1,&viewport);
+ const V3 cameraEye=camera_.eye(),up=camera_.up();
+ const XMVECTOR eye=XMVectorSet(cameraEye.x,cameraEye.y,cameraEye.z,1);
+ const XMMATRIX view=XMMatrixLookAtLH(eye,XMVectorSet(camera_.pivot.x,camera_.pivot.y,camera_.pivot.z,1),XMVectorSet(up.x,up.y,up.z,0));
+ const XMMATRIX projection=XMMatrixPerspectiveFovLH(XM_PIDIV4,float(width_)/float(height_),.005f,100.f);
+ const XMMATRIX world=XMMatrixRotationX(modelPitch_)*XMMatrixRotationY(modelYaw_);
+ CB cb{};cb.eye={cameraEye.x,cameraEye.y,cameraEye.z,1};
+ cb.ld={cosf(lightPitch_)*sinf(lightYaw_),sinf(lightPitch_),cosf(lightPitch_)*cosf(lightYaw_),0};
+ cb.lc={light_[0]*lightIntensity_,light_[1]*lightIntensity_,light_[2]*lightIntensity_,1};
+ cb.ambient={ambient_[0],ambient_[1],ambient_[2],1};cb.tint={tint_[0],tint_[1],tint_[2],1};
+ cb.outline={1,.65f,.16f,2};cb.viewport={1.f/float(width_),1.f/float(height_),0,0};
+ cb.environment={environment_.x,environment_.y,environment_.z,hemisphere_};
+ auto matrices=[&](const XMMATRIX& model){XMStoreFloat4x4(&cb.wvp,model*view*projection);XMStoreFloat4x4(&cb.world,model);};
+ matrices(world);
+ ID3D11Buffer* buffer=cb_.Get();context_->VSSetConstantBuffers(0,1,&buffer);context_->PSSetConstantBuffers(0,1,&buffer);
+ ID3D11SamplerState* sampler=sampler_.Get();context_->PSSetSamplers(0,1,&sampler);
+ sampler=materialSampler_.Get();context_->PSSetSamplers(1,1,&sampler);
+ ID3D11ShaderResourceView* lut=materialLut_.Get();context_->PSSetShaderResources(3,1,&lut);
+ UINT stride=sizeof(GPUVertex),offset=0;
+ context_->IASetInputLayout(input_.Get());context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+ context_->RSSetState(!clean&&wireframeOn_?wireRaster_.Get():raster_.Get());
+ context_->OMSetDepthStencilState(nullptr,0);context_->VSSetShader(vs_.Get(),nullptr,0);context_->PSSetShader(ps_.Get(),nullptr,0);
+ struct Item{RenderPart* part;XMFLOAT4X4 world;int mainIndex=-1;};
+ std::vector<Item> items;items.reserve(parts_.size()+attachments_.size());
+ XMFLOAT4X4 baseWorld;XMStoreFloat4x4(&baseWorld,world);
+ for(size_t i=0;i<parts_.size();++i)items.push_back({&parts_[i],baseWorld,int(i)});
+ for(auto& attachment:attachments_){
+  if(attachment.bone>=boneTransforms_.size())continue;
+  XMFLOAT4X4 model;XMStoreFloat4x4(&model,attachmentWorld(attachment));
+  // Resources are mutable only for the transparent-sort cache; material edits
+  // never traverse this list, and props are absent from the picking geometry.
+  for(auto& part:attachment.parts)items.push_back({&part,model,-1});
+ }
  auto drawable=[&](const RenderPart& part){return part.visible&&part.vb&&part.ib&&part.textures[0]&&!(alphaEnabled_&&part.alpha.invisible);};
- auto material=[&](RenderPart& part,size_t pi){
-  const bool hovered=int(pi)==hoverPart_&&!part.selected;
-  cb.tint={tint_[0]*(hovered?1.12f:1.f),tint_[1]*(hovered?1.07f:1.f),tint_[2]*(hovered?.88f:1.f),1.f};
-  // Selection limits editing, never the material being displayed. Selecting a
-  // brush target must not flatten every other mesh or reset its normal gain.
-  cb.params={(bumpOn_&&part.hasBump&&!part.flatShader)?1.f:0.f,normalStrength_,glossStrength_,invertNormalY_?1.f:0.f};
-  cb.lighting={materialClass_<0?part.materialClass:float(materialClass_),glossEnabled_?1.f:0.f,part.emissive,part.emissiveSpecular};
+ auto material=[&](Item& item){
+  auto& part=*item.part;const bool prop=item.mainIndex<0;
+  const bool hovered=!clean&&!prop&&item.mainIndex==hoverPart_&&!part.selected;
+  matrices(XMLoadFloat4x4(&item.world));
+  cb.tint=prop?XMFLOAT4{1,1,1,1}:XMFLOAT4{tint_[0]*(hovered?1.12f:1.f),tint_[1]*(hovered?1.07f:1.f),tint_[2]*(hovered?.88f:1.f),1};
+  cb.params={((prop||bumpOn_)&&part.hasBump&&!part.flatShader)?1.f:0.f,prop?1.f:normalStrength_,prop?.5f:glossStrength_,!prop&&invertNormalY_?1.f:0.f};
+  cb.lighting={materialClass_<0?std::clamp(part.materialClass,0.f,3.f):float(materialClass_),glossEnabled_?1.f:0.f,part.emissive,part.emissiveSpecular};
+  cb.lightingOptions={exposure_,r4GlossFactor_,part.hasBump&&!part.flatShader?1.f:0.f,0};
   cb.alpha={float(alphaMode(part)),alphaCutoff_,0,0};context_->UpdateSubresource(cb_.Get(),0,nullptr,&cb,0,0);
-  ID3D11Buffer* vb=part.vb.Get();context_->IASetVertexBuffers(0,1,&vb,&stride,&offset);
+  ID3D11Buffer* vertexBuffer=part.vb.Get();context_->IASetVertexBuffers(0,1,&vertexBuffer,&stride,&offset);
   ID3D11ShaderResourceView* images[]={part.textures[0].Get(),part.textures[1].Get(),part.textures[2].Get()};context_->PSSetShaderResources(0,3,images);
  };
  context_->OMSetBlendState(nullptr,nullptr,0xffffffff);
- // Solid/cutout geometry establishes depth before the translucent pass.
- std::vector<std::pair<float,size_t>> transparent;
- const XMMATRIX modelView=world*view;
- for(size_t pi=0;pi<parts_.size();++pi){auto& part=parts_[pi];if(!drawable(part))continue;
-  if(alphaMode(part)==AlphaMode::Blend){const V3 center=part.center;const float depth=XMVectorGetZ(XMVector3TransformCoord(XMVectorSet(center.x,center.y,center.z,1),modelView));transparent.push_back({depth,pi});continue;}
-  material(part,pi);context_->IASetIndexBuffer(part.ib.Get(),DXGI_FORMAT_R32_UINT,0);context_->DrawIndexed(part.indexCount,0,0);
+ struct Translucent{float depth;size_t item;};std::vector<Translucent> transparent;
+ for(size_t i=0;i<items.size();++i){auto& item=items[i];auto& part=*item.part;if(!drawable(part))continue;
+  if(alphaMode(part)==AlphaMode::Blend){
+   const V3 c=part.center;const XMMATRIX modelView=XMLoadFloat4x4(&item.world)*view;
+   transparent.push_back({XMVectorGetZ(XMVector3TransformCoord(XMVectorSet(c.x,c.y,c.z,1),modelView)),i});continue;
+  }
+  material(item);context_->IASetIndexBuffer(part.ib.Get(),DXGI_FORMAT_R32_UINT,0);context_->DrawIndexed(part.indexCount,0,0);
  }
- std::stable_sort(transparent.begin(),transparent.end(),[](const auto& a,const auto& b){return a.first>b.first;});
+ std::stable_sort(transparent.begin(),transparent.end(),[](const Translucent& a,const Translucent& b){return a.depth>b.depth;});
  context_->OMSetBlendState(alphaBlend_.Get(),nullptr,0xffffffff);context_->OMSetDepthStencilState(alphaDepth_.Get(),0);
- for(const auto& entry:transparent){auto& part=parts_[entry.second];material(part,entry.second);context_->IASetIndexBuffer(sortedAlphaIndices(part,modelView),DXGI_FORMAT_R32_UINT,0);context_->DrawIndexed(part.indexCount,0,0);}
- context_->OMSetBlendState(nullptr,nullptr,0xffffffff);context_->OMSetDepthStencilState(nullptr,0);cb.tint={tint_[0],tint_[1],tint_[2],1.f};
- if(outlineOn_&&anySelection&&vsOutline_&&psOutline_&&outlineRaster_){
-  // A translucent surface did not write depth. Establish its selected surface
-  // without color first, otherwise the inverted hull fills its whole interior.
+ for(const auto& entry:transparent){auto& item=items[entry.item];auto& part=*item.part;material(item);
+  context_->IASetIndexBuffer(sortedAlphaIndices(part,XMLoadFloat4x4(&item.world)*view),DXGI_FORMAT_R32_UINT,0);context_->DrawIndexed(part.indexCount,0,0);
+ }
+ context_->OMSetBlendState(nullptr,nullptr,0xffffffff);context_->OMSetDepthStencilState(nullptr,0);
+ if(!clean&&outlineOn_&&HasSelection()&&vsOutline_&&psOutline_&&outlineRaster_){
   context_->RSSetState(raster_.Get());context_->OMSetBlendState(depthOnlyBlend_.Get(),nullptr,0xffffffff);
-  for(size_t pi=0;pi<parts_.size();++pi){auto& part=parts_[pi];if(!drawable(part)||!part.selected||alphaMode(part)!=AlphaMode::Blend)continue;material(part,pi);context_->IASetIndexBuffer(part.ib.Get(),DXGI_FORMAT_R32_UINT,0);context_->DrawIndexed(part.indexCount,0,0);}
-  context_->OMSetBlendState(nullptr,nullptr,0xffffffff);context_->RSSetState(outlineRaster_.Get());context_->VSSetShader(vsOutline_.Get(),nullptr,0);context_->PSSetShader(psOutline_.Get(),nullptr,0);
-  for(size_t pi=0;pi<parts_.size();++pi){auto& part=parts_[pi];if(!drawable(part)||!part.selected)continue;material(part,pi);context_->IASetIndexBuffer(part.ib.Get(),DXGI_FORMAT_R32_UINT,0);context_->DrawIndexed(part.indexCount,0,0);}
+  for(auto& item:items){auto& part=*item.part;if(item.mainIndex<0||!drawable(part)||!part.selected||alphaMode(part)!=AlphaMode::Blend)continue;
+   material(item);context_->IASetIndexBuffer(part.ib.Get(),DXGI_FORMAT_R32_UINT,0);context_->DrawIndexed(part.indexCount,0,0);
+  }
+  context_->OMSetBlendState(nullptr,nullptr,0xffffffff);context_->RSSetState(outlineRaster_.Get());
+  context_->VSSetShader(vsOutline_.Get(),nullptr,0);context_->PSSetShader(psOutline_.Get(),nullptr,0);
+  for(auto& item:items){auto& part=*item.part;if(item.mainIndex<0||!drawable(part)||!part.selected)continue;
+   material(item);context_->IASetIndexBuffer(part.ib.Get(),DXGI_FORMAT_R32_UINT,0);context_->DrawIndexed(part.indexCount,0,0);
+  }
   context_->RSSetState(raster_.Get());
  }
- if(skeletonOn_&&skeletonVB_&&skeletonVertexCount_){ID3D11ShaderResourceView* nulls[3]={nullptr,nullptr,nullptr};context_->PSSetShaderResources(0,3,nulls);cb.params={0,1,.5f,0};context_->UpdateSubresource(cb_.Get(),0,nullptr,&cb,0,0);UINT bs=sizeof(BoneGPU),bo=0;ID3D11Buffer* vb=skeletonVB_.Get();context_->IASetInputLayout(inputSkeleton_.Get());context_->IASetVertexBuffers(0,1,&vb,&bs,&bo);context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_LINELIST);context_->OMSetDepthStencilState(skeletonDepth_.Get(),0);context_->VSSetShader(vsSkeleton_.Get(),nullptr,0);context_->PSSetShader(psSkeleton_.Get(),nullptr,0);context_->Draw(skeletonVertexCount_,0);context_->OMSetDepthStencilState(nullptr,0);}
- if(brushVB_&&brushVertexCount_){ID3D11ShaderResourceView* nulls[3]={nullptr,nullptr,nullptr};context_->PSSetShaderResources(0,3,nulls);cb.params={0,1,.5f,0};context_->UpdateSubresource(cb_.Get(),0,nullptr,&cb,0,0);UINT bs=sizeof(BoneGPU),bo=0;ID3D11Buffer* vb=brushVB_.Get();context_->IASetInputLayout(inputSkeleton_.Get());context_->IASetVertexBuffers(0,1,&vb,&bs,&bo);context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_LINELIST);context_->OMSetDepthStencilState(skeletonDepth_.Get(),0);context_->VSSetShader(vsSkeleton_.Get(),nullptr,0);context_->PSSetShader(psSkeleton_.Get(),nullptr,0);context_->Draw(brushVertexCount_,0);context_->OMSetDepthStencilState(nullptr,0);}
- // ImGui will sample the scene immediately after this call.
+ matrices(world);cb.tint={tint_[0],tint_[1],tint_[2],1};
+ auto lines=[&](ID3D11Buffer* vertices,UINT count){
+  if(!vertices||!count)return;
+  ID3D11ShaderResourceView* nulls[3]{};context_->PSSetShaderResources(0,3,nulls);cb.params={0,1,.5f,0};context_->UpdateSubresource(cb_.Get(),0,nullptr,&cb,0,0);
+  UINT size=sizeof(BoneGPU),start=0;context_->IASetInputLayout(inputSkeleton_.Get());context_->IASetVertexBuffers(0,1,&vertices,&size,&start);
+  context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_LINELIST);context_->OMSetDepthStencilState(skeletonDepth_.Get(),0);
+  context_->VSSetShader(vsSkeleton_.Get(),nullptr,0);context_->PSSetShader(psSkeleton_.Get(),nullptr,0);context_->Draw(count,0);
+  context_->OMSetDepthStencilState(nullptr,0);
+ };
+ if(!clean&&skeletonOn_)lines(skeletonVB_.Get(),skeletonVertexCount_);
+ if(!clean)lines(brushVB_.Get(),brushVertexCount_);
  context_->OMSetRenderTargets(0,nullptr,nullptr);
 }
 void Renderer::Draw(bool present){
@@ -375,15 +575,61 @@ void Renderer::Draw(bool present){
  PresentUI();
 }
 
-bool Renderer::CaptureFrame(Image& image){
- image={};if(!device_||!scene_||!width_||!height_)return false;DrawScene();
+bool Renderer::readSceneImage(Image& image,std::wstring* error){
+ image={};if(!device_||!scene_||!width_||!height_){if(error)*error=L"No scene surface to capture";return false;}
  ComPtr<ID3D11Texture2D> staging;
  D3D11_TEXTURE2D_DESC desc{};scene_->GetDesc(&desc);desc.Usage=D3D11_USAGE_STAGING;desc.BindFlags=0;desc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;desc.MiscFlags=0;
- if(FAILED(device_->CreateTexture2D(&desc,nullptr,staging.GetAddressOf())))return false;context_->CopyResource(staging.Get(),scene_.Get());D3D11_MAPPED_SUBRESOURCE map{};
- if(FAILED(context_->Map(staging.Get(),0,D3D11_MAP_READ,0,&map)))return false;
- image.w=width_;image.h=height_;image.pixels.resize(size_t(width_)*height_);
- for(UINT y=0;y<height_;++y)std::memcpy(image.pixels.data()+size_t(y)*width_,static_cast<const uint8_t*>(map.pData)+size_t(y)*map.RowPitch,size_t(width_)*sizeof(Pixel));
- context_->Unmap(staging.Get(),0);return true;
+ HRESULT hr=device_->CreateTexture2D(&desc,nullptr,staging.GetAddressOf());
+ if(FAILED(hr)){if(error)*error=hrtext(L"Create screenshot readback surface",hr);return false;}
+ Image result;result.w=width_;result.h=height_;result.pixels.resize(size_t(width_)*height_);
+ context_->CopyResource(staging.Get(),scene_.Get());D3D11_MAPPED_SUBRESOURCE map{};
+ hr=context_->Map(staging.Get(),0,D3D11_MAP_READ,0,&map);
+ if(FAILED(hr)){if(error)*error=hrtext(L"Read screenshot surface",hr);return false;}
+ for(UINT y=0;y<height_;++y)std::memcpy(result.pixels.data()+size_t(y)*width_,static_cast<const uint8_t*>(map.pData)+size_t(y)*map.RowPitch,size_t(width_)*sizeof(Pixel));
+ context_->Unmap(staging.Get(),0);image=std::move(result);return true;
+}
+bool Renderer::CaptureFrame(Image& image){
+ image={};if(!device_||!scene_)return false;DrawScene();return readSceneImage(image);
+}
+bool Renderer::CaptureTransparent(Image& image,uint32_t maxDimension,std::wstring& error){
+ image={};error.clear();
+ if(!device_||!context_||!scene_||!width_||!height_){error=L"No model viewport to capture";return false;}
+ const auto size=PreviewCaptureSize(width_,height_,maxDimension);
+ // Two by two supersampling preserves subpixel coverage in the PNG alpha,
+ // independent of device MSAA support. Only the resolved image is exported.
+ const UINT captureWidth=size.first*2,captureHeight=size.second*2;
+ ComPtr<ID3D11Texture2D> color,depth;ComPtr<ID3D11RenderTargetView> target;ComPtr<ID3D11DepthStencilView> depthView;
+ D3D11_TEXTURE2D_DESC desc{};desc.Width=captureWidth;desc.Height=captureHeight;desc.MipLevels=1;desc.ArraySize=1;
+ desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;desc.SampleDesc.Count=1;desc.Usage=D3D11_USAGE_DEFAULT;desc.BindFlags=D3D11_BIND_RENDER_TARGET;
+ HRESULT hr=device_->CreateTexture2D(&desc,nullptr,color.GetAddressOf());
+ if(SUCCEEDED(hr))hr=device_->CreateRenderTargetView(color.Get(),nullptr,target.GetAddressOf());
+ if(FAILED(hr)){error=hrtext(L"Create transparent screenshot target",hr);return false;}
+ desc.Format=DXGI_FORMAT_D24_UNORM_S8_UINT;desc.BindFlags=D3D11_BIND_DEPTH_STENCIL;
+ hr=device_->CreateTexture2D(&desc,nullptr,depth.GetAddressOf());
+ if(SUCCEEDED(hr))hr=device_->CreateDepthStencilView(depth.Get(),nullptr,depthView.GetAddressOf());
+ if(FAILED(hr)){error=hrtext(L"Create screenshot depth",hr);return false;}
+ const auto originalScene=scene_,originalDepth=depth_;const auto originalTarget=rtv_;const auto originalDepthView=dsv_;
+ const UINT originalWidth=width_,originalHeight=height_;
+ std::array<ID3D11RenderTargetView*,D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT> previousTargets{};
+ ComPtr<ID3D11DepthStencilView> previousDepth;
+ context_->OMGetRenderTargets(UINT(previousTargets.size()),previousTargets.data(),previousDepth.GetAddressOf());
+ std::array<D3D11_VIEWPORT,D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE> previousViewports{};
+ UINT viewportCount=UINT(previousViewports.size());context_->RSGetViewports(&viewportCount,previousViewports.data());
+ const auto restore=onExit([&]{
+  context_->OMSetRenderTargets(0,nullptr,nullptr);
+  scene_=originalScene;depth_=originalDepth;rtv_=originalTarget;dsv_=originalDepthView;width_=originalWidth;height_=originalHeight;
+  context_->RSSetViewports(viewportCount,previousViewports.data());
+  context_->OMSetRenderTargets(UINT(previousTargets.size()),previousTargets.data(),previousDepth.Get());
+  for(auto* view:previousTargets)if(view)view->Release();
+ });
+ scene_=std::move(color);depth_=std::move(depth);rtv_=std::move(target);dsv_=std::move(depthView);width_=captureWidth;height_=captureHeight;
+ try{
+  drawScene(true,true);Image premultiplied;
+  if(!readSceneImage(premultiplied,&error))return false;
+  image=ResolvePreviewCapture(premultiplied,size.first,size.second);
+  if(!image.valid()){error=L"Cannot resolve transparent screenshot";return false;}
+  return true;
+ }catch(const std::exception&){error=L"Not enough memory to create screenshot";image={};return false;}
 }
 
 }

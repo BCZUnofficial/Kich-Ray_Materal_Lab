@@ -1,5 +1,6 @@
 #pragma once
 #include "Core.h"
+#include "AttachmentPreview.h"
 #include "imgui.h"
 #include <array>
 #include <functional>
@@ -17,13 +18,17 @@ enum class EditorAction {
     SelectPart, Visibility, ShowAll, HideSelected, ClearSelection, PreviewSettings,
     LightSettings, AlphaSettings, Skeleton, AnimationSelect, AnimationPlay,
     AnimationSeek, AnimationSettings, AdjustMaterial, ApplyAdjustments, DiscardAdjustments,
-    GlossSettings, BackgroundSettings, AxisView, SurfacePreset, SetBrushTool
+    GlossSettings, BackgroundSettings, AxisView, SurfacePreset, SetBrushTool,
+    BipedBones, SelectAttachmentBone, LoadAttachment, UseRecentAttachment,
+    RemoveAttachment, AttachmentTransform, ResetAttachmentTransform, CaptureAnimation
 };
 struct EditorMeshRow {
     std::string label;
     bool visible=true,selected=false,hasDiffuse=false,hasBump=false;
 };
 struct EditorRect { float x=0,y=0,w=0,h=0; };
+struct EditorBoneRow {int index=-1;std::string name;};
+struct EditorBoneMarker {int index=-1;std::string name;float x=0,y=0;bool occupied=false;};
 struct EditorUIState {
     EditorTab tab=EditorTab::Files;
     EditorMode mode=EditorMode::Fly;
@@ -38,6 +43,7 @@ struct EditorUIState {
     BrushTool brushTool=BrushTool::Freehand;
     bool forceBrushTab=false,hasDiffuse=false;
     float lightIntensity=1.f;
+    float environment[3]={0,0,0},hemisphere=1.f,exposure=1.f,glossFactor=1.f;
     float background[3]={.095f,.105f,.12f};
     std::array<std::string,6> sourceNames;
     std::string modelName="Тестовый куб",status="Откройте OGF или загрузите diffuse.",documentInfo;
@@ -54,11 +60,18 @@ struct EditorUIState {
     int animationIndex=0,animationFrame=0,animationFrames=1;
     float animationSpeed=1.f;
     bool animationPlaying=false,animationLoop=true;
+    bool showBipedBones=false,attachmentActive=false,requestAttachmentPopup=false,bonePointerCaptured=false;
+    int attachmentBone=-1;
+    std::string attachmentBoneName,attachmentName;
+    std::vector<EditorBoneRow> attachmentBones;
+    std::vector<EditorBoneMarker> boneMarkers;
+    std::vector<std::string> recentAttachments;
+    AttachmentTransform attachmentTransform;
     bool requestGeneratePopup=false;
     std::vector<bool> generateTargets;
     ImTextureID viewportTexture=0;
     EditorRect viewportRect,toolbarRect,inspectorRect;
-    bool viewportHovered=false,viewportClicked=false;
+    bool viewportHovered=false,viewportClicked=false,viewportActive=false;
     int renderedPaneCount=0;
     float uiScale=1.f;
 };

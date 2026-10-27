@@ -1,23 +1,26 @@
-Material Lab 0.11.0 — круглая иконка ML
+Material Lab 0.13.0 — сборка и запуск
 
-1. Закройте Material Lab.
-2. Распакуйте содержимое этого архива в папку проекта, где находится
-   KichRay_MaterialLab.sln. Согласитесь на замену файлов.
-3. В Visual Studio 2022 выберите Сборка → Пересобрать решение.
-   Поддержаны Release/Debug, x64/Win32.
-4. Запускайте EXE из bin/Release/x64 (либо выбранной конфигурации).
+1. Откройте KichRay_MaterialLab.sln в Visual Studio 2022 с установленными
+   компонентами разработки классических приложений на C++ и Windows SDK.
+2. Выберите Release | x64 и выполните «Пересобрать решение».
+   Проект также содержит конфигурации Debug и Win32.
+3. Запустите bin/Release/x64/MaterialLab.exe.
+   При переносе EXE сохраните рядом каталог assets с Preview.hlsl.
+   Иконка и заставка встроены в EXE.
 
-MaterialLab.vcxproj включает компиляцию assets/MaterialLab.rc.
-src/Resource.h задаёт идентификатор, src/WinApp.cpp назначает ресурс окну.
-assets/MaterialLab.ico содержит 10 размеров от 16 до 256 с прозрачным фоном.
-assets/MaterialLab.png — исходник с прозрачностью.
-Иконка встроена в EXE, копировать ICO рядом с приложением не требуется.
-Исправление конфликта Windows SDK small/char и C4457 сохранено.
+Корень репозитория и source/ содержат одинаковые исходники. Собирайте
+одну из этих копий. Старые INSTALL_0.* и MaterialLab_0.12.0.patch относятся
+к предыдущим версиям; применять их к 0.13.0 не требуется.
 
-Проверено: MinGW-w64 x64/Win32; иконка находится в обоих EXE,
-все 10 изображений ресурсов побайтно совпадают с ICO. MSVC и запуск
-оболочки Windows в этой среде не выполнялись.
-Подробности: verification/icon-verification.txt.
+Если скачивается готовый artifact из GitHub Actions, распакуйте его целиком
+и запускайте MaterialLab.exe с сохранённой структурой assets/Preview.hlsl.
+Отчёт smoke-tests.txt в таком artifact относится к приложенному EXE.
 
-Этот архив обновляет ранее выданный проект 0.11.0. Полный архив проекта
-MaterialLab_0.11.0_audit_fix.zip также обновлён и содержит собранные EXE.
+Настройки сцены хранятся в MaterialLab.ini рядом с приложением.
+История предметов: %LOCALAPPDATA%/KichRay/MaterialLab/AttachmentHistory.txt.
+Если LOCALAPPDATA недоступна, используется MaterialLab.attachments рядом
+с EXE. История содержит пути к исходным OGF и настройки крепления;
+сами модели и текстуры в неё не копируются.
+
+Новые функции и границы соответствия DX11: UPDATE_0.13.0_RU.md.
+Фактические результаты тестов: verification/ и GitHub Actions.

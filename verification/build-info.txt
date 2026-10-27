@@ -1,12 +1,28 @@
-Source commit: 935d5f3167913cc4d41e4607245f80accc17efcf
-Update base: ad59fed53999310d0f482cec64cfa0161a39434d
-Cumulative patch base: 15a6b05f3ffe91d15da216cd99cf94557440dc81
-MinGW-w64 GCC 13.2: x64 and Win32 builds passed.
-Portable tests: 7/7 passed. ASan/UBSan: 7/7 passed.
-LeakSanitizer disabled: sandbox /proc access limitation.
-MSVC / native Windows execution / native smoke test: NOT RUN.
-Splash PNG matches supplied attachment byte for byte.
-x64: RCDATA 102 and all 10 icon frames match source; manifest retained.
-x64 EXE SHA256: 77231217ad2188ee8a25273663bc69c0b5e9f6d885fa5cbcc00332811eea5dfe
-Win32: RCDATA 102 and all 10 icon frames match source; manifest retained.
-Win32 EXE SHA256: 0355eda1f802fcf18e8d87081d03e1a8ee29aff7cb09f87a92638e8b743aceb1
+Material Lab 0.13.0 — local validation, 2026-10-26 UTC
+Update base: 9d0be1aa320651207d7922d712e0741922ea6aa1 (0.12.0)
+Branch: codex/material-lab-0.13.0
+
+GCC Release portable regressions: 10/10 PASS.
+GCC ASan/UBSan portable regressions: 10/10 PASS.
+ASAN_OPTIONS=detect_leaks=0:halt_on_error=1
+UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
+LeakSanitizer was disabled due to sandbox /proc limitations.
+Actual ImGui draw-list snapshots inspected at 1490x900 and 960x600.
+
+MinGW-w64 GCC 13.2 x64: all 14 .cpp files compiled, resources and EXE linked.
+DirectXMath source: microsoft/DirectXMath f5d82574b03417d905fdd2f85bfa9bf7a2f1deac.
+Cross-build executable SHA256: d444a99f1963b9eedc24028d3574981956d1f3de77c9cd560c40a8d8e1dde8d3
+
+These are Linux-hosted checks. Native MSVC x64/Win32 builds, HLSL runtime
+compilation, D3D11 WARP rendering and WIC PNG roundtrip are checked by the
+GitHub Actions workflow for the corresponding commit. Consult that run and
+the smoke-tests.txt included in its Windows artifact for native results.
+
+New WARP checks cover preserved camera/light, biped prop placement and
+animation, prop/material isolation, transparent screenshot alpha/size/state,
+R4 hemisphere/exposure and direct-specular pixel values, and WIC PNG output.
+
+The user's affected OGF models/textures were not provided. Parser cases and
+GPU fixtures are synthetic; no claim is made that those exact assets ran.
+The lighting reference does not include a level's weather cubemaps or shadows.
+Historical 0.12.0 verification records are retained under verification/0.12.0/.

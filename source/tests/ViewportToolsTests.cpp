@@ -28,6 +28,30 @@ void framePortraitViewport(){
     check(c.distance>wide,"A narrow viewport must move farther away to frame the same mesh");
     check(distance(c.pivot,{2,3,4})<1e-6f,"Focus must center the selected mesh, not the world origin");
 }
+void flightDirection(){
+    // Guard the reported backward-flight symptom at the math/input boundary.
+    // Forward input must move in the actual view direction at every yaw/pitch;
+    // a released (zero) input must never retain velocity from the last frame.
+    for(float yaw:{-3.141592654f,-1.570796327f,0.f,.65f,1.570796327f,3.141592654f})
+        for(float pitch:{-1.570796327f,-1.3f,0.f,1.3f,1.570796327f}){
+            lab::ViewportCamera c;c.pivot={2,-3,5};c.yaw=yaw;c.pitch=pitch;
+            const auto before=c.eye();const auto offset=c.offset();
+            const lab::V3 forward{-offset.x/c.distance,-offset.y/c.distance,-offset.z/c.distance};
+            c.move(0,0,.25f);const auto after=c.eye();
+            const lab::V3 expected{before.x+forward.x*.25f,before.y+forward.y*.25f,before.z+forward.z*.25f};
+            check(distance(after,expected)<2e-6f,"W movement must follow view direction, including vertical flight");
+            c.move(0,0,-.25f);
+            check(distance(c.eye(),before)<2e-6f,"S movement must be the exact reverse of W");
+            const auto stopped=c.eye();
+            for(int frame=0;frame<100;++frame)c.move(0,0,0);
+            check(distance(c.eye(),stopped)==0,"no input must mean no movement or residual backward velocity");
+            c.zoom(1);const auto zoomed=c.eye();
+            const float along=(zoomed.x-stopped.x)*forward.x+(zoomed.y-stopped.y)*forward.y+(zoomed.z-stopped.z)*forward.z;
+            check(along>0,"positive fly zoom must advance along the same view direction as W");
+            const auto eye=c.eye();c.look(30,-20);
+            check(distance(c.eye(),eye)<2e-6f,"looking after movement must not add backward translation");
+        }
+}
 void periodicUndoCoverage(){
     // Check the actual scalar brush against the selected undo tiles, including
     // thin rectangular maps and the partial final tile of a 70px texture.
@@ -91,7 +115,7 @@ void diffuseAlpha(){
 
 }
 int main(){
-    try{cameraNavigation();framePortraitViewport();periodicUndoCoverage();screenSpaceStroke();diffuseAlpha();
+    try{cameraNavigation();framePortraitViewport();flightDirection();periodicUndoCoverage();screenSpaceStroke();diffuseAlpha();
         std::cout<<"PASS: camera, framing, 16 periodic undo cases, surface stroke sampling, diffuse alpha\n";return 0;
     }catch(const std::exception& e){std::cerr<<"FAIL: "<<e.what()<<'\n';return 1;}
 }

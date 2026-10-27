@@ -14,6 +14,9 @@ struct Vertex {
     uint16_t bone0=0,bone1=0;
     float weight=0.f; // 2-link: lerp(bone0, bone1, weight)
     uint8_t links=0; // 0 static, 1 or 2 skeletal
+    // Skeletal OGF exports its tangent basis; keep it for engine-matching normals.
+    V3 tangent{},binormal{};
+    bool hasTangentBasis=false;
 };
 struct MeshPart {
     std::vector<Vertex> vertices;
@@ -59,7 +62,12 @@ struct Mesh {
 };
 struct Settings {float normalStrength=1.f,gloss=0.45f,height=0.5f,blur=0.12f,sharpness=0.35f;bool invertY=false;};
 // Relative to an immutable, committed layer snapshot; identity changes no bytes.
-struct MaterialAdjustments {float normalStrength=1.f,gloss=1.f,height=1.f,blur=0.f,sharpness=0.f;bool invertY=false;};
+struct MaterialAdjustments {
+    float normalStrength=1.f,gloss=1.f,height=1.f,blur=0.f,sharpness=0.f;
+    bool invertY=false,heightFromDiffuse=false;
+    float diffuseHeightStrength=.25f;
+};
+GrayImage MakeDiffuseHeightLift(const Image& diffuse,uint32_t width,uint32_t height);
 Settings MinimalBaseSettings();
 enum class SurfacePreset { Glass, Fabric, Metal, Concrete, Leather };
 // A texel-aligned stamp derived from the diffuse around the hit UV. Its detail

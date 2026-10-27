@@ -1,0 +1,1564 @@
+{
+  "base_commit": "9d0be1aa320651207d7922d712e0741922ea6aa1",
+  "base_files_verified": 146,
+  "base_excluded_historical_patch": [
+    "MaterialLab_0.12.0.patch"
+  ],
+  "base_files": [
+    {
+      "path": ".gitattributes",
+      "base_git_blob_sha1": "1ff0c423042b46cb1d617b81efb715defbe8054d",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/.gitattributes"
+      ]
+    },
+    {
+      "path": ".github/workflows/build.yml",
+      "base_git_blob_sha1": "8e13eb4b5c86a3317cd71c6b990a10d7d15750be",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/.github/workflows/build.yml"
+      ]
+    },
+    {
+      "path": ".gitignore",
+      "base_git_blob_sha1": "6bc52991388f36c853d1b19c18209d593aa57e59",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/.gitignore"
+      ]
+    },
+    {
+      "path": "AUDIT_0.10.0_RU.md",
+      "base_git_blob_sha1": "d46226c9105389e8cb9b8862cd677ec2745626d5",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/AUDIT_0.10.0_RU.md"
+      ]
+    },
+    {
+      "path": "AUDIT_0.11.0_RU.md",
+      "base_git_blob_sha1": "79ffb4668ea6c653f37f2200355df00f9f1e02eb",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/AUDIT_0.11.0_RU.md"
+      ]
+    },
+    {
+      "path": "CHANGELOG.md",
+      "base_git_blob_sha1": "eb469b7f7dac2e707cb1584d8f1ae8554c55fdc8",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/CHANGELOG.md"
+      ]
+    },
+    {
+      "path": "CMakeLists.txt",
+      "base_git_blob_sha1": "3e8f150debfbc061c0b4ddfeda0e56b5a894617c",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/CMakeLists.txt"
+      ]
+    },
+    {
+      "path": "INSTALL_0.10.0_RU.txt",
+      "base_git_blob_sha1": "93d21fd630190f6b400e539716443b79dac14f38",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/INSTALL_0.10.0_RU.txt"
+      ]
+    },
+    {
+      "path": "INSTALL_0.9.1_RU.txt",
+      "base_git_blob_sha1": "ddad377c0a695f2dc347495ebc2b41561eec98b8",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/INSTALL_0.9.1_RU.txt"
+      ]
+    },
+    {
+      "path": "INSTALL_0.9.2_RU.txt",
+      "base_git_blob_sha1": "2754952b4bea2438f23954524f270c6b58b01100",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/INSTALL_0.9.2_RU.txt"
+      ]
+    },
+    {
+      "path": "INSTALL_RU.txt",
+      "base_git_blob_sha1": "ea344230e9b05d1f5b7153e62e573c8d6786ae13",
+      "source": [
+        "https://github.com/BCZUnofficial/Kich-Ray_Materal_Lab/blob/9d0be1aa320651207d7922d712e0741922ea6aa1/INSTALL_RU.txt"
+      ]
+    },
+    {
+      "path": "KichRay_MaterialLab.sln",
+      "base_git_blob_sha1": "b6c7efb5c904523df25381feb0fd6786fbff90d7",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/KichRay_MaterialLab.sln"
+      ]
+    },
+    {
+      "path": "MaterialLab.vcxproj",
+      "base_git_blob_sha1": "65f3d59b5afd76b1add2f735bd7a9a8786cdcc80",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/MaterialLab.vcxproj"
+      ]
+    },
+    {
+      "path": "README.md",
+      "base_git_blob_sha1": "7744961cad18a0e02eccdf113b95c37553fe6411",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/README.md"
+      ]
+    },
+    {
+      "path": "START_HERE_RU.txt",
+      "base_git_blob_sha1": "92d907442fe63ad869db951816d36636886c5569",
+      "source": [
+        "https://github.com/BCZUnofficial/Kich-Ray_Materal_Lab/blob/9d0be1aa320651207d7922d712e0741922ea6aa1/START_HERE_RU.txt"
+      ]
+    },
+    {
+      "path": "UPDATE_0.12.0_RU.md",
+      "base_git_blob_sha1": "3e1f3edaede7cb449b3c7c01af14ccd693cd0db0",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/UPDATE_0.12.0_RU.md"
+      ]
+    },
+    {
+      "path": "assets/ICON_README_RU.txt",
+      "base_git_blob_sha1": "d265c6f75689d9099c8e8080c9b725062edf7e48",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/assets/ICON_README_RU.txt"
+      ]
+    },
+    {
+      "path": "assets/MaterialLab.ico",
+      "base_git_blob_sha1": "bf6e3c1b479e4de473c83a68eed13d700d237e25",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/assets/MaterialLab.ico"
+      ]
+    },
+    {
+      "path": "assets/MaterialLab.manifest",
+      "base_git_blob_sha1": "396a21f8a1c58814e77253549df9204b78a5e8e3",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/assets/MaterialLab.manifest"
+      ]
+    },
+    {
+      "path": "assets/MaterialLab.png",
+      "base_git_blob_sha1": "6da3faecc871facbae1c882b75ad56c3ae44e6a1",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/assets/MaterialLab.png"
+      ]
+    },
+    {
+      "path": "assets/MaterialLab.rc",
+      "base_git_blob_sha1": "81e1111f4ecc44012ce9bfe04075aad8186a79af",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/assets/MaterialLab.rc"
+      ]
+    },
+    {
+      "path": "assets/Preview.hlsl",
+      "base_git_blob_sha1": "012e07e8ad4f91b7ebe8751df30df2792cb00751",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/assets/Preview.hlsl"
+      ]
+    },
+    {
+      "path": "assets/StartupSplash.png",
+      "base_git_blob_sha1": "ab0820777a52b25464e06cb731d3f509903bbc76",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/assets/StartupSplash.png"
+      ]
+    },
+    {
+      "path": "build_vs2022.bat",
+      "base_git_blob_sha1": "6d59209215f044eddd95f109ce4317c47a7354ec",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/build_vs2022.bat"
+      ]
+    },
+    {
+      "path": "licenses/DearImGui.txt",
+      "base_git_blob_sha1": "00ae473abe62bf1c53b333613bd9e05aa72e2ca0",
+      "source": [
+        "ML013_x64(2).zip:MaterialLab_0.13.0_Windows_x64/licenses/DearImGui.txt",
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "licenses/DirectXMath.txt",
+      "base_git_blob_sha1": "9e841e7a26e4eb057b24511e7b92d42b257a80e5",
+      "source": [
+        "ML013_x64(2).zip:MaterialLab_0.13.0_Windows_x64/licenses/DirectXMath.txt"
+      ]
+    },
+    {
+      "path": "licenses/GCC-runtime.txt",
+      "base_git_blob_sha1": "7b129d8784e448187fee852f361a22644d1ae5ff",
+      "source": [
+        "ML013_x64(2).zip:MaterialLab_0.13.0_Windows_x64/licenses/GCC-runtime.txt"
+      ]
+    },
+    {
+      "path": "licenses/MinGW-w64.txt",
+      "base_git_blob_sha1": "c63733987e9b9060ccfd667fae73806064cf7d90",
+      "source": [
+        "ML013_x64(2).zip:MaterialLab_0.13.0_Windows_x64/licenses/MinGW-w64.txt"
+      ]
+    },
+    {
+      "path": "source/.gitattributes",
+      "base_git_blob_sha1": "1ff0c423042b46cb1d617b81efb715defbe8054d",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/.gitattributes"
+      ]
+    },
+    {
+      "path": "source/.github/workflows/build.yml",
+      "base_git_blob_sha1": "8e13eb4b5c86a3317cd71c6b990a10d7d15750be",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/.github/workflows/build.yml"
+      ]
+    },
+    {
+      "path": "source/.gitignore",
+      "base_git_blob_sha1": "6bc52991388f36c853d1b19c18209d593aa57e59",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/.gitignore"
+      ]
+    },
+    {
+      "path": "source/AUDIT_0.10.0_RU.md",
+      "base_git_blob_sha1": "d46226c9105389e8cb9b8862cd677ec2745626d5",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/AUDIT_0.10.0_RU.md"
+      ]
+    },
+    {
+      "path": "source/AUDIT_0.11.0_RU.md",
+      "base_git_blob_sha1": "79ffb4668ea6c653f37f2200355df00f9f1e02eb",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/AUDIT_0.11.0_RU.md"
+      ]
+    },
+    {
+      "path": "source/CHANGELOG.md",
+      "base_git_blob_sha1": "eb469b7f7dac2e707cb1584d8f1ae8554c55fdc8",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/CHANGELOG.md"
+      ]
+    },
+    {
+      "path": "source/CMakeLists.txt",
+      "base_git_blob_sha1": "3e8f150debfbc061c0b4ddfeda0e56b5a894617c",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/CMakeLists.txt"
+      ]
+    },
+    {
+      "path": "source/INSTALL_0.10.0_RU.txt",
+      "base_git_blob_sha1": "93d21fd630190f6b400e539716443b79dac14f38",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/INSTALL_0.10.0_RU.txt"
+      ]
+    },
+    {
+      "path": "source/INSTALL_0.9.1_RU.txt",
+      "base_git_blob_sha1": "ddad377c0a695f2dc347495ebc2b41561eec98b8",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/INSTALL_0.9.1_RU.txt"
+      ]
+    },
+    {
+      "path": "source/INSTALL_0.9.2_RU.txt",
+      "base_git_blob_sha1": "2754952b4bea2438f23954524f270c6b58b01100",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/INSTALL_0.9.2_RU.txt"
+      ]
+    },
+    {
+      "path": "source/KichRay_MaterialLab.sln",
+      "base_git_blob_sha1": "b6c7efb5c904523df25381feb0fd6786fbff90d7",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/KichRay_MaterialLab.sln"
+      ]
+    },
+    {
+      "path": "source/MaterialLab.vcxproj",
+      "base_git_blob_sha1": "65f3d59b5afd76b1add2f735bd7a9a8786cdcc80",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/MaterialLab.vcxproj"
+      ]
+    },
+    {
+      "path": "source/README.md",
+      "base_git_blob_sha1": "7744961cad18a0e02eccdf113b95c37553fe6411",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/README.md"
+      ]
+    },
+    {
+      "path": "source/UPDATE_0.12.0_RU.md",
+      "base_git_blob_sha1": "3e1f3edaede7cb449b3c7c01af14ccd693cd0db0",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/UPDATE_0.12.0_RU.md"
+      ]
+    },
+    {
+      "path": "source/assets/ICON_README_RU.txt",
+      "base_git_blob_sha1": "d265c6f75689d9099c8e8080c9b725062edf7e48",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/assets/ICON_README_RU.txt"
+      ]
+    },
+    {
+      "path": "source/assets/MaterialLab.ico",
+      "base_git_blob_sha1": "bf6e3c1b479e4de473c83a68eed13d700d237e25",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/assets/MaterialLab.ico"
+      ]
+    },
+    {
+      "path": "source/assets/MaterialLab.manifest",
+      "base_git_blob_sha1": "396a21f8a1c58814e77253549df9204b78a5e8e3",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/assets/MaterialLab.manifest"
+      ]
+    },
+    {
+      "path": "source/assets/MaterialLab.png",
+      "base_git_blob_sha1": "6da3faecc871facbae1c882b75ad56c3ae44e6a1",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/assets/MaterialLab.png"
+      ]
+    },
+    {
+      "path": "source/assets/MaterialLab.rc",
+      "base_git_blob_sha1": "81e1111f4ecc44012ce9bfe04075aad8186a79af",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/assets/MaterialLab.rc"
+      ]
+    },
+    {
+      "path": "source/assets/Preview.hlsl",
+      "base_git_blob_sha1": "012e07e8ad4f91b7ebe8751df30df2792cb00751",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/assets/Preview.hlsl"
+      ]
+    },
+    {
+      "path": "source/assets/StartupSplash.png",
+      "base_git_blob_sha1": "ab0820777a52b25464e06cb731d3f509903bbc76",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/assets/StartupSplash.png"
+      ]
+    },
+    {
+      "path": "source/build_vs2022.bat",
+      "base_git_blob_sha1": "6d59209215f044eddd95f109ce4317c47a7354ec",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/build_vs2022.bat"
+      ]
+    },
+    {
+      "path": "source/src/Core.cpp",
+      "base_git_blob_sha1": "7e952fee4d86ac9af1df85819f74e98014948571",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/Core.cpp"
+      ]
+    },
+    {
+      "path": "source/src/Core.h",
+      "base_git_blob_sha1": "6a389708d3ef857777cda34467f80177ead5d67a",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/Core.h"
+      ]
+    },
+    {
+      "path": "source/src/DDS.cpp",
+      "base_git_blob_sha1": "49f63561dd81669626dc6c0bba867854c1113656",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/DDS.cpp"
+      ]
+    },
+    {
+      "path": "source/src/EditorUI.cpp",
+      "base_git_blob_sha1": "bcd9507620a3702bc63696e4afdf592e6f6f3a2b",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/EditorUI.cpp"
+      ]
+    },
+    {
+      "path": "source/src/EditorUI.h",
+      "base_git_blob_sha1": "0aa63bd4d0fb142d7ebe14491147c62a8cf60ce7",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/EditorUI.h"
+      ]
+    },
+    {
+      "path": "source/src/EditorWorkflow.h",
+      "base_git_blob_sha1": "c7ac1cf25634e0f6f4ffc88a6d5e3275a1933e05",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/EditorWorkflow.h"
+      ]
+    },
+    {
+      "path": "source/src/EngineLighting.h",
+      "base_git_blob_sha1": "c44f8ac872d16db6905187c7e873269096aa3b29",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/EngineLighting.h"
+      ]
+    },
+    {
+      "path": "source/src/EngineTexture.h",
+      "base_git_blob_sha1": "6f993ad201c35ec1100962f575c2fcb7f94fa7b5",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/EngineTexture.h"
+      ]
+    },
+    {
+      "path": "source/src/MaterialAlpha.h",
+      "base_git_blob_sha1": "651ec64c20dcef3c2f5a501de64c7f7f9e44e1db",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/MaterialAlpha.h"
+      ]
+    },
+    {
+      "path": "source/src/MaterialDocument.cpp",
+      "base_git_blob_sha1": "68e61f8d8a543d60f9a4da942db78e18c9215a0d",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/MaterialDocument.cpp"
+      ]
+    },
+    {
+      "path": "source/src/MaterialDocument.h",
+      "base_git_blob_sha1": "7ccf7103ac93095cdc8605d0273149f925eea50a",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/MaterialDocument.h"
+      ]
+    },
+    {
+      "path": "source/src/OGF.cpp",
+      "base_git_blob_sha1": "3047bbb902b59b72926d19885a399b3f19107b85",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/OGF.cpp"
+      ]
+    },
+    {
+      "path": "source/src/Renderer.cpp",
+      "base_git_blob_sha1": "b0da0ee6f497481a83608e5718e10aab37b0a419",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/Renderer.cpp"
+      ]
+    },
+    {
+      "path": "source/src/Renderer.h",
+      "base_git_blob_sha1": "5bfe3bd80698689722bf027f1ccd347b59ffd74a",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/Renderer.h"
+      ]
+    },
+    {
+      "path": "source/src/Resource.h",
+      "base_git_blob_sha1": "b805fee1f662ac1ad677d3246b637f818ab3d403",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/Resource.h"
+      ]
+    },
+    {
+      "path": "source/src/StartupSplash.cpp",
+      "base_git_blob_sha1": "f70fdf34b4fd35d712ee29b8e1712b34e90d20f9",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/StartupSplash.cpp"
+      ]
+    },
+    {
+      "path": "source/src/StartupSplash.h",
+      "base_git_blob_sha1": "5546b2978d9da1b15c037f96feabdbc7e7d0da29",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/StartupSplash.h"
+      ]
+    },
+    {
+      "path": "source/src/ViewportToolbar.h",
+      "base_git_blob_sha1": "d48d9a621c33a90f3a9ff6a88c24932bd0b46719",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/ViewportToolbar.h"
+      ]
+    },
+    {
+      "path": "source/src/ViewportTools.h",
+      "base_git_blob_sha1": "6be1af5dd65a52f4511d19c0b825ce7beb665357",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/ViewportTools.h"
+      ]
+    },
+    {
+      "path": "source/src/WinApp.cpp",
+      "base_git_blob_sha1": "ef4a7908f47a1d5f409b58dfe083e55c2cdbf737",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/WinApp.cpp"
+      ]
+    },
+    {
+      "path": "source/tests/BrushLayersTests.cpp",
+      "base_git_blob_sha1": "7c922c027487430d1c4c6d77a3b635456e09eb2e",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/tests/BrushLayersTests.cpp"
+      ]
+    },
+    {
+      "path": "source/tests/EditorUITests.cpp",
+      "base_git_blob_sha1": "d27ad86a949b089174563ce1cfcf1d9933e544b4",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/tests/EditorUITests.cpp"
+      ]
+    },
+    {
+      "path": "source/tests/MaterialDocumentTests.cpp",
+      "base_git_blob_sha1": "b86c18489cdd6803b360e36aaeaa9a2c2cd543ad",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/tests/MaterialDocumentTests.cpp"
+      ]
+    },
+    {
+      "path": "source/tests/ParserTests.cpp",
+      "base_git_blob_sha1": "1e5ad9207061b8c27a6a05ddbd1d3fba2de243c5",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/tests/ParserTests.cpp"
+      ]
+    },
+    {
+      "path": "source/tests/SurfaceReliefTests.cpp",
+      "base_git_blob_sha1": "d5b5b3d9d3a09cdaaec40c19bd90dc0bd9adc782",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/tests/SurfaceReliefTests.cpp"
+      ]
+    },
+    {
+      "path": "source/tests/ViewportToolsTests.cpp",
+      "base_git_blob_sha1": "e3a6cc1503fd57db1dbf1c19a1e227934bcc963b",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/tests/ViewportToolsTests.cpp"
+      ]
+    },
+    {
+      "path": "source/tests/WorkflowTests.cpp",
+      "base_git_blob_sha1": "160fea9d7a26e588395a4b0d1ac5b9abe0eee200",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/tests/WorkflowTests.cpp"
+      ]
+    },
+    {
+      "path": "source/tests/reference_audit_act_bandit.json",
+      "base_git_blob_sha1": "dc3c525a629cd3da8109fce4f1231209c0dda914",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/tests/reference_audit_act_bandit.json"
+      ]
+    },
+    {
+      "path": "source/third_party/imgui/LICENSE.txt",
+      "base_git_blob_sha1": "00ae473abe62bf1c53b333613bd9e05aa72e2ca0",
+      "source": [
+        "ML013_x64(2).zip:MaterialLab_0.13.0_Windows_x64/licenses/DearImGui.txt",
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "source/third_party/imgui/VERSION.txt",
+      "base_git_blob_sha1": "17b7243153611dfd2442e24dcdf61e1445e3a5b9",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/VERSION.txt"
+      ]
+    },
+    {
+      "path": "source/third_party/imgui/backends/imgui_impl_dx11.cpp",
+      "base_git_blob_sha1": "9f39588810eb648a5c4569a5f157cb94903642f5",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/backends/imgui_impl_dx11.cpp"
+      ]
+    },
+    {
+      "path": "source/third_party/imgui/backends/imgui_impl_dx11.h",
+      "base_git_blob_sha1": "772c1b920c0546be02657f2812258cc8e2b6bd17",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/backends/imgui_impl_dx11.h"
+      ]
+    },
+    {
+      "path": "source/third_party/imgui/backends/imgui_impl_win32.cpp",
+      "base_git_blob_sha1": "2c749515d221fcb2916833a5efda095ff684f6ea",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/backends/imgui_impl_win32.cpp"
+      ]
+    },
+    {
+      "path": "source/third_party/imgui/backends/imgui_impl_win32.h",
+      "base_git_blob_sha1": "083fe385f6fa0738ecb43756e7e97a007082e235",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/backends/imgui_impl_win32.h"
+      ]
+    },
+    {
+      "path": "source/third_party/imgui/imconfig.h",
+      "base_git_blob_sha1": "a1e29e849bc8c6125a0c567fa6cb528a293025cb",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/imconfig.h"
+      ]
+    },
+    {
+      "path": "source/third_party/imgui/imgui.cpp",
+      "base_git_blob_sha1": "7ec19227897180787843dc65b1238ac9494433c5",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/imgui.cpp"
+      ]
+    },
+    {
+      "path": "source/third_party/imgui/imgui.h",
+      "base_git_blob_sha1": "75750ae10904989cd7bdefb413fabd056696816a",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/imgui.h"
+      ]
+    },
+    {
+      "path": "source/third_party/imgui/imgui_draw.cpp",
+      "base_git_blob_sha1": "2731015291896890d5f46c8563198074fb7f14cb",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/imgui_draw.cpp"
+      ]
+    },
+    {
+      "path": "source/third_party/imgui/imgui_internal.h",
+      "base_git_blob_sha1": "ddf9ea3e9afd59e948fbf34c3edf614d1623b2ef",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/imgui_internal.h"
+      ]
+    },
+    {
+      "path": "source/third_party/imgui/imgui_tables.cpp",
+      "base_git_blob_sha1": "c98aea2d1cc7c6a2d64e8d27c70d6c724005f5ba",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/imgui_tables.cpp"
+      ]
+    },
+    {
+      "path": "source/third_party/imgui/imgui_widgets.cpp",
+      "base_git_blob_sha1": "c997e17b61c6d506b496f6f990e67c88cace65f0",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/imgui_widgets.cpp"
+      ]
+    },
+    {
+      "path": "source/third_party/imgui/imstb_rectpack.h",
+      "base_git_blob_sha1": "f6917e7a6e56a03dcee169bf4e08c32611b761c9",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/imstb_rectpack.h"
+      ]
+    },
+    {
+      "path": "source/third_party/imgui/imstb_textedit.h",
+      "base_git_blob_sha1": "b7a761c85381993be0f4cd78539f277c06eb407e",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/imstb_textedit.h"
+      ]
+    },
+    {
+      "path": "source/third_party/imgui/imstb_truetype.h",
+      "base_git_blob_sha1": "976f09cb92780b0d0db6fdfa3b2714df2567b320",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/imstb_truetype.h"
+      ]
+    },
+    {
+      "path": "source/tools/MaterialReferenceAudit.cpp",
+      "base_git_blob_sha1": "014bc35281c2511827e893cef0a095d964b624b4",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/tools/MaterialReferenceAudit.cpp"
+      ]
+    },
+    {
+      "path": "source/tools/audit_reference.py",
+      "base_git_blob_sha1": "420fc129ec5b09d9199a4d9a4b39bb3b06c29070",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/tools/audit_reference.py"
+      ]
+    },
+    {
+      "path": "src/Core.cpp",
+      "base_git_blob_sha1": "7e952fee4d86ac9af1df85819f74e98014948571",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/Core.cpp"
+      ]
+    },
+    {
+      "path": "src/Core.h",
+      "base_git_blob_sha1": "6a389708d3ef857777cda34467f80177ead5d67a",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/Core.h"
+      ]
+    },
+    {
+      "path": "src/DDS.cpp",
+      "base_git_blob_sha1": "49f63561dd81669626dc6c0bba867854c1113656",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/DDS.cpp"
+      ]
+    },
+    {
+      "path": "src/EditorUI.cpp",
+      "base_git_blob_sha1": "bcd9507620a3702bc63696e4afdf592e6f6f3a2b",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/EditorUI.cpp"
+      ]
+    },
+    {
+      "path": "src/EditorUI.h",
+      "base_git_blob_sha1": "0aa63bd4d0fb142d7ebe14491147c62a8cf60ce7",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/EditorUI.h"
+      ]
+    },
+    {
+      "path": "src/EditorWorkflow.h",
+      "base_git_blob_sha1": "c7ac1cf25634e0f6f4ffc88a6d5e3275a1933e05",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/EditorWorkflow.h"
+      ]
+    },
+    {
+      "path": "src/EngineLighting.h",
+      "base_git_blob_sha1": "c44f8ac872d16db6905187c7e873269096aa3b29",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/EngineLighting.h"
+      ]
+    },
+    {
+      "path": "src/EngineTexture.h",
+      "base_git_blob_sha1": "6f993ad201c35ec1100962f575c2fcb7f94fa7b5",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/EngineTexture.h"
+      ]
+    },
+    {
+      "path": "src/MaterialAlpha.h",
+      "base_git_blob_sha1": "651ec64c20dcef3c2f5a501de64c7f7f9e44e1db",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/MaterialAlpha.h"
+      ]
+    },
+    {
+      "path": "src/MaterialDocument.cpp",
+      "base_git_blob_sha1": "68e61f8d8a543d60f9a4da942db78e18c9215a0d",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/MaterialDocument.cpp"
+      ]
+    },
+    {
+      "path": "src/MaterialDocument.h",
+      "base_git_blob_sha1": "7ccf7103ac93095cdc8605d0273149f925eea50a",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/MaterialDocument.h"
+      ]
+    },
+    {
+      "path": "src/OGF.cpp",
+      "base_git_blob_sha1": "3047bbb902b59b72926d19885a399b3f19107b85",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/OGF.cpp"
+      ]
+    },
+    {
+      "path": "src/Renderer.cpp",
+      "base_git_blob_sha1": "b0da0ee6f497481a83608e5718e10aab37b0a419",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/Renderer.cpp"
+      ]
+    },
+    {
+      "path": "src/Renderer.h",
+      "base_git_blob_sha1": "5bfe3bd80698689722bf027f1ccd347b59ffd74a",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/Renderer.h"
+      ]
+    },
+    {
+      "path": "src/Resource.h",
+      "base_git_blob_sha1": "b805fee1f662ac1ad677d3246b637f818ab3d403",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/Resource.h"
+      ]
+    },
+    {
+      "path": "src/StartupSplash.cpp",
+      "base_git_blob_sha1": "f70fdf34b4fd35d712ee29b8e1712b34e90d20f9",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/StartupSplash.cpp"
+      ]
+    },
+    {
+      "path": "src/StartupSplash.h",
+      "base_git_blob_sha1": "5546b2978d9da1b15c037f96feabdbc7e7d0da29",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/StartupSplash.h"
+      ]
+    },
+    {
+      "path": "src/ViewportToolbar.h",
+      "base_git_blob_sha1": "d48d9a621c33a90f3a9ff6a88c24932bd0b46719",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/ViewportToolbar.h"
+      ]
+    },
+    {
+      "path": "src/ViewportTools.h",
+      "base_git_blob_sha1": "6be1af5dd65a52f4511d19c0b825ce7beb665357",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/ViewportTools.h"
+      ]
+    },
+    {
+      "path": "src/WinApp.cpp",
+      "base_git_blob_sha1": "ef4a7908f47a1d5f409b58dfe083e55c2cdbf737",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/src/WinApp.cpp"
+      ]
+    },
+    {
+      "path": "tests/BrushLayersTests.cpp",
+      "base_git_blob_sha1": "7c922c027487430d1c4c6d77a3b635456e09eb2e",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/tests/BrushLayersTests.cpp"
+      ]
+    },
+    {
+      "path": "tests/EditorUITests.cpp",
+      "base_git_blob_sha1": "d27ad86a949b089174563ce1cfcf1d9933e544b4",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/tests/EditorUITests.cpp"
+      ]
+    },
+    {
+      "path": "tests/MaterialDocumentTests.cpp",
+      "base_git_blob_sha1": "b86c18489cdd6803b360e36aaeaa9a2c2cd543ad",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/tests/MaterialDocumentTests.cpp"
+      ]
+    },
+    {
+      "path": "tests/ParserTests.cpp",
+      "base_git_blob_sha1": "1e5ad9207061b8c27a6a05ddbd1d3fba2de243c5",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/tests/ParserTests.cpp"
+      ]
+    },
+    {
+      "path": "tests/SurfaceReliefTests.cpp",
+      "base_git_blob_sha1": "d5b5b3d9d3a09cdaaec40c19bd90dc0bd9adc782",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/tests/SurfaceReliefTests.cpp"
+      ]
+    },
+    {
+      "path": "tests/ViewportToolsTests.cpp",
+      "base_git_blob_sha1": "e3a6cc1503fd57db1dbf1c19a1e227934bcc963b",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/tests/ViewportToolsTests.cpp"
+      ]
+    },
+    {
+      "path": "tests/WorkflowTests.cpp",
+      "base_git_blob_sha1": "160fea9d7a26e588395a4b0d1ac5b9abe0eee200",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/tests/WorkflowTests.cpp"
+      ]
+    },
+    {
+      "path": "tests/reference_audit_act_bandit.json",
+      "base_git_blob_sha1": "dc3c525a629cd3da8109fce4f1231209c0dda914",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/tests/reference_audit_act_bandit.json"
+      ]
+    },
+    {
+      "path": "third_party/imgui/LICENSE.txt",
+      "base_git_blob_sha1": "00ae473abe62bf1c53b333613bd9e05aa72e2ca0",
+      "source": [
+        "ML013_x64(2).zip:MaterialLab_0.13.0_Windows_x64/licenses/DearImGui.txt",
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/LICENSE.txt"
+      ]
+    },
+    {
+      "path": "third_party/imgui/VERSION.txt",
+      "base_git_blob_sha1": "17b7243153611dfd2442e24dcdf61e1445e3a5b9",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/VERSION.txt"
+      ]
+    },
+    {
+      "path": "third_party/imgui/backends/imgui_impl_dx11.cpp",
+      "base_git_blob_sha1": "9f39588810eb648a5c4569a5f157cb94903642f5",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/backends/imgui_impl_dx11.cpp"
+      ]
+    },
+    {
+      "path": "third_party/imgui/backends/imgui_impl_dx11.h",
+      "base_git_blob_sha1": "772c1b920c0546be02657f2812258cc8e2b6bd17",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/backends/imgui_impl_dx11.h"
+      ]
+    },
+    {
+      "path": "third_party/imgui/backends/imgui_impl_win32.cpp",
+      "base_git_blob_sha1": "2c749515d221fcb2916833a5efda095ff684f6ea",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/backends/imgui_impl_win32.cpp"
+      ]
+    },
+    {
+      "path": "third_party/imgui/backends/imgui_impl_win32.h",
+      "base_git_blob_sha1": "083fe385f6fa0738ecb43756e7e97a007082e235",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/backends/imgui_impl_win32.h"
+      ]
+    },
+    {
+      "path": "third_party/imgui/imconfig.h",
+      "base_git_blob_sha1": "a1e29e849bc8c6125a0c567fa6cb528a293025cb",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/imconfig.h"
+      ]
+    },
+    {
+      "path": "third_party/imgui/imgui.cpp",
+      "base_git_blob_sha1": "7ec19227897180787843dc65b1238ac9494433c5",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/imgui.cpp"
+      ]
+    },
+    {
+      "path": "third_party/imgui/imgui.h",
+      "base_git_blob_sha1": "75750ae10904989cd7bdefb413fabd056696816a",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/imgui.h"
+      ]
+    },
+    {
+      "path": "third_party/imgui/imgui_draw.cpp",
+      "base_git_blob_sha1": "2731015291896890d5f46c8563198074fb7f14cb",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/imgui_draw.cpp"
+      ]
+    },
+    {
+      "path": "third_party/imgui/imgui_internal.h",
+      "base_git_blob_sha1": "ddf9ea3e9afd59e948fbf34c3edf614d1623b2ef",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/imgui_internal.h"
+      ]
+    },
+    {
+      "path": "third_party/imgui/imgui_tables.cpp",
+      "base_git_blob_sha1": "c98aea2d1cc7c6a2d64e8d27c70d6c724005f5ba",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/imgui_tables.cpp"
+      ]
+    },
+    {
+      "path": "third_party/imgui/imgui_widgets.cpp",
+      "base_git_blob_sha1": "c997e17b61c6d506b496f6f990e67c88cace65f0",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/imgui_widgets.cpp"
+      ]
+    },
+    {
+      "path": "third_party/imgui/imstb_rectpack.h",
+      "base_git_blob_sha1": "f6917e7a6e56a03dcee169bf4e08c32611b761c9",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/imstb_rectpack.h"
+      ]
+    },
+    {
+      "path": "third_party/imgui/imstb_textedit.h",
+      "base_git_blob_sha1": "b7a761c85381993be0f4cd78539f277c06eb407e",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/imstb_textedit.h"
+      ]
+    },
+    {
+      "path": "third_party/imgui/imstb_truetype.h",
+      "base_git_blob_sha1": "976f09cb92780b0d0db6fdfa3b2714df2567b320",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/third_party/imgui/imstb_truetype.h"
+      ]
+    },
+    {
+      "path": "tools/MaterialReferenceAudit.cpp",
+      "base_git_blob_sha1": "014bc35281c2511827e893cef0a095d964b624b4",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/tools/MaterialReferenceAudit.cpp"
+      ]
+    },
+    {
+      "path": "tools/audit_reference.py",
+      "base_git_blob_sha1": "420fc129ec5b09d9199a4d9a4b39bb3b06c29070",
+      "source": [
+        "MaterialLab_0.13.0_recovery_kit(1).zip:source/tools/audit_reference.py"
+      ]
+    },
+    {
+      "path": "verification/asan-ubsan-tests.txt",
+      "base_git_blob_sha1": "3f132639dd0f6f1838e170d9bc1cc8829712d9e9",
+      "source": [
+        "https://github.com/BCZUnofficial/Kich-Ray_Materal_Lab/blob/9d0be1aa320651207d7922d712e0741922ea6aa1/verification/asan-ubsan-tests.txt"
+      ]
+    },
+    {
+      "path": "verification/build-info.txt",
+      "base_git_blob_sha1": "4a1f1707950c554db2ccee6b5d28285230fdd4bb",
+      "source": [
+        "https://github.com/BCZUnofficial/Kich-Ray_Materal_Lab/blob/9d0be1aa320651207d7922d712e0741922ea6aa1/verification/build-info.txt"
+      ]
+    },
+    {
+      "path": "verification/icon-verification.txt",
+      "base_git_blob_sha1": "58b19c8d628ae64aea5d4f09227d07fcff9936d5",
+      "source": [
+        "https://github.com/BCZUnofficial/Kich-Ray_Materal_Lab/blob/9d0be1aa320651207d7922d712e0741922ea6aa1/verification/icon-verification.txt"
+      ]
+    },
+    {
+      "path": "verification/portable-tests.txt",
+      "base_git_blob_sha1": "ebd54382e52696e7ab8687a3f259fbf5466eeaf7",
+      "source": [
+        "https://github.com/BCZUnofficial/Kich-Ray_Materal_Lab/blob/9d0be1aa320651207d7922d712e0741922ea6aa1/verification/portable-tests.txt"
+      ]
+    }
+  ],
+  "patch_files_verified": 68,
+  "patch_files": [
+    {
+      "path": ".github/workflows/build.yml",
+      "git_blob_sha1": "345564fbb86ba53d1398baff21bf24210a0f8b73",
+      "sha256": "d0f559e3b97be2e442905add12b43e69e89239ed1381c866be57808d3182ef4a"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "git_blob_sha1": "3b0c75c8fd678f63a742b277427120e9986ad56d",
+      "sha256": "21316648acfef0280361c5177df3f4aa84a574a9740a3b4bca9e91eae4e5da46"
+    },
+    {
+      "path": "CMakeLists.txt",
+      "git_blob_sha1": "ad0b8ad83f8e6e1c645436887a8c583d847c2f8e",
+      "sha256": "1b40a435b46537d72e46a170f1c0716a7f8768379b80cecc688958a98beb7127"
+    },
+    {
+      "path": "INSTALL_RU.txt",
+      "git_blob_sha1": "0ff771aa80a3f46219034fec691def2f8e2ff04f",
+      "sha256": "5f14c7e8e97fbfeba0aff98d27ffa30086742ebb6b5fb2d829f652e42a031631"
+    },
+    {
+      "path": "MaterialLab.vcxproj",
+      "git_blob_sha1": "ff1554b19c94a6b40afd955689fcaf7823e2d701",
+      "sha256": "647a742658113c8b59b2a6de91fa4409bdea3e574fbbb854fd10b119e368cd0e"
+    },
+    {
+      "path": "README.md",
+      "git_blob_sha1": "c5e05522473e29be4e8ef9f66adbe1bfafd4c788",
+      "sha256": "e78cbb91f4934ad25daf147453ae223984fd610b4d43f5917f1fa9d21892d61a"
+    },
+    {
+      "path": "START_HERE_RU.txt",
+      "git_blob_sha1": "073ab3ec97c3b2e89d0c640066606e1117176e6e",
+      "sha256": "ae80b8de7fcd982fa1b7a76789ad866ac1dea2b0faf21f906da99ba323a77eaa"
+    },
+    {
+      "path": "UPDATE_0.13.0_RU.md",
+      "git_blob_sha1": "7abcb9cc50d85174344102b6b85b3109a7444296",
+      "sha256": "96e43d1160f1780921e054f14809c3018a05ae88d6851a1e9182c96636731494"
+    },
+    {
+      "path": "assets/Preview.hlsl",
+      "git_blob_sha1": "b1f30b4c786f7507d984731aa92285d266bd6175",
+      "sha256": "7696abe22f58dd488a8677c5f54a44f0f41b9558d813d0113a36d6c2e1462174"
+    },
+    {
+      "path": "source/CHANGELOG.md",
+      "git_blob_sha1": "3b0c75c8fd678f63a742b277427120e9986ad56d",
+      "sha256": "21316648acfef0280361c5177df3f4aa84a574a9740a3b4bca9e91eae4e5da46"
+    },
+    {
+      "path": "source/CMakeLists.txt",
+      "git_blob_sha1": "ad0b8ad83f8e6e1c645436887a8c583d847c2f8e",
+      "sha256": "1b40a435b46537d72e46a170f1c0716a7f8768379b80cecc688958a98beb7127"
+    },
+    {
+      "path": "source/INSTALL_RU.txt",
+      "git_blob_sha1": "0ff771aa80a3f46219034fec691def2f8e2ff04f",
+      "sha256": "5f14c7e8e97fbfeba0aff98d27ffa30086742ebb6b5fb2d829f652e42a031631"
+    },
+    {
+      "path": "source/MaterialLab.vcxproj",
+      "git_blob_sha1": "ff1554b19c94a6b40afd955689fcaf7823e2d701",
+      "sha256": "647a742658113c8b59b2a6de91fa4409bdea3e574fbbb854fd10b119e368cd0e"
+    },
+    {
+      "path": "source/README.md",
+      "git_blob_sha1": "c5e05522473e29be4e8ef9f66adbe1bfafd4c788",
+      "sha256": "e78cbb91f4934ad25daf147453ae223984fd610b4d43f5917f1fa9d21892d61a"
+    },
+    {
+      "path": "source/START_HERE_RU.txt",
+      "git_blob_sha1": "073ab3ec97c3b2e89d0c640066606e1117176e6e",
+      "sha256": "ae80b8de7fcd982fa1b7a76789ad866ac1dea2b0faf21f906da99ba323a77eaa"
+    },
+    {
+      "path": "source/UPDATE_0.13.0_RU.md",
+      "git_blob_sha1": "7abcb9cc50d85174344102b6b85b3109a7444296",
+      "sha256": "96e43d1160f1780921e054f14809c3018a05ae88d6851a1e9182c96636731494"
+    },
+    {
+      "path": "source/assets/Preview.hlsl",
+      "git_blob_sha1": "b1f30b4c786f7507d984731aa92285d266bd6175",
+      "sha256": "7696abe22f58dd488a8677c5f54a44f0f41b9558d813d0113a36d6c2e1462174"
+    },
+    {
+      "path": "source/src/AttachmentHistory.h",
+      "git_blob_sha1": "31d71e463eeb767d88d3d37329151ed80d3dfc56",
+      "sha256": "761a0e4212a682b9a90dde28e1968b15b0c0f1384bc2e1a7cf2c06be8474253c"
+    },
+    {
+      "path": "source/src/AttachmentPreview.h",
+      "git_blob_sha1": "8c52523cf5f9dec138afc9ced2c7f62789fc5711",
+      "sha256": "1a36e208b12813d2f2fa71b31480b970b9e28347049279455a4dfc79fa8949cc"
+    },
+    {
+      "path": "source/src/Core.cpp",
+      "git_blob_sha1": "5cb81e565a2bb1ba6851f13344b118dc7e9a2328",
+      "sha256": "7145e10ab90c5fee86b4630a31cae8b2b3ce2bd82881c5f26b2f2b18fb28c020"
+    },
+    {
+      "path": "source/src/Core.h",
+      "git_blob_sha1": "d2ad44c1aee17f6a1cb3823533eb9db1aee45328",
+      "sha256": "7a98611185535be32e6966b63209402fc583b6a07abfc98e627cbbc3c1c80ed8"
+    },
+    {
+      "path": "source/src/EditorUI.cpp",
+      "git_blob_sha1": "44e2e4a9290905138ceb13a1870f526297e5055d",
+      "sha256": "2ba18f53cf38afb7cf6b450308d60d062974e1d7c3315f65b7e573628db6c37a"
+    },
+    {
+      "path": "source/src/EditorUI.h",
+      "git_blob_sha1": "4f04aef76e6746ffbf17894645007bf8a4712b46",
+      "sha256": "04401469907579e8b62c0196b8e1963993c057fe7f1fbb2282479d8cdc0f4b5c"
+    },
+    {
+      "path": "source/src/EngineLighting.h",
+      "git_blob_sha1": "402c983e23a782217961e6bb1601888fcbe91763",
+      "sha256": "f310e545f960b69b2f983985e11d5f847d367a775658b1e059c70b96560d1fc6"
+    },
+    {
+      "path": "source/src/FlightInput.h",
+      "git_blob_sha1": "4b17b4912962321d7526e0a9362f3bc884eac719",
+      "sha256": "763eb2ad1074c3f355fdd747dbdbe12980908f1e69298b60512000a069781b27"
+    },
+    {
+      "path": "source/src/MaterialDocument.cpp",
+      "git_blob_sha1": "4e4f856a2243b78db48e034202fb01f6c1b27784",
+      "sha256": "a8289f82e2050332801c35e6c936f8c853eb02d3a3b0638f4013d210b35069b1"
+    },
+    {
+      "path": "source/src/MaterialDocument.h",
+      "git_blob_sha1": "31f330f84fd889d6c080afe917f35e6eafe99bc8",
+      "sha256": "585c344e5ccf8467918dca615c855e52c427dc0a30b03742e99669bbd7904454"
+    },
+    {
+      "path": "source/src/OGF.cpp",
+      "git_blob_sha1": "884ef938467bc5196bbb17be69caef7226dcd109",
+      "sha256": "e1ae9bfca9da233a13ee6b0a8ebadc6ababcddb477d05bbe4894163d0b970fc7"
+    },
+    {
+      "path": "source/src/Renderer.cpp",
+      "git_blob_sha1": "9ebfbf60c0e8bf4b6045ce034be9a0142c5b4d40",
+      "sha256": "5250e1f4ef9620df44077bc1dd4b9345b09bfd0648bf63d08c700c2236d0fc96"
+    },
+    {
+      "path": "source/src/Renderer.h",
+      "git_blob_sha1": "e3e8df63eaaf3eedd7f4b748eb95b3680c30d058",
+      "sha256": "656d980b26a0556dc9d8aef92cf7f513890b4fc2c5e1fc263100def96745523d"
+    },
+    {
+      "path": "source/src/RendererSmoke.h",
+      "git_blob_sha1": "b3ffc092a872ed97ed6599a667bbfd6994dcf86e",
+      "sha256": "8afb285dd8603a47c82d6ef68745c54ccf279ecf3ee2cb15822009b6bbb890e3"
+    },
+    {
+      "path": "source/src/WinApp.cpp",
+      "git_blob_sha1": "b76a42c338ffb8952597ebb64bf3f92ced48a545",
+      "sha256": "020f0e33ddac796e4fb26f3f2d50eb682226dfe4a9c6344f7825f7b9d995670d"
+    },
+    {
+      "path": "source/tests/AttachmentHistoryTests.cpp",
+      "git_blob_sha1": "c948d3b04acea19930e12c4788caa66e03ea3f66",
+      "sha256": "f413d439a99475cc0285fe0918d49ed535b837a29756ce0bc65a193ddc8b5dbb"
+    },
+    {
+      "path": "source/tests/EditorUITests.cpp",
+      "git_blob_sha1": "7ce00f314326df644293dd09c33c8076a29c05c4",
+      "sha256": "5eb95d59ef21650419a69fdba4ba1fefe9f21d71cf1761f09cd446ea16c50a87"
+    },
+    {
+      "path": "source/tests/FlightInputTests.cpp",
+      "git_blob_sha1": "abf200be818c629453b339d5b88b4082fdddbe1f",
+      "sha256": "bae12ce3ec80f30a604ef395bb6171a073296ea1db5133b7ed77729e4202955a"
+    },
+    {
+      "path": "source/tests/MaterialDocumentTests.cpp",
+      "git_blob_sha1": "3b718680c104ba70f2b2f15dc930630fd3c83743",
+      "sha256": "9e089b3a971aebb0c0d8f2bfcf9b0b266861d42be192865faa358c64122da78c"
+    },
+    {
+      "path": "source/tests/ParserTests.cpp",
+      "git_blob_sha1": "9642a113569400cf40b14f41c8c6838b1fca9c7c",
+      "sha256": "128c351c132f5a2e4b9cf2da73b5b2bf4d567556e780187d4e185d22774c7c8f"
+    },
+    {
+      "path": "source/tests/RendererPreviewTests.cpp",
+      "git_blob_sha1": "e225351f9b87c6b3a387176c5f0e29f13edde1d4",
+      "sha256": "fb1f1b6dde5ae222ed50471a5908f8d222246c85b3c0115c76085d105cb7d279"
+    },
+    {
+      "path": "source/tests/ViewportToolsTests.cpp",
+      "git_blob_sha1": "5aac5284d0230b94d6246199f1832de94893045d",
+      "sha256": "6392843507b13abdde927b4f8bbbe26b7267d9902037ea1cf10d2b3814a8e33c"
+    },
+    {
+      "path": "src/AttachmentHistory.h",
+      "git_blob_sha1": "31d71e463eeb767d88d3d37329151ed80d3dfc56",
+      "sha256": "761a0e4212a682b9a90dde28e1968b15b0c0f1384bc2e1a7cf2c06be8474253c"
+    },
+    {
+      "path": "src/AttachmentPreview.h",
+      "git_blob_sha1": "8c52523cf5f9dec138afc9ced2c7f62789fc5711",
+      "sha256": "1a36e208b12813d2f2fa71b31480b970b9e28347049279455a4dfc79fa8949cc"
+    },
+    {
+      "path": "src/Core.cpp",
+      "git_blob_sha1": "5cb81e565a2bb1ba6851f13344b118dc7e9a2328",
+      "sha256": "7145e10ab90c5fee86b4630a31cae8b2b3ce2bd82881c5f26b2f2b18fb28c020"
+    },
+    {
+      "path": "src/Core.h",
+      "git_blob_sha1": "d2ad44c1aee17f6a1cb3823533eb9db1aee45328",
+      "sha256": "7a98611185535be32e6966b63209402fc583b6a07abfc98e627cbbc3c1c80ed8"
+    },
+    {
+      "path": "src/EditorUI.cpp",
+      "git_blob_sha1": "44e2e4a9290905138ceb13a1870f526297e5055d",
+      "sha256": "2ba18f53cf38afb7cf6b450308d60d062974e1d7c3315f65b7e573628db6c37a"
+    },
+    {
+      "path": "src/EditorUI.h",
+      "git_blob_sha1": "4f04aef76e6746ffbf17894645007bf8a4712b46",
+      "sha256": "04401469907579e8b62c0196b8e1963993c057fe7f1fbb2282479d8cdc0f4b5c"
+    },
+    {
+      "path": "src/EngineLighting.h",
+      "git_blob_sha1": "402c983e23a782217961e6bb1601888fcbe91763",
+      "sha256": "f310e545f960b69b2f983985e11d5f847d367a775658b1e059c70b96560d1fc6"
+    },
+    {
+      "path": "src/FlightInput.h",
+      "git_blob_sha1": "4b17b4912962321d7526e0a9362f3bc884eac719",
+      "sha256": "763eb2ad1074c3f355fdd747dbdbe12980908f1e69298b60512000a069781b27"
+    },
+    {
+      "path": "src/MaterialDocument.cpp",
+      "git_blob_sha1": "4e4f856a2243b78db48e034202fb01f6c1b27784",
+      "sha256": "a8289f82e2050332801c35e6c936f8c853eb02d3a3b0638f4013d210b35069b1"
+    },
+    {
+      "path": "src/MaterialDocument.h",
+      "git_blob_sha1": "31f330f84fd889d6c080afe917f35e6eafe99bc8",
+      "sha256": "585c344e5ccf8467918dca615c855e52c427dc0a30b03742e99669bbd7904454"
+    },
+    {
+      "path": "src/OGF.cpp",
+      "git_blob_sha1": "884ef938467bc5196bbb17be69caef7226dcd109",
+      "sha256": "e1ae9bfca9da233a13ee6b0a8ebadc6ababcddb477d05bbe4894163d0b970fc7"
+    },
+    {
+      "path": "src/Renderer.cpp",
+      "git_blob_sha1": "9ebfbf60c0e8bf4b6045ce034be9a0142c5b4d40",
+      "sha256": "5250e1f4ef9620df44077bc1dd4b9345b09bfd0648bf63d08c700c2236d0fc96"
+    },
+    {
+      "path": "src/Renderer.h",
+      "git_blob_sha1": "e3e8df63eaaf3eedd7f4b748eb95b3680c30d058",
+      "sha256": "656d980b26a0556dc9d8aef92cf7f513890b4fc2c5e1fc263100def96745523d"
+    },
+    {
+      "path": "src/RendererSmoke.h",
+      "git_blob_sha1": "b3ffc092a872ed97ed6599a667bbfd6994dcf86e",
+      "sha256": "8afb285dd8603a47c82d6ef68745c54ccf279ecf3ee2cb15822009b6bbb890e3"
+    },
+    {
+      "path": "src/WinApp.cpp",
+      "git_blob_sha1": "b76a42c338ffb8952597ebb64bf3f92ced48a545",
+      "sha256": "020f0e33ddac796e4fb26f3f2d50eb682226dfe4a9c6344f7825f7b9d995670d"
+    },
+    {
+      "path": "tests/AttachmentHistoryTests.cpp",
+      "git_blob_sha1": "c948d3b04acea19930e12c4788caa66e03ea3f66",
+      "sha256": "f413d439a99475cc0285fe0918d49ed535b837a29756ce0bc65a193ddc8b5dbb"
+    },
+    {
+      "path": "tests/EditorUITests.cpp",
+      "git_blob_sha1": "7ce00f314326df644293dd09c33c8076a29c05c4",
+      "sha256": "5eb95d59ef21650419a69fdba4ba1fefe9f21d71cf1761f09cd446ea16c50a87"
+    },
+    {
+      "path": "tests/FlightInputTests.cpp",
+      "git_blob_sha1": "abf200be818c629453b339d5b88b4082fdddbe1f",
+      "sha256": "bae12ce3ec80f30a604ef395bb6171a073296ea1db5133b7ed77729e4202955a"
+    },
+    {
+      "path": "tests/MaterialDocumentTests.cpp",
+      "git_blob_sha1": "3b718680c104ba70f2b2f15dc930630fd3c83743",
+      "sha256": "9e089b3a971aebb0c0d8f2bfcf9b0b266861d42be192865faa358c64122da78c"
+    },
+    {
+      "path": "tests/ParserTests.cpp",
+      "git_blob_sha1": "9642a113569400cf40b14f41c8c6838b1fca9c7c",
+      "sha256": "128c351c132f5a2e4b9cf2da73b5b2bf4d567556e780187d4e185d22774c7c8f"
+    },
+    {
+      "path": "tests/RendererPreviewTests.cpp",
+      "git_blob_sha1": "e225351f9b87c6b3a387176c5f0e29f13edde1d4",
+      "sha256": "fb1f1b6dde5ae222ed50471a5908f8d222246c85b3c0115c76085d105cb7d279"
+    },
+    {
+      "path": "tests/ViewportToolsTests.cpp",
+      "git_blob_sha1": "5aac5284d0230b94d6246199f1832de94893045d",
+      "sha256": "6392843507b13abdde927b4f8bbbe26b7267d9902037ea1cf10d2b3814a8e33c"
+    },
+    {
+      "path": "verification/0.12.0/asan-ubsan-tests.txt",
+      "git_blob_sha1": "3f132639dd0f6f1838e170d9bc1cc8829712d9e9",
+      "sha256": "0bacd8e50e97f85a929009306023d3a4c6196dfb7d541097eb4a929bdcf48084"
+    },
+    {
+      "path": "verification/0.12.0/build-info.txt",
+      "git_blob_sha1": "4a1f1707950c554db2ccee6b5d28285230fdd4bb",
+      "sha256": "a8a57570058fa023e4dd5706c3cd04a28e8b51e77c800509655e122225db922a"
+    },
+    {
+      "path": "verification/0.12.0/icon-verification.txt",
+      "git_blob_sha1": "58b19c8d628ae64aea5d4f09227d07fcff9936d5",
+      "sha256": "547abf933e4ba5b3aadb52e8c84da892aa72ddea3887946476b785c5b1eb5202"
+    },
+    {
+      "path": "verification/0.12.0/portable-tests.txt",
+      "git_blob_sha1": "ebd54382e52696e7ab8687a3f259fbf5466eeaf7",
+      "sha256": "78c0b0490caaa83b589c34a9f3949aaae5f7a0cb336b8ba15ec687c9006df0e4"
+    },
+    {
+      "path": "verification/asan-ubsan-tests.txt",
+      "git_blob_sha1": "fd9780c60da0661689f01ceea5d3d9e97f65c4a2",
+      "sha256": "7862de626bde90785eeec1450331f5064d25c4095698733939ef7c68751a191b"
+    },
+    {
+      "path": "verification/build-info.txt",
+      "git_blob_sha1": "a2380449b0ade7682f268838935826c853688ce9",
+      "sha256": "520eb7532cc01d53ed789884f8dea6c59c955282d2994ae8c2b761e2ac91bf47"
+    },
+    {
+      "path": "verification/portable-tests.txt",
+      "git_blob_sha1": "de7015e15795d74887e3ea26222f1052594aa49c",
+      "sha256": "d9a09d272ea86f25a1756511863f23333b63a54d2d5c86e3ff7e28a2a3d28032"
+    }
+  ],
+  "supplied_exe_sha256": "d444a99f1963b9eedc24028d3574981956d1f3de77c9cd560c40a8d8e1dde8d3",
+  "root_source_mirror_differences_in_original_patch": [
+    ".github/workflows/build.yml"
+  ],
+  "final_project_files_verified": 167,
+  "portable_tests": {
+    "viewport-tests": "PASS",
+    "brush-tests": "PASS",
+    "parser-tests": "PASS",
+    "document-tests": "PASS",
+    "workflow-tests": "PASS",
+    "surface-relief-tests": "PASS",
+    "editor-ui-tests": "PASS",
+    "flight-input-tests": "PASS",
+    "attachment-history-tests": "PASS",
+    "renderer-preview-tests": "PASS"
+  },
+  "native_windows_build_and_d3d_execution_this_recovery": "NOT RUN: Linux environment",
+  "original_project_sha256": {
+    ".gitattributes": "45a7cbb7d9942ba7ffce0b20bc8dbe2d1196533bc6e4bd245871d77fb1eedfdc",
+    ".github/workflows/build.yml": "d0f559e3b97be2e442905add12b43e69e89239ed1381c866be57808d3182ef4a",
+    ".gitignore": "8ff686d536675107b208a0322053488efa5fe2d0f759aa5caed350ff9514a6a3",
+    "AUDIT_0.10.0_RU.md": "30590fff2c3410d801b3b25e7a1fcac3f3aa07cc2dc3d7a6f6e1d8974dec1a21",
+    "AUDIT_0.11.0_RU.md": "94707b6f862350adaadabffaff145aad28a0d1d8284e1029594251e2753025a9",
+    "CHANGELOG.md": "21316648acfef0280361c5177df3f4aa84a574a9740a3b4bca9e91eae4e5da46",
+    "CMakeLists.txt": "1b40a435b46537d72e46a170f1c0716a7f8768379b80cecc688958a98beb7127",
+    "INSTALL_0.10.0_RU.txt": "ae50fc5bf422e7ac9b79dc1d6f02c82fb5946443adf218875488cd6d155fd2ea",
+    "INSTALL_0.9.1_RU.txt": "945d0a466b103abfe2917d3413c46ab85f12b77b1c4444e2bb39ad2027868f0d",
+    "INSTALL_0.9.2_RU.txt": "44030fdbab317c95efe1b11c54d8b473eefe7455ce09b540b814677c3f6bcaf1",
+    "INSTALL_RU.txt": "5f14c7e8e97fbfeba0aff98d27ffa30086742ebb6b5fb2d829f652e42a031631",
+    "KichRay_MaterialLab.sln": "bb3238902c9424f6a9ef15d1335b2c336df59a8a7299e05d990db371bf85dc9b",
+    "MaterialLab.vcxproj": "647a742658113c8b59b2a6de91fa4409bdea3e574fbbb854fd10b119e368cd0e",
+    "README.md": "e78cbb91f4934ad25daf147453ae223984fd610b4d43f5917f1fa9d21892d61a",
+    "START_HERE_RU.txt": "ae80b8de7fcd982fa1b7a76789ad866ac1dea2b0faf21f906da99ba323a77eaa",
+    "UPDATE_0.12.0_RU.md": "6c82bc290397ba1907188820a9f326d910eff8f52f5ac44011b02693c8203692",
+    "UPDATE_0.13.0_RU.md": "96e43d1160f1780921e054f14809c3018a05ae88d6851a1e9182c96636731494",
+    "assets/ICON_README_RU.txt": "10b3edb4921af5bc5808d72be51b4e0e5fed549a859ce3a8f31b8a162bdf927c",
+    "assets/MaterialLab.ico": "95084b74ea0c9025676ebe960485f17b02c51f08bf0f50754142f1ac46a182c7",
+    "assets/MaterialLab.manifest": "34889649c3a9929d1640aad018457c04d9d49fd4340e115a79527430106b4aa4",
+    "assets/MaterialLab.png": "2485021aa7bf69892d207cc5f8c36775e2dbbc52343ce1898ca97745841fc4bb",
+    "assets/MaterialLab.rc": "6c2fd6364956fc977aa91dae468284b0f4872c6eed44fa4450c82b7b2b52f048",
+    "assets/Preview.hlsl": "7696abe22f58dd488a8677c5f54a44f0f41b9558d813d0113a36d6c2e1462174",
+    "assets/StartupSplash.png": "c333f113f5aaff9f0481a6d88e61b7853c40b990ce550d7d3b41baf3db6ebb85",
+    "build_vs2022.bat": "4d7b166aa258a5a4e1689c7ffb0004090bd349200eb88dbe19f06cfd0dbd072f",
+    "licenses/DearImGui.txt": "c80c5789748d955c4a650562baa0d750494e2c7128c2ca66aaebe2e3c4e198bf",
+    "licenses/DirectXMath.txt": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383",
+    "licenses/GCC-runtime.txt": "a481f772f7a53335f13b32c6c54eb1c8577ce97704edd3757ab7ed4287a8e96a",
+    "licenses/MinGW-w64.txt": "af23297b7d17e8e31817a5d58088de6fdafe34705bb5a7d1d330f08711b31314",
+    "source/.gitattributes": "45a7cbb7d9942ba7ffce0b20bc8dbe2d1196533bc6e4bd245871d77fb1eedfdc",
+    "source/.github/workflows/build.yml": "cb25bd57c4bece8a646dbc2b371850100cd9dbcec5aec28954117a5c8d943ed0",
+    "source/.gitignore": "8ff686d536675107b208a0322053488efa5fe2d0f759aa5caed350ff9514a6a3",
+    "source/AUDIT_0.10.0_RU.md": "30590fff2c3410d801b3b25e7a1fcac3f3aa07cc2dc3d7a6f6e1d8974dec1a21",
+    "source/AUDIT_0.11.0_RU.md": "94707b6f862350adaadabffaff145aad28a0d1d8284e1029594251e2753025a9",
+    "source/CHANGELOG.md": "21316648acfef0280361c5177df3f4aa84a574a9740a3b4bca9e91eae4e5da46",
+    "source/CMakeLists.txt": "1b40a435b46537d72e46a170f1c0716a7f8768379b80cecc688958a98beb7127",
+    "source/INSTALL_0.10.0_RU.txt": "ae50fc5bf422e7ac9b79dc1d6f02c82fb5946443adf218875488cd6d155fd2ea",
+    "source/INSTALL_0.9.1_RU.txt": "945d0a466b103abfe2917d3413c46ab85f12b77b1c4444e2bb39ad2027868f0d",
+    "source/INSTALL_0.9.2_RU.txt": "44030fdbab317c95efe1b11c54d8b473eefe7455ce09b540b814677c3f6bcaf1",
+    "source/INSTALL_RU.txt": "5f14c7e8e97fbfeba0aff98d27ffa30086742ebb6b5fb2d829f652e42a031631",
+    "source/KichRay_MaterialLab.sln": "bb3238902c9424f6a9ef15d1335b2c336df59a8a7299e05d990db371bf85dc9b",
+    "source/MaterialLab.vcxproj": "647a742658113c8b59b2a6de91fa4409bdea3e574fbbb854fd10b119e368cd0e",
+    "source/README.md": "e78cbb91f4934ad25daf147453ae223984fd610b4d43f5917f1fa9d21892d61a",
+    "source/START_HERE_RU.txt": "ae80b8de7fcd982fa1b7a76789ad866ac1dea2b0faf21f906da99ba323a77eaa",
+    "source/UPDATE_0.12.0_RU.md": "6c82bc290397ba1907188820a9f326d910eff8f52f5ac44011b02693c8203692",
+    "source/UPDATE_0.13.0_RU.md": "96e43d1160f1780921e054f14809c3018a05ae88d6851a1e9182c96636731494",
+    "source/assets/ICON_README_RU.txt": "10b3edb4921af5bc5808d72be51b4e0e5fed549a859ce3a8f31b8a162bdf927c",
+    "source/assets/MaterialLab.ico": "95084b74ea0c9025676ebe960485f17b02c51f08bf0f50754142f1ac46a182c7",
+    "source/assets/MaterialLab.manifest": "34889649c3a9929d1640aad018457c04d9d49fd4340e115a79527430106b4aa4",
+    "source/assets/MaterialLab.png": "2485021aa7bf69892d207cc5f8c36775e2dbbc52343ce1898ca97745841fc4bb",
+    "source/assets/MaterialLab.rc": "6c2fd6364956fc977aa91dae468284b0f4872c6eed44fa4450c82b7b2b52f048",
+    "source/assets/Preview.hlsl": "7696abe22f58dd488a8677c5f54a44f0f41b9558d813d0113a36d6c2e1462174",
+    "source/assets/StartupSplash.png": "c333f113f5aaff9f0481a6d88e61b7853c40b990ce550d7d3b41baf3db6ebb85",
+    "source/build_vs2022.bat": "4d7b166aa258a5a4e1689c7ffb0004090bd349200eb88dbe19f06cfd0dbd072f",
+    "source/src/AttachmentHistory.h": "761a0e4212a682b9a90dde28e1968b15b0c0f1384bc2e1a7cf2c06be8474253c",
+    "source/src/AttachmentPreview.h": "1a36e208b12813d2f2fa71b31480b970b9e28347049279455a4dfc79fa8949cc",
+    "source/src/Core.cpp": "7145e10ab90c5fee86b4630a31cae8b2b3ce2bd82881c5f26b2f2b18fb28c020",
+    "source/src/Core.h": "7a98611185535be32e6966b63209402fc583b6a07abfc98e627cbbc3c1c80ed8",
+    "source/src/DDS.cpp": "194925013edab279db492b8248a0b9cf028f26cb4bd92544cef4694b0a5e45b8",
+    "source/src/EditorUI.cpp": "2ba18f53cf38afb7cf6b450308d60d062974e1d7c3315f65b7e573628db6c37a",
+    "source/src/EditorUI.h": "04401469907579e8b62c0196b8e1963993c057fe7f1fbb2282479d8cdc0f4b5c",
+    "source/src/EditorWorkflow.h": "d8e1b06517a32f3ad5d92c80995745b4c717c1131a09b859e7fbaa2cd7818906",
+    "source/src/EngineLighting.h": "f310e545f960b69b2f983985e11d5f847d367a775658b1e059c70b96560d1fc6",
+    "source/src/EngineTexture.h": "05b69ca433d26c687eb78c645aac2b56cae596f78678647ab64001e2c49bfe97",
+    "source/src/FlightInput.h": "763eb2ad1074c3f355fdd747dbdbe12980908f1e69298b60512000a069781b27",
+    "source/src/MaterialAlpha.h": "a9c47518c7166b556827eb7ebbd130768c23cecd94794222c09bba3412c66572",
+    "source/src/MaterialDocument.cpp": "a8289f82e2050332801c35e6c936f8c853eb02d3a3b0638f4013d210b35069b1",
+    "source/src/MaterialDocument.h": "585c344e5ccf8467918dca615c855e52c427dc0a30b03742e99669bbd7904454",
+    "source/src/OGF.cpp": "e1ae9bfca9da233a13ee6b0a8ebadc6ababcddb477d05bbe4894163d0b970fc7",
+    "source/src/Renderer.cpp": "5250e1f4ef9620df44077bc1dd4b9345b09bfd0648bf63d08c700c2236d0fc96",
+    "source/src/Renderer.h": "656d980b26a0556dc9d8aef92cf7f513890b4fc2c5e1fc263100def96745523d",
+    "source/src/RendererSmoke.h": "8afb285dd8603a47c82d6ef68745c54ccf279ecf3ee2cb15822009b6bbb890e3",
+    "source/src/Resource.h": "3af575e3fc7ef9a2fc217eb33b7ccbaafa73bca45c240e8c6eec95c2983c9386",
+    "source/src/StartupSplash.cpp": "8dc6fe8307743a488e4121aaf7e9e9748828634c304f6e9538304de1777e2c20",
+    "source/src/StartupSplash.h": "dd50faa092ea9dd777d89033280ff3c70ecd16d0addec56abbc96028ef896181",
+    "source/src/ViewportToolbar.h": "e4d21b20ce750732bf24515c19a0f853252c45aab5b88f95b1448c45301f3d5d",
+    "source/src/ViewportTools.h": "03734778cfffb0ef0d31e1219e676b24ae3130087ea60ba795d9489e7848ee35",
+    "source/src/WinApp.cpp": "020f0e33ddac796e4fb26f3f2d50eb682226dfe4a9c6344f7825f7b9d995670d",
+    "source/tests/AttachmentHistoryTests.cpp": "f413d439a99475cc0285fe0918d49ed535b837a29756ce0bc65a193ddc8b5dbb",
+    "source/tests/BrushLayersTests.cpp": "85c349e8cbad4affc52913ecd94fb36c4e47e04a3afef09dfc598d6ba5905de8",
+    "source/tests/EditorUITests.cpp": "5eb95d59ef21650419a69fdba4ba1fefe9f21d71cf1761f09cd446ea16c50a87",
+    "source/tests/FlightInputTests.cpp": "bae12ce3ec80f30a604ef395bb6171a073296ea1db5133b7ed77729e4202955a",
+    "source/tests/MaterialDocumentTests.cpp": "9e089b3a971aebb0c0d8f2bfcf9b0b266861d42be192865faa358c64122da78c",
+    "source/tests/ParserTests.cpp": "128c351c132f5a2e4b9cf2da73b5b2bf4d567556e780187d4e185d22774c7c8f",
+    "source/tests/RendererPreviewTests.cpp": "fb1f1b6dde5ae222ed50471a5908f8d222246c85b3c0115c76085d105cb7d279",
+    "source/tests/SurfaceReliefTests.cpp": "4fedf4e422fde7f273f336798fe1c2d6f2d50dc50e67ca473d9fb190224cd148",
+    "source/tests/ViewportToolsTests.cpp": "6392843507b13abdde927b4f8bbbe26b7267d9902037ea1cf10d2b3814a8e33c",
+    "source/tests/WorkflowTests.cpp": "f02c771218e117f3a9ee1cf1bf588b450793b2e9363fea4970c98cc37ce558c3",
+    "source/tests/reference_audit_act_bandit.json": "39c7e9ba7ed6e6a6a264faafcb3a20a0c87cb429d6cb41b8d71e4db35be8c9be",
+    "source/third_party/imgui/LICENSE.txt": "c80c5789748d955c4a650562baa0d750494e2c7128c2ca66aaebe2e3c4e198bf",
+    "source/third_party/imgui/VERSION.txt": "2522217d5dc4ee9d6865864bbf709d4a60b8d317819813707a07e1ca173e8292",
+    "source/third_party/imgui/backends/imgui_impl_dx11.cpp": "7a8f7294b86065d514a9e19f1bed3bc84d4587f0142b2c551a584b4067cb2902",
+    "source/third_party/imgui/backends/imgui_impl_dx11.h": "cf55f23132dcd240c31995494e0828abb84e552adee71be20f384d68eca21697",
+    "source/third_party/imgui/backends/imgui_impl_win32.cpp": "e572de10045298bbf833aa7a15e28d2777df57603b4e50b9c8aa4c878f1e4cfa",
+    "source/third_party/imgui/backends/imgui_impl_win32.h": "606df46db972371ac6b5f5ad94bba75a09657da47b259105c4845c1f8638fa0c",
+    "source/third_party/imgui/imconfig.h": "0884061cc43e27e1d346fe18dcd1425792eb2532d3d16610a82eb5ac751f7594",
+    "source/third_party/imgui/imgui.cpp": "af1cc31255fbf58d57ecc9d727cbd39a84e44fa8f11be7fd419fa0100c5255d8",
+    "source/third_party/imgui/imgui.h": "2d0180859ff85e7fe66ed9999b0f05f2fc45176773046a8f86b3b6bd190b0765",
+    "source/third_party/imgui/imgui_draw.cpp": "9d2d9ee6745d9b98d7f39a16da8ffcf783f90bb8c9e931038fc8e9a15cbe3d84",
+    "source/third_party/imgui/imgui_internal.h": "1363c617a743957f367afe1c6c88345870b7aa25ee339809fb915466e4fb9575",
+    "source/third_party/imgui/imgui_tables.cpp": "4ea380fa9d49cac6cbfbc8b969969f9b0705518ec9ca340681d8c70e3eefbc28",
+    "source/third_party/imgui/imgui_widgets.cpp": "54ac29dbcbe70091f5e5fc2cb4099e6d0b9d1c939e5158f2be983cb508714414",
+    "source/third_party/imgui/imstb_rectpack.h": "2efa3d5f7d003c19743b15155dad9f46d9f9fc783a18893d703b431d3c990972",
+    "source/third_party/imgui/imstb_textedit.h": "77010e494caf72c178b573569612aec409d24380409676325a31d02de0ec64b7",
+    "source/third_party/imgui/imstb_truetype.h": "87f08919ae8e7223451d0e9d06b62829075d3e920c9e6ad436db9d7e7427ffce",
+    "source/tools/MaterialReferenceAudit.cpp": "cbb84d6f0819d9e3b37161bd10749037a6e5f89d392a811d926a15db877fe687",
+    "source/tools/audit_reference.py": "fb8755e78f6d4d87ac75d5037df58464fa708b71c3b61e547c2ef00e4ef610d9",
+    "src/AttachmentHistory.h": "761a0e4212a682b9a90dde28e1968b15b0c0f1384bc2e1a7cf2c06be8474253c",
+    "src/AttachmentPreview.h": "1a36e208b12813d2f2fa71b31480b970b9e28347049279455a4dfc79fa8949cc",
+    "src/Core.cpp": "7145e10ab90c5fee86b4630a31cae8b2b3ce2bd82881c5f26b2f2b18fb28c020",
+    "src/Core.h": "7a98611185535be32e6966b63209402fc583b6a07abfc98e627cbbc3c1c80ed8",
+    "src/DDS.cpp": "194925013edab279db492b8248a0b9cf028f26cb4bd92544cef4694b0a5e45b8",
+    "src/EditorUI.cpp": "2ba18f53cf38afb7cf6b450308d60d062974e1d7c3315f65b7e573628db6c37a",
+    "src/EditorUI.h": "04401469907579e8b62c0196b8e1963993c057fe7f1fbb2282479d8cdc0f4b5c",
+    "src/EditorWorkflow.h": "d8e1b06517a32f3ad5d92c80995745b4c717c1131a09b859e7fbaa2cd7818906",
+    "src/EngineLighting.h": "f310e545f960b69b2f983985e11d5f847d367a775658b1e059c70b96560d1fc6",
+    "src/EngineTexture.h": "05b69ca433d26c687eb78c645aac2b56cae596f78678647ab64001e2c49bfe97",
+    "src/FlightInput.h": "763eb2ad1074c3f355fdd747dbdbe12980908f1e69298b60512000a069781b27",
+    "src/MaterialAlpha.h": "a9c47518c7166b556827eb7ebbd130768c23cecd94794222c09bba3412c66572",
+    "src/MaterialDocument.cpp": "a8289f82e2050332801c35e6c936f8c853eb02d3a3b0638f4013d210b35069b1",
+    "src/MaterialDocument.h": "585c344e5ccf8467918dca615c855e52c427dc0a30b03742e99669bbd7904454",
+    "src/OGF.cpp": "e1ae9bfca9da233a13ee6b0a8ebadc6ababcddb477d05bbe4894163d0b970fc7",
+    "src/Renderer.cpp": "5250e1f4ef9620df44077bc1dd4b9345b09bfd0648bf63d08c700c2236d0fc96",
+    "src/Renderer.h": "656d980b26a0556dc9d8aef92cf7f513890b4fc2c5e1fc263100def96745523d",
+    "src/RendererSmoke.h": "8afb285dd8603a47c82d6ef68745c54ccf279ecf3ee2cb15822009b6bbb890e3",
+    "src/Resource.h": "3af575e3fc7ef9a2fc217eb33b7ccbaafa73bca45c240e8c6eec95c2983c9386",
+    "src/StartupSplash.cpp": "8dc6fe8307743a488e4121aaf7e9e9748828634c304f6e9538304de1777e2c20",
+    "src/StartupSplash.h": "dd50faa092ea9dd777d89033280ff3c70ecd16d0addec56abbc96028ef896181",
+    "src/ViewportToolbar.h": "e4d21b20ce750732bf24515c19a0f853252c45aab5b88f95b1448c45301f3d5d",
+    "src/ViewportTools.h": "03734778cfffb0ef0d31e1219e676b24ae3130087ea60ba795d9489e7848ee35",
+    "src/WinApp.cpp": "020f0e33ddac796e4fb26f3f2d50eb682226dfe4a9c6344f7825f7b9d995670d",
+    "tests/AttachmentHistoryTests.cpp": "f413d439a99475cc0285fe0918d49ed535b837a29756ce0bc65a193ddc8b5dbb",
+    "tests/BrushLayersTests.cpp": "85c349e8cbad4affc52913ecd94fb36c4e47e04a3afef09dfc598d6ba5905de8",
+    "tests/EditorUITests.cpp": "5eb95d59ef21650419a69fdba4ba1fefe9f21d71cf1761f09cd446ea16c50a87",
+    "tests/FlightInputTests.cpp": "bae12ce3ec80f30a604ef395bb6171a073296ea1db5133b7ed77729e4202955a",
+    "tests/MaterialDocumentTests.cpp": "9e089b3a971aebb0c0d8f2bfcf9b0b266861d42be192865faa358c64122da78c",
+    "tests/ParserTests.cpp": "128c351c132f5a2e4b9cf2da73b5b2bf4d567556e780187d4e185d22774c7c8f",
+    "tests/RendererPreviewTests.cpp": "fb1f1b6dde5ae222ed50471a5908f8d222246c85b3c0115c76085d105cb7d279",
+    "tests/SurfaceReliefTests.cpp": "4fedf4e422fde7f273f336798fe1c2d6f2d50dc50e67ca473d9fb190224cd148",
+    "tests/ViewportToolsTests.cpp": "6392843507b13abdde927b4f8bbbe26b7267d9902037ea1cf10d2b3814a8e33c",
+    "tests/WorkflowTests.cpp": "f02c771218e117f3a9ee1cf1bf588b450793b2e9363fea4970c98cc37ce558c3",
+    "tests/reference_audit_act_bandit.json": "39c7e9ba7ed6e6a6a264faafcb3a20a0c87cb429d6cb41b8d71e4db35be8c9be",
+    "third_party/imgui/LICENSE.txt": "c80c5789748d955c4a650562baa0d750494e2c7128c2ca66aaebe2e3c4e198bf",
+    "third_party/imgui/VERSION.txt": "2522217d5dc4ee9d6865864bbf709d4a60b8d317819813707a07e1ca173e8292",
+    "third_party/imgui/backends/imgui_impl_dx11.cpp": "7a8f7294b86065d514a9e19f1bed3bc84d4587f0142b2c551a584b4067cb2902",
+    "third_party/imgui/backends/imgui_impl_dx11.h": "cf55f23132dcd240c31995494e0828abb84e552adee71be20f384d68eca21697",
+    "third_party/imgui/backends/imgui_impl_win32.cpp": "e572de10045298bbf833aa7a15e28d2777df57603b4e50b9c8aa4c878f1e4cfa",
+    "third_party/imgui/backends/imgui_impl_win32.h": "606df46db972371ac6b5f5ad94bba75a09657da47b259105c4845c1f8638fa0c",
+    "third_party/imgui/imconfig.h": "0884061cc43e27e1d346fe18dcd1425792eb2532d3d16610a82eb5ac751f7594",
+    "third_party/imgui/imgui.cpp": "af1cc31255fbf58d57ecc9d727cbd39a84e44fa8f11be7fd419fa0100c5255d8",
+    "third_party/imgui/imgui.h": "2d0180859ff85e7fe66ed9999b0f05f2fc45176773046a8f86b3b6bd190b0765",
+    "third_party/imgui/imgui_draw.cpp": "9d2d9ee6745d9b98d7f39a16da8ffcf783f90bb8c9e931038fc8e9a15cbe3d84",
+    "third_party/imgui/imgui_internal.h": "1363c617a743957f367afe1c6c88345870b7aa25ee339809fb915466e4fb9575",
+    "third_party/imgui/imgui_tables.cpp": "4ea380fa9d49cac6cbfbc8b969969f9b0705518ec9ca340681d8c70e3eefbc28",
+    "third_party/imgui/imgui_widgets.cpp": "54ac29dbcbe70091f5e5fc2cb4099e6d0b9d1c939e5158f2be983cb508714414",
+    "third_party/imgui/imstb_rectpack.h": "2efa3d5f7d003c19743b15155dad9f46d9f9fc783a18893d703b431d3c990972",
+    "third_party/imgui/imstb_textedit.h": "77010e494caf72c178b573569612aec409d24380409676325a31d02de0ec64b7",
+    "third_party/imgui/imstb_truetype.h": "87f08919ae8e7223451d0e9d06b62829075d3e920c9e6ad436db9d7e7427ffce",
+    "tools/MaterialReferenceAudit.cpp": "cbb84d6f0819d9e3b37161bd10749037a6e5f89d392a811d926a15db877fe687",
+    "tools/audit_reference.py": "fb8755e78f6d4d87ac75d5037df58464fa708b71c3b61e547c2ef00e4ef610d9",
+    "verification/0.12.0/asan-ubsan-tests.txt": "0bacd8e50e97f85a929009306023d3a4c6196dfb7d541097eb4a929bdcf48084",
+    "verification/0.12.0/build-info.txt": "a8a57570058fa023e4dd5706c3cd04a28e8b51e77c800509655e122225db922a",
+    "verification/0.12.0/icon-verification.txt": "547abf933e4ba5b3aadb52e8c84da892aa72ddea3887946476b785c5b1eb5202",
+    "verification/0.12.0/portable-tests.txt": "78c0b0490caaa83b589c34a9f3949aaae5f7a0cb336b8ba15ec687c9006df0e4",
+    "verification/asan-ubsan-tests.txt": "7862de626bde90785eeec1450331f5064d25c4095698733939ef7c68751a191b",
+    "verification/build-info.txt": "520eb7532cc01d53ed789884f8dea6c59c955282d2994ae8c2b761e2ac91bf47",
+    "verification/portable-tests.txt": "d9a09d272ea86f25a1756511863f23333b63a54d2d5c86e3ff7e28a2a3d28032"
+  }
+}

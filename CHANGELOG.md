@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.13.0
+
+- Flight input consumes Ctrl+S until physical S release and blocks held movement keys across focus/UI ownership changes.
+- Replacing the model preserves camera, light and model rotation; fitting/resetting remain explicit commands.
+- Progressive OGF geometry selects the maximum-detail SWI window, validates active ranges and preserves authored skeletal tangent/binormal data.
+- SMPARAMS v4 marks are parsed safely; animation definitions use motion IDs, and all external OMF references are searched.
+- Material height gains an optional diffuse/alpha-derived lift with live Apply/Discard, Undo/Redo and session persistence.
+- Lighting follows the pinned KichRay DX11/R4 material/GBuffer precision, direct light, gloss factor, uniform-environment hemisphere and exposure formulas.
+- Animation has clickable biped points, transient bone-bound OGF props with local transforms and persistent per-bone recent history.
+- Leaving Animation unloads props; both paused and playing animation protect material editing.
+- A dedicated animation action exports model/props/lighting as a straight-alpha PNG, maximum 1024 pixels per side, without editor guides.
+- Portable regressions and Windows renderer smoke checks cover the new workflows. The root and `source/` source trees are synchronized.
+
 ## 0.12.0
 
 - Fade in the supplied transparent emblem on a dedicated startup window while the main thread loads D3D resources, shaders, fonts and the initial viewport. Embed the PNG in the executable.

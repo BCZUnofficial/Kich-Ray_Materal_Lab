@@ -154,6 +154,111 @@ void surfaceReliefInteractions() {
     s.hasDiffuse=true;s.brushTool=lab::BrushTool::Freehand;s.forceBrushTab=true;for(int i=0;i<4;++i)step();
     require(s.brushTool==lab::BrushTool::Freehand&&s.brushChannel==2&&s.brushRemove,"return to freehand restores its untouched settings");
 }
+void diffuseHeightControls() {
+    UIContext context(1.f);auto s=fixture(1.f);auto& io=ImGui::GetIO();
+    s.tab=lab::EditorTab::Material;s.forceTab=true;
+    std::vector<lab::EditorAction> actions;
+    auto step=[&]{frame(s,1490,1100,[&](lab::EditorAction kind,int){actions.push_back(kind);});};
+    for(int i=0;i<4;++i)step();
+    auto pane=[](){for(auto* w:GImGui->Windows)if(w->LastFrameActive==GImGui->FrameCount&&std::string(w->Name).find("Active pane")!=std::string::npos)return w;return static_cast<ImGuiWindow*>(nullptr);};
+    auto hover=[&](const char* label){auto* w=pane();require(w!=nullptr,"material inspector exists");const auto id=w->GetID(label);
+        for(float y=w->Pos.y+10;y<w->Pos.y+w->Size.y-10;y+=3){io.AddMousePosEvent(w->Pos.x+70,y);step();if(GImGui->HoveredId==id)return ImVec2(w->Pos.x+70,y);}
+        throw std::runtime_error(std::string("missing height control: ")+label);
+    };
+    auto click=[&](ImVec2 p){io.AddMousePosEvent(p.x,p.y);step();io.AddMouseButtonEvent(0,true);step();io.AddMouseButtonEvent(0,false);step();};
+    const auto checkbox=hover("Поднять по базовой текстуре");
+    s.hasDiffuse=false;step();actions.clear();click(checkbox);
+    require(!s.adjustments.heightFromDiffuse&&actions.empty(),"height-from-diffuse checkbox must be disabled when the selected material has no diffuse");
+    s.hasDiffuse=true;step();actions.clear();click(checkbox);
+    require(s.adjustments.heightFromDiffuse&&std::count(actions.begin(),actions.end(),lab::EditorAction::AdjustMaterial)==1,
+            "enabling diffuse height must request exactly one live material adjustment");
+    hover("Подъём из diffuse");const float before=s.adjustments.diffuseHeightStrength,scroll=pane()->Scroll.y;actions.clear();
+    io.AddMouseWheelEvent(0,1);step();step();
+    require(s.adjustments.diffuseHeightStrength>before&&std::count(actions.begin(),actions.end(),lab::EditorAction::AdjustMaterial)==1,
+            "height strength must respond to the mouse wheel through the material adjustment action");
+    require(pane()->Scroll.y==scroll,"height strength wheel must not also scroll the material inspector");
+    s.canAdjust=false;step();const float disabled=s.adjustments.diffuseHeightStrength;actions.clear();
+    io.AddMouseWheelEvent(0,1);step();step();
+    require(s.adjustments.diffuseHeightStrength==disabled&&actions.empty(),"a locked material cannot change its diffuse height strength");
+    validate(s,1490,1100);
+}
+void animationAttachmentsAndCapture() {
+    UIContext context(1.f);auto s=fixture(1.f);auto& io=ImGui::GetIO();
+    s.tab=lab::EditorTab::Animation;s.forceTab=true;s.animations.clear();s.animationPlaying=false;
+    s.showBipedBones=true;s.attachmentBones={{7,"bip01_r_hand"},{9,"bip01_l_hand"}};
+    s.boneMarkers={{7,"bip01_r_hand",.42f,.44f,false},{9,"bip01_l_hand",.61f,.46f,false}};
+    // Shell availability is deliberately true: Animation itself must keep
+    // editing tools disabled even when the current pose is paused.
+    s.canBrush=s.canUndo=s.canRedo=s.pendingAdjustments=true;
+    std::vector<std::pair<lab::EditorAction,int>> actions;
+    auto callback=[&](lab::EditorAction kind,int value){
+        actions.emplace_back(kind,value);
+        if(kind==lab::EditorAction::SelectAttachmentBone){
+            s.attachmentBone=value;s.attachmentBoneName=value==7?"bip01_r_hand":"bip01_l_hand";
+            s.recentAttachments={u8R"(C:\Предметы\водка.ogf)",u8R"(C:\Предметы\хлеб.ogf)"};
+            s.requestAttachmentPopup=true;
+        }
+        if(kind==lab::EditorAction::UseRecentAttachment){s.attachmentActive=true;s.attachmentName=value==0?"водка.ogf":"хлеб.ogf";}
+        if(kind==lab::EditorAction::SetMode)s.mode=lab::EditorMode(value);
+    };
+    auto step=[&]{
+        // This is production shell state supplied before DrawEditorUI, not an
+        // inference the pure UI renderer is expected to make for the caller.
+        s.editingLocked=s.animationPlaying||s.tab==lab::EditorTab::Animation;
+        frame(s,1490,1100,callback);
+    };
+    auto count=[&](lab::EditorAction kind){return std::count_if(actions.begin(),actions.end(),[&](const auto& a){return a.first==kind;});};
+    for(int i=0;i<4;++i)step();
+    const ImVec2 bonePoint(s.viewportRect.x+s.boneMarkers[0].x*s.viewportRect.w,s.viewportRect.y+s.boneMarkers[0].y*s.viewportRect.h);
+    io.AddMousePosEvent(bonePoint.x,bonePoint.y);step();actions.clear();
+    io.AddMouseButtonEvent(0,true);step();
+    require(count(lab::EditorAction::SelectAttachmentBone)==1&&actions.back().second==7&&s.bonePointerCaptured,
+            "clicking a projected biped point must select its real bone and consume the camera pointer");
+    for(int i=0;i<12;++i)step();
+    require(count(lab::EditorAction::SelectAttachmentBone)==1,"holding a biped point cannot open its menu repeatedly");
+    io.AddMouseButtonEvent(0,false);step();for(int i=0;i<3;++i)step();
+    auto popup=[](){for(auto* w:GImGui->Windows)if(w->LastFrameActive==GImGui->FrameCount&&(w->Flags&ImGuiWindowFlags_Popup))return w;return static_cast<ImGuiWindow*>(nullptr);};
+    auto* recentPopup=popup();
+    require(recentPopup&&s.attachmentBone==7&&!s.recentAttachments.empty(),"biped point click opens the selected bone's recent-prop menu");
+    require(recentPopup->Pos.x>=0&&recentPopup->Pos.y>=0&&recentPopup->Pos.x+recentPopup->Size.x<=1490&&recentPopup->Pos.y+recentPopup->Size.y<=1100,
+            "bone menu remains inside the application window");
+    auto hover=[&](ImGuiWindow* w,ImGuiID id){
+        for(float y=w->Pos.y+5;y<w->Pos.y+w->Size.y-5;y+=3){io.AddMousePosEvent(w->Pos.x+70,y);step();if(GImGui->HoveredId==id)return;}
+        throw std::runtime_error("cannot find attachment-menu action");
+    };
+    const auto recentId=ImHashStr("хлеб.ogf",0,recentPopup->GetID(1));hover(recentPopup,recentId);actions.clear();
+    io.AddMouseButtonEvent(0,true);step();for(int i=0;i<8;++i)step();io.AddMouseButtonEvent(0,false);step();step();
+    require(count(lab::EditorAction::UseRecentAttachment)==1&&
+            std::find(actions.begin(),actions.end(),std::make_pair(lab::EditorAction::UseRecentAttachment,1))!=actions.end(),
+            "recent-prop click dispatches its exact list index once, including a held mouse button");
+    require(!popup()&&s.attachmentActive&&s.attachmentName=="хлеб.ogf","choosing a recent prop closes its menu and displays the attachment state");
+
+    auto pane=[](){for(auto* w:GImGui->Windows)if(w->LastFrameActive==GImGui->FrameCount&&std::string(w->Name).find("Active pane")!=std::string::npos)return w;return static_cast<ImGuiWindow*>(nullptr);};
+    auto* animation=pane();require(animation!=nullptr,"animation inspector exists");
+    hover(animation,animation->GetID("Сохранить PNG с прозрачным фоном…"));actions.clear();
+    io.AddMouseButtonEvent(0,true);step();io.AddMouseButtonEvent(0,false);step();
+    require(s.animations.empty()&&count(lab::EditorAction::CaptureAnimation)==1,
+            "transparent PNG export remains available for bind pose without animation clips");
+
+    const float button=std::max(30.f,ImGui::CalcTextSize("WW").x+ImGui::GetStyle().FramePadding.x*2);
+    auto toolClick=[&](int index){
+        io.AddMousePosEvent(s.toolbarRect.x+index*(button+ImGui::GetStyle().ItemSpacing.x)+button*.5f,s.toolbarRect.y+ImGui::GetFrameHeight()*.5f);step();
+        io.AddMouseButtonEvent(0,true);step();io.AddMouseButtonEvent(0,false);step();
+    };
+    actions.clear();for(int index:{2,5,6,8,10,11,12})toolClick(index);
+    require(actions.empty()&&!s.animationPlaying&&s.editingLocked,
+            "paused Animation must disable mesh selection, brush, model rotation, isolation, undo/redo and material apply");
+    toolClick(1);toolClick(4);
+    require(std::find(actions.begin(),actions.end(),std::make_pair(lab::EditorAction::SetMode,int(lab::EditorMode::Orbit)))!=actions.end()&&
+            std::find(actions.begin(),actions.end(),std::make_pair(lab::EditorAction::SetMode,int(lab::EditorMode::Light)))!=actions.end(),
+            "paused Animation keeps camera and lighting controls available");
+    const auto remembered=s.recentAttachments;
+    s.tab=lab::EditorTab::Scene;s.forceTab=true;for(int i=0;i<4;++i)step();actions.clear();
+    io.AddMousePosEvent(bonePoint.x,bonePoint.y);step();io.AddMouseButtonEvent(0,true);step();io.AddMouseButtonEvent(0,false);step();
+    require(count(lab::EditorAction::SelectAttachmentBone)==0&&!s.bonePointerCaptured&&s.recentAttachments==remembered,
+            "leaving Animation removes bone-point interaction without clearing the recent list");
+    validate(s,1490,1100);
+}
 // Render the actual ImGui draw lists into an internal audit screenshot. This
 // exercises the production portable UI; it is not a separate mock-up layout.
 void snapshot(const std::string& path,int width,int height) {
@@ -195,10 +300,21 @@ int main(int argc,char** argv) {
             int w=std::stoi(argv[3]),h=std::stoi(argv[4]),tab=std::stoi(argv[6]);float scale=std::stof(argv[5]);
             UIContext context(scale);auto state=fixture(scale);
             if(argc>7&&std::string(argv[7])=="surface"){state.brushTool=lab::BrushTool::SurfaceRelief;state.forceBrushTab=true;}
-            for(int i=0;i<5;++i){state.tab=lab::EditorTab(tab);state.forceTab=true;frame(state,w,h);}
+            if(argc>7&&std::string(argv[7])=="attachments"){
+                state.showBipedBones=true;state.attachmentActive=true;state.attachmentBone=7;
+                state.attachmentBoneName="bip01_r_hand";state.attachmentName="wpn_ak74.ogf";
+                state.attachmentBones={{0,"bip01_pelvis"},{1,"bip01_spine"},{4,"bip01_head"},{7,"bip01_r_hand"},{9,"bip01_l_hand"}};
+                state.boneMarkers={{0,"bip01_pelvis",.50f,.58f,false},{1,"bip01_spine",.50f,.42f,false},
+                    {4,"bip01_head",.50f,.24f,false},{7,"bip01_r_hand",.35f,.46f,true},{9,"bip01_l_hand",.65f,.46f,false}};
+                state.recentAttachments={R"(C:\S.T.A.L.K.E.R.\gamedata\meshes\weapons\ak74\wpn_ak74.ogf)",u8R"(C:\Мой мод\gamedata\meshes\items\водка.ogf)"};
+                state.attachmentTransform.position={.015f,.03f,.02f};state.attachmentTransform.rotation={0,90,0};
+                state.status="wpn_ak74.ogf закреплён на bip01_r_hand. Материал основного объекта доступен после выхода из анимации.";
+            }
+            for(int i=0;i<5;++i){state.tab=lab::EditorTab(tab);state.forceTab=true;
+                state.editingLocked=state.animationPlaying||state.tab==lab::EditorTab::Animation;frame(state,w,h);}
             validate(state,w,h);snapshot(argv[2],w,h);return 0;
         }
-        interactions();wheelAndAnimationInteractions();surfaceReliefInteractions();
+        interactions();wheelAndAnimationInteractions();surfaceReliefInteractions();diffuseHeightControls();animationAttachmentsAndCapture();
         int frames=0;
         for(float scale:{1.f,1.25f,1.5f,2.f}){
             UIContext context(scale);auto state=fixture(scale);

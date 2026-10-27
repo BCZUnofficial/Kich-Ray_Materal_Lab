@@ -1,0 +1,1330 @@
+{
+  "sha": "9d0be1aa320651207d7922d712e0741922ea6aa1",
+  "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/trees/9d0be1aa320651207d7922d712e0741922ea6aa1",
+  "tree": [
+    {
+      "path": ".gitattributes",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1ff0c423042b46cb1d617b81efb715defbe8054d",
+      "size": 2518,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/1ff0c423042b46cb1d617b81efb715defbe8054d"
+    },
+    {
+      "path": ".github",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "2cf257a859460e355f84c9b7c24c07100d9a1fb0",
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/trees/2cf257a859460e355f84c9b7c24c07100d9a1fb0"
+    },
+    {
+      "path": ".github/workflows",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "1b766ad01e8c33c2f548968bb85e82cc7cfe9187",
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/trees/1b766ad01e8c33c2f548968bb85e82cc7cfe9187"
+    },
+    {
+      "path": ".github/workflows/build.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8e13eb4b5c86a3317cd71c6b990a10d7d15750be",
+      "size": 2823,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/8e13eb4b5c86a3317cd71c6b990a10d7d15750be"
+    },
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6bc52991388f36c853d1b19c18209d593aa57e59",
+      "size": 6291,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/6bc52991388f36c853d1b19c18209d593aa57e59"
+    },
+    {
+      "path": "AUDIT_0.10.0_RU.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d46226c9105389e8cb9b8862cd677ec2745626d5",
+      "size": 14875,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/d46226c9105389e8cb9b8862cd677ec2745626d5"
+    },
+    {
+      "path": "AUDIT_0.11.0_RU.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "79ffb4668ea6c653f37f2200355df00f9f1e02eb",
+      "size": 16513,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/79ffb4668ea6c653f37f2200355df00f9f1e02eb"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "eb469b7f7dac2e707cb1584d8f1ae8554c55fdc8",
+      "size": 25809,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/eb469b7f7dac2e707cb1584d8f1ae8554c55fdc8"
+    },
+    {
+      "path": "CMakeLists.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3e8f150debfbc061c0b4ddfeda0e56b5a894617c",
+      "size": 2991,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/3e8f150debfbc061c0b4ddfeda0e56b5a894617c"
+    },
+    {
+      "path": "INSTALL_0.10.0_RU.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "93d21fd630190f6b400e539716443b79dac14f38",
+      "size": 2603,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/93d21fd630190f6b400e539716443b79dac14f38"
+    },
+    {
+      "path": "INSTALL_0.9.1_RU.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ddad377c0a695f2dc347495ebc2b41561eec98b8",
+      "size": 1482,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/ddad377c0a695f2dc347495ebc2b41561eec98b8"
+    },
+    {
+      "path": "INSTALL_0.9.2_RU.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2754952b4bea2438f23954524f270c6b58b01100",
+      "size": 3689,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/2754952b4bea2438f23954524f270c6b58b01100"
+    },
+    {
+      "path": "INSTALL_RU.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ea344230e9b05d1f5b7153e62e573c8d6786ae13",
+      "size": 1731,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/ea344230e9b05d1f5b7153e62e573c8d6786ae13"
+    },
+    {
+      "path": "KichRay_MaterialLab.sln",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b6c7efb5c904523df25381feb0fd6786fbff90d7",
+      "size": 1308,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/b6c7efb5c904523df25381feb0fd6786fbff90d7"
+    },
+    {
+      "path": "MaterialLab.vcxproj",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "65f3d59b5afd76b1add2f735bd7a9a8786cdcc80",
+      "size": 12167,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/65f3d59b5afd76b1add2f735bd7a9a8786cdcc80"
+    },
+    {
+      "path": "MaterialLab_0.12.0.patch",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "39b23220d9f4d924c6e8045c0d4cbcda18f73c49",
+      "size": 8482931,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/39b23220d9f4d924c6e8045c0d4cbcda18f73c49"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7744961cad18a0e02eccdf113b95c37553fe6411",
+      "size": 13270,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/7744961cad18a0e02eccdf113b95c37553fe6411"
+    },
+    {
+      "path": "START_HERE_RU.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "92d907442fe63ad869db951816d36636886c5569",
+      "size": 2750,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/92d907442fe63ad869db951816d36636886c5569"
+    },
+    {
+      "path": "UPDATE_0.12.0_RU.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3e1f3edaede7cb449b3c7c01af14ccd693cd0db0",
+      "size": 9782,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/3e1f3edaede7cb449b3c7c01af14ccd693cd0db0"
+    },
+    {
+      "path": "assets",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "13d9cdd60a81139a208db572e8fed46948db0590",
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/trees/13d9cdd60a81139a208db572e8fed46948db0590"
+    },
+    {
+      "path": "assets/ICON_README_RU.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d265c6f75689d9099c8e8080c9b725062edf7e48",
+      "size": 1686,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/d265c6f75689d9099c8e8080c9b725062edf7e48"
+    },
+    {
+      "path": "assets/MaterialLab.ico",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bf6e3c1b479e4de473c83a68eed13d700d237e25",
+      "size": 285586,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/bf6e3c1b479e4de473c83a68eed13d700d237e25"
+    },
+    {
+      "path": "assets/MaterialLab.manifest",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "396a21f8a1c58814e77253549df9204b78a5e8e3",
+      "size": 824,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/396a21f8a1c58814e77253549df9204b78a5e8e3"
+    },
+    {
+      "path": "assets/MaterialLab.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6da3faecc871facbae1c882b75ad56c3ae44e6a1",
+      "size": 2957313,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/6da3faecc871facbae1c882b75ad56c3ae44e6a1"
+    },
+    {
+      "path": "assets/MaterialLab.rc",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "81e1111f4ecc44012ce9bfe04075aad8186a79af",
+      "size": 180,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/81e1111f4ecc44012ce9bfe04075aad8186a79af"
+    },
+    {
+      "path": "assets/Preview.hlsl",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "012e07e8ad4f91b7ebe8751df30df2792cb00751",
+      "size": 5349,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/012e07e8ad4f91b7ebe8751df30df2792cb00751"
+    },
+    {
+      "path": "assets/StartupSplash.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ab0820777a52b25464e06cb731d3f509903bbc76",
+      "size": 3249131,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/ab0820777a52b25464e06cb731d3f509903bbc76"
+    },
+    {
+      "path": "build_vs2022.bat",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6d59209215f044eddd95f109ce4317c47a7354ec",
+      "size": 1495,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/6d59209215f044eddd95f109ce4317c47a7354ec"
+    },
+    {
+      "path": "licenses",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "fc0a1665047b047ba88da0ca1b161d1c08e09469",
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/trees/fc0a1665047b047ba88da0ca1b161d1c08e09469"
+    },
+    {
+      "path": "licenses/DearImGui.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "00ae473abe62bf1c53b333613bd9e05aa72e2ca0",
+      "size": 1083,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/00ae473abe62bf1c53b333613bd9e05aa72e2ca0"
+    },
+    {
+      "path": "licenses/DirectXMath.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9e841e7a26e4eb057b24511e7b92d42b257a80e5",
+      "size": 1141,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/9e841e7a26e4eb057b24511e7b92d42b257a80e5"
+    },
+    {
+      "path": "licenses/GCC-runtime.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7b129d8784e448187fee852f361a22644d1ae5ff",
+      "size": 75729,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/7b129d8784e448187fee852f361a22644d1ae5ff"
+    },
+    {
+      "path": "licenses/MinGW-w64.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c63733987e9b9060ccfd667fae73806064cf7d90",
+      "size": 37808,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/c63733987e9b9060ccfd667fae73806064cf7d90"
+    },
+    {
+      "path": "source",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "597b3dabcfba6f0ab4e9fdc45746896009414de9",
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/trees/597b3dabcfba6f0ab4e9fdc45746896009414de9"
+    },
+    {
+      "path": "source/.gitattributes",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1ff0c423042b46cb1d617b81efb715defbe8054d",
+      "size": 2518,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/1ff0c423042b46cb1d617b81efb715defbe8054d"
+    },
+    {
+      "path": "source/.github",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "2cf257a859460e355f84c9b7c24c07100d9a1fb0",
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/trees/2cf257a859460e355f84c9b7c24c07100d9a1fb0"
+    },
+    {
+      "path": "source/.github/workflows",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "1b766ad01e8c33c2f548968bb85e82cc7cfe9187",
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/trees/1b766ad01e8c33c2f548968bb85e82cc7cfe9187"
+    },
+    {
+      "path": "source/.github/workflows/build.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8e13eb4b5c86a3317cd71c6b990a10d7d15750be",
+      "size": 2823,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/8e13eb4b5c86a3317cd71c6b990a10d7d15750be"
+    },
+    {
+      "path": "source/.gitignore",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6bc52991388f36c853d1b19c18209d593aa57e59",
+      "size": 6291,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/6bc52991388f36c853d1b19c18209d593aa57e59"
+    },
+    {
+      "path": "source/AUDIT_0.10.0_RU.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d46226c9105389e8cb9b8862cd677ec2745626d5",
+      "size": 14875,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/d46226c9105389e8cb9b8862cd677ec2745626d5"
+    },
+    {
+      "path": "source/AUDIT_0.11.0_RU.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "79ffb4668ea6c653f37f2200355df00f9f1e02eb",
+      "size": 16513,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/79ffb4668ea6c653f37f2200355df00f9f1e02eb"
+    },
+    {
+      "path": "source/CHANGELOG.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "eb469b7f7dac2e707cb1584d8f1ae8554c55fdc8",
+      "size": 25809,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/eb469b7f7dac2e707cb1584d8f1ae8554c55fdc8"
+    },
+    {
+      "path": "source/CMakeLists.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3e8f150debfbc061c0b4ddfeda0e56b5a894617c",
+      "size": 2991,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/3e8f150debfbc061c0b4ddfeda0e56b5a894617c"
+    },
+    {
+      "path": "source/INSTALL_0.10.0_RU.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "93d21fd630190f6b400e539716443b79dac14f38",
+      "size": 2603,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/93d21fd630190f6b400e539716443b79dac14f38"
+    },
+    {
+      "path": "source/INSTALL_0.9.1_RU.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ddad377c0a695f2dc347495ebc2b41561eec98b8",
+      "size": 1482,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/ddad377c0a695f2dc347495ebc2b41561eec98b8"
+    },
+    {
+      "path": "source/INSTALL_0.9.2_RU.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2754952b4bea2438f23954524f270c6b58b01100",
+      "size": 3689,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/2754952b4bea2438f23954524f270c6b58b01100"
+    },
+    {
+      "path": "source/KichRay_MaterialLab.sln",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b6c7efb5c904523df25381feb0fd6786fbff90d7",
+      "size": 1308,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/b6c7efb5c904523df25381feb0fd6786fbff90d7"
+    },
+    {
+      "path": "source/MaterialLab.vcxproj",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "65f3d59b5afd76b1add2f735bd7a9a8786cdcc80",
+      "size": 12167,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/65f3d59b5afd76b1add2f735bd7a9a8786cdcc80"
+    },
+    {
+      "path": "source/README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7744961cad18a0e02eccdf113b95c37553fe6411",
+      "size": 13270,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/7744961cad18a0e02eccdf113b95c37553fe6411"
+    },
+    {
+      "path": "source/UPDATE_0.12.0_RU.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3e1f3edaede7cb449b3c7c01af14ccd693cd0db0",
+      "size": 9782,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/3e1f3edaede7cb449b3c7c01af14ccd693cd0db0"
+    },
+    {
+      "path": "source/assets",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "13d9cdd60a81139a208db572e8fed46948db0590",
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/trees/13d9cdd60a81139a208db572e8fed46948db0590"
+    },
+    {
+      "path": "source/assets/ICON_README_RU.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d265c6f75689d9099c8e8080c9b725062edf7e48",
+      "size": 1686,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/d265c6f75689d9099c8e8080c9b725062edf7e48"
+    },
+    {
+      "path": "source/assets/MaterialLab.ico",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bf6e3c1b479e4de473c83a68eed13d700d237e25",
+      "size": 285586,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/bf6e3c1b479e4de473c83a68eed13d700d237e25"
+    },
+    {
+      "path": "source/assets/MaterialLab.manifest",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "396a21f8a1c58814e77253549df9204b78a5e8e3",
+      "size": 824,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/396a21f8a1c58814e77253549df9204b78a5e8e3"
+    },
+    {
+      "path": "source/assets/MaterialLab.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6da3faecc871facbae1c882b75ad56c3ae44e6a1",
+      "size": 2957313,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/6da3faecc871facbae1c882b75ad56c3ae44e6a1"
+    },
+    {
+      "path": "source/assets/MaterialLab.rc",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "81e1111f4ecc44012ce9bfe04075aad8186a79af",
+      "size": 180,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/81e1111f4ecc44012ce9bfe04075aad8186a79af"
+    },
+    {
+      "path": "source/assets/Preview.hlsl",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "012e07e8ad4f91b7ebe8751df30df2792cb00751",
+      "size": 5349,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/012e07e8ad4f91b7ebe8751df30df2792cb00751"
+    },
+    {
+      "path": "source/assets/StartupSplash.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ab0820777a52b25464e06cb731d3f509903bbc76",
+      "size": 3249131,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/ab0820777a52b25464e06cb731d3f509903bbc76"
+    },
+    {
+      "path": "source/build_vs2022.bat",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6d59209215f044eddd95f109ce4317c47a7354ec",
+      "size": 1495,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/6d59209215f044eddd95f109ce4317c47a7354ec"
+    },
+    {
+      "path": "source/src",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "9b7b5bac54b2b0fff2a39c9620319d195f2f9818",
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/trees/9b7b5bac54b2b0fff2a39c9620319d195f2f9818"
+    },
+    {
+      "path": "source/src/Core.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7e952fee4d86ac9af1df85819f74e98014948571",
+      "size": 43231,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/7e952fee4d86ac9af1df85819f74e98014948571"
+    },
+    {
+      "path": "source/src/Core.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6a389708d3ef857777cda34467f80177ead5d67a",
+      "size": 7461,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/6a389708d3ef857777cda34467f80177ead5d67a"
+    },
+    {
+      "path": "source/src/DDS.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "49f63561dd81669626dc6c0bba867854c1113656",
+      "size": 10398,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/49f63561dd81669626dc6c0bba867854c1113656"
+    },
+    {
+      "path": "source/src/EditorUI.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bcd9507620a3702bc63696e4afdf592e6f6f3a2b",
+      "size": 27029,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/bcd9507620a3702bc63696e4afdf592e6f6f3a2b"
+    },
+    {
+      "path": "source/src/EditorUI.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0aa63bd4d0fb142d7ebe14491147c62a8cf60ce7",
+      "size": 3308,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/0aa63bd4d0fb142d7ebe14491147c62a8cf60ce7"
+    },
+    {
+      "path": "source/src/EditorWorkflow.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c7ac1cf25634e0f6f4ffc88a6d5e3275a1933e05",
+      "size": 1595,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/c7ac1cf25634e0f6f4ffc88a6d5e3275a1933e05"
+    },
+    {
+      "path": "source/src/EngineLighting.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c44f8ac872d16db6905187c7e873269096aa3b29",
+      "size": 1531,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/c44f8ac872d16db6905187c7e873269096aa3b29"
+    },
+    {
+      "path": "source/src/EngineTexture.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6f993ad201c35ec1100962f575c2fcb7f94fa7b5",
+      "size": 1646,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/6f993ad201c35ec1100962f575c2fcb7f94fa7b5"
+    },
+    {
+      "path": "source/src/MaterialAlpha.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "651ec64c20dcef3c2f5a501de64c7f7f9e44e1db",
+      "size": 1821,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/651ec64c20dcef3c2f5a501de64c7f7f9e44e1db"
+    },
+    {
+      "path": "source/src/MaterialDocument.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "68e61f8d8a543d60f9a4da942db78e18c9215a0d",
+      "size": 27734,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/68e61f8d8a543d60f9a4da942db78e18c9215a0d"
+    },
+    {
+      "path": "source/src/MaterialDocument.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7ccf7103ac93095cdc8605d0273149f925eea50a",
+      "size": 4527,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/7ccf7103ac93095cdc8605d0273149f925eea50a"
+    },
+    {
+      "path": "source/src/OGF.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3047bbb902b59b72926d19885a399b3f19107b85",
+      "size": 21709,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/3047bbb902b59b72926d19885a399b3f19107b85"
+    },
+    {
+      "path": "source/src/Renderer.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b0da0ee6f497481a83608e5718e10aab37b0a419",
+      "size": 52766,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/b0da0ee6f497481a83608e5718e10aab37b0a419"
+    },
+    {
+      "path": "source/src/Renderer.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5bfe3bd80698689722bf027f1ccd347b59ffd74a",
+      "size": 8358,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/5bfe3bd80698689722bf027f1ccd347b59ffd74a"
+    },
+    {
+      "path": "source/src/Resource.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b805fee1f662ac1ad677d3246b637f818ab3d403",
+      "size": 127,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/b805fee1f662ac1ad677d3246b637f818ab3d403"
+    },
+    {
+      "path": "source/src/StartupSplash.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f70fdf34b4fd35d712ee29b8e1712b34e90d20f9",
+      "size": 8891,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/f70fdf34b4fd35d712ee29b8e1712b34e90d20f9"
+    },
+    {
+      "path": "source/src/StartupSplash.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5546b2978d9da1b15c037f96feabdbc7e7d0da29",
+      "size": 711,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/5546b2978d9da1b15c037f96feabdbc7e7d0da29"
+    },
+    {
+      "path": "source/src/ViewportToolbar.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d48d9a621c33a90f3a9ff6a88c24932bd0b46719",
+      "size": 5274,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/d48d9a621c33a90f3a9ff6a88c24932bd0b46719"
+    },
+    {
+      "path": "source/src/ViewportTools.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6be1af5dd65a52f4511d19c0b825ce7beb665357",
+      "size": 3283,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/6be1af5dd65a52f4511d19c0b825ce7beb665357"
+    },
+    {
+      "path": "source/src/WinApp.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ef4a7908f47a1d5f409b58dfe083e55c2cdbf737",
+      "size": 85147,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/ef4a7908f47a1d5f409b58dfe083e55c2cdbf737"
+    },
+    {
+      "path": "source/tests",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "ca37ec8db7e2353eb1e261ce37f2d2fc42205d50",
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/trees/ca37ec8db7e2353eb1e261ce37f2d2fc42205d50"
+    },
+    {
+      "path": "source/tests/BrushLayersTests.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7c922c027487430d1c4c6d77a3b635456e09eb2e",
+      "size": 14467,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/7c922c027487430d1c4c6d77a3b635456e09eb2e"
+    },
+    {
+      "path": "source/tests/EditorUITests.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d27ad86a949b089174563ce1cfcf1d9933e544b4",
+      "size": 17447,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/d27ad86a949b089174563ce1cfcf1d9933e544b4"
+    },
+    {
+      "path": "source/tests/MaterialDocumentTests.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b86c18489cdd6803b360e36aaeaa9a2c2cd543ad",
+      "size": 10719,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/b86c18489cdd6803b360e36aaeaa9a2c2cd543ad"
+    },
+    {
+      "path": "source/tests/ParserTests.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1e5ad9207061b8c27a6a05ddbd1d3fba2de243c5",
+      "size": 9792,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/1e5ad9207061b8c27a6a05ddbd1d3fba2de243c5"
+    },
+    {
+      "path": "source/tests/SurfaceReliefTests.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d5b5b3d9d3a09cdaaec40c19bd90dc0bd9adc782",
+      "size": 8124,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/d5b5b3d9d3a09cdaaec40c19bd90dc0bd9adc782"
+    },
+    {
+      "path": "source/tests/ViewportToolsTests.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e3a6cc1503fd57db1dbf1c19a1e227934bcc963b",
+      "size": 6469,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/e3a6cc1503fd57db1dbf1c19a1e227934bcc963b"
+    },
+    {
+      "path": "source/tests/WorkflowTests.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "160fea9d7a26e588395a4b0d1ac5b9abe0eee200",
+      "size": 9701,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/160fea9d7a26e588395a4b0d1ac5b9abe0eee200"
+    },
+    {
+      "path": "source/tests/reference_audit_act_bandit.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "dc3c525a629cd3da8109fce4f1231209c0dda914",
+      "size": 3411,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/dc3c525a629cd3da8109fce4f1231209c0dda914"
+    },
+    {
+      "path": "source/third_party",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "d6ee9d7cb1f45363b601b79ac7b214ba60c47699",
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/trees/d6ee9d7cb1f45363b601b79ac7b214ba60c47699"
+    },
+    {
+      "path": "source/third_party/imgui",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "c643bfa10bd0c8a5ae7db575d3f8cc7e8d28deb9",
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/trees/c643bfa10bd0c8a5ae7db575d3f8cc7e8d28deb9"
+    },
+    {
+      "path": "source/third_party/imgui/LICENSE.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "00ae473abe62bf1c53b333613bd9e05aa72e2ca0",
+      "size": 1083,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/00ae473abe62bf1c53b333613bd9e05aa72e2ca0"
+    },
+    {
+      "path": "source/third_party/imgui/VERSION.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "17b7243153611dfd2442e24dcdf61e1445e3a5b9",
+      "size": 155,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/17b7243153611dfd2442e24dcdf61e1445e3a5b9"
+    },
+    {
+      "path": "source/third_party/imgui/backends",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "3b3f4f11584f3568e905f3560af8c14980f7fa84",
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/trees/3b3f4f11584f3568e905f3560af8c14980f7fa84"
+    },
+    {
+      "path": "source/third_party/imgui/backends/imgui_impl_dx11.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9f39588810eb648a5c4569a5f157cb94903642f5",
+      "size": 30818,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/9f39588810eb648a5c4569a5f157cb94903642f5"
+    },
+    {
+      "path": "source/third_party/imgui/backends/imgui_impl_dx11.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "772c1b920c0546be02657f2812258cc8e2b6bd17",
+      "size": 2335,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/772c1b920c0546be02657f2812258cc8e2b6bd17"
+    },
+    {
+      "path": "source/third_party/imgui/backends/imgui_impl_win32.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2c749515d221fcb2916833a5efda095ff684f6ea",
+      "size": 49602,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/2c749515d221fcb2916833a5efda095ff684f6ea"
+    },
+    {
+      "path": "source/third_party/imgui/backends/imgui_impl_win32.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "083fe385f6fa0738ecb43756e7e97a007082e235",
+      "size": 3549,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/083fe385f6fa0738ecb43756e7e97a007082e235"
+    },
+    {
+      "path": "source/third_party/imgui/imconfig.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a1e29e849bc8c6125a0c567fa6cb528a293025cb",
+      "size": 11579,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/a1e29e849bc8c6125a0c567fa6cb528a293025cb"
+    },
+    {
+      "path": "source/third_party/imgui/imgui.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7ec19227897180787843dc65b1238ac9494433c5",
+      "size": 882057,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/7ec19227897180787843dc65b1238ac9494433c5"
+    },
+    {
+      "path": "source/third_party/imgui/imgui.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "75750ae10904989cd7bdefb413fabd056696816a",
+      "size": 378236,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/75750ae10904989cd7bdefb413fabd056696816a"
+    },
+    {
+      "path": "source/third_party/imgui/imgui_draw.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2731015291896890d5f46c8563198074fb7f14cb",
+      "size": 258761,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/2731015291896890d5f46c8563198074fb7f14cb"
+    },
+    {
+      "path": "source/third_party/imgui/imgui_internal.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ddf9ea3e9afd59e948fbf34c3edf614d1623b2ef",
+      "size": 272833,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/ddf9ea3e9afd59e948fbf34c3edf614d1623b2ef"
+    },
+    {
+      "path": "source/third_party/imgui/imgui_tables.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c98aea2d1cc7c6a2d64e8d27c70d6c724005f5ba",
+      "size": 247597,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/c98aea2d1cc7c6a2d64e8d27c70d6c724005f5ba"
+    },
+    {
+      "path": "source/third_party/imgui/imgui_widgets.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c997e17b61c6d506b496f6f990e67c88cace65f0",
+      "size": 517769,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/c997e17b61c6d506b496f6f990e67c88cace65f0"
+    },
+    {
+      "path": "source/third_party/imgui/imstb_rectpack.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f6917e7a6e56a03dcee169bf4e08c32611b761c9",
+      "size": 20344,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/f6917e7a6e56a03dcee169bf4e08c32611b761c9"
+    },
+    {
+      "path": "source/third_party/imgui/imstb_textedit.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b7a761c85381993be0f4cd78539f277c06eb407e",
+      "size": 57128,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/b7a761c85381993be0f4cd78539f277c06eb407e"
+    },
+    {
+      "path": "source/third_party/imgui/imstb_truetype.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "976f09cb92780b0d0db6fdfa3b2714df2567b320",
+      "size": 199485,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/976f09cb92780b0d0db6fdfa3b2714df2567b320"
+    },
+    {
+      "path": "source/tools",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "28f6ad7ba2608c3ff82c50509f2794f5e6e1d4bf",
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/trees/28f6ad7ba2608c3ff82c50509f2794f5e6e1d4bf"
+    },
+    {
+      "path": "source/tools/MaterialReferenceAudit.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "014bc35281c2511827e893cef0a095d964b624b4",
+      "size": 6658,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/014bc35281c2511827e893cef0a095d964b624b4"
+    },
+    {
+      "path": "source/tools/audit_reference.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "420fc129ec5b09d9199a4d9a4b39bb3b06c29070",
+      "size": 2770,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/420fc129ec5b09d9199a4d9a4b39bb3b06c29070"
+    },
+    {
+      "path": "src",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "9b7b5bac54b2b0fff2a39c9620319d195f2f9818",
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/trees/9b7b5bac54b2b0fff2a39c9620319d195f2f9818"
+    },
+    {
+      "path": "src/Core.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7e952fee4d86ac9af1df85819f74e98014948571",
+      "size": 43231,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/7e952fee4d86ac9af1df85819f74e98014948571"
+    },
+    {
+      "path": "src/Core.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6a389708d3ef857777cda34467f80177ead5d67a",
+      "size": 7461,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/6a389708d3ef857777cda34467f80177ead5d67a"
+    },
+    {
+      "path": "src/DDS.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "49f63561dd81669626dc6c0bba867854c1113656",
+      "size": 10398,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/49f63561dd81669626dc6c0bba867854c1113656"
+    },
+    {
+      "path": "src/EditorUI.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bcd9507620a3702bc63696e4afdf592e6f6f3a2b",
+      "size": 27029,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/bcd9507620a3702bc63696e4afdf592e6f6f3a2b"
+    },
+    {
+      "path": "src/EditorUI.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0aa63bd4d0fb142d7ebe14491147c62a8cf60ce7",
+      "size": 3308,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/0aa63bd4d0fb142d7ebe14491147c62a8cf60ce7"
+    },
+    {
+      "path": "src/EditorWorkflow.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c7ac1cf25634e0f6f4ffc88a6d5e3275a1933e05",
+      "size": 1595,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/c7ac1cf25634e0f6f4ffc88a6d5e3275a1933e05"
+    },
+    {
+      "path": "src/EngineLighting.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c44f8ac872d16db6905187c7e873269096aa3b29",
+      "size": 1531,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/c44f8ac872d16db6905187c7e873269096aa3b29"
+    },
+    {
+      "path": "src/EngineTexture.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6f993ad201c35ec1100962f575c2fcb7f94fa7b5",
+      "size": 1646,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/6f993ad201c35ec1100962f575c2fcb7f94fa7b5"
+    },
+    {
+      "path": "src/MaterialAlpha.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "651ec64c20dcef3c2f5a501de64c7f7f9e44e1db",
+      "size": 1821,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/651ec64c20dcef3c2f5a501de64c7f7f9e44e1db"
+    },
+    {
+      "path": "src/MaterialDocument.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "68e61f8d8a543d60f9a4da942db78e18c9215a0d",
+      "size": 27734,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/68e61f8d8a543d60f9a4da942db78e18c9215a0d"
+    },
+    {
+      "path": "src/MaterialDocument.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7ccf7103ac93095cdc8605d0273149f925eea50a",
+      "size": 4527,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/7ccf7103ac93095cdc8605d0273149f925eea50a"
+    },
+    {
+      "path": "src/OGF.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3047bbb902b59b72926d19885a399b3f19107b85",
+      "size": 21709,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/3047bbb902b59b72926d19885a399b3f19107b85"
+    },
+    {
+      "path": "src/Renderer.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b0da0ee6f497481a83608e5718e10aab37b0a419",
+      "size": 52766,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/b0da0ee6f497481a83608e5718e10aab37b0a419"
+    },
+    {
+      "path": "src/Renderer.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5bfe3bd80698689722bf027f1ccd347b59ffd74a",
+      "size": 8358,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/5bfe3bd80698689722bf027f1ccd347b59ffd74a"
+    },
+    {
+      "path": "src/Resource.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b805fee1f662ac1ad677d3246b637f818ab3d403",
+      "size": 127,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/b805fee1f662ac1ad677d3246b637f818ab3d403"
+    },
+    {
+      "path": "src/StartupSplash.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f70fdf34b4fd35d712ee29b8e1712b34e90d20f9",
+      "size": 8891,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/f70fdf34b4fd35d712ee29b8e1712b34e90d20f9"
+    },
+    {
+      "path": "src/StartupSplash.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5546b2978d9da1b15c037f96feabdbc7e7d0da29",
+      "size": 711,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/5546b2978d9da1b15c037f96feabdbc7e7d0da29"
+    },
+    {
+      "path": "src/ViewportToolbar.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d48d9a621c33a90f3a9ff6a88c24932bd0b46719",
+      "size": 5274,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/d48d9a621c33a90f3a9ff6a88c24932bd0b46719"
+    },
+    {
+      "path": "src/ViewportTools.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6be1af5dd65a52f4511d19c0b825ce7beb665357",
+      "size": 3283,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/6be1af5dd65a52f4511d19c0b825ce7beb665357"
+    },
+    {
+      "path": "src/WinApp.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ef4a7908f47a1d5f409b58dfe083e55c2cdbf737",
+      "size": 85147,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/ef4a7908f47a1d5f409b58dfe083e55c2cdbf737"
+    },
+    {
+      "path": "tests",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "ca37ec8db7e2353eb1e261ce37f2d2fc42205d50",
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/trees/ca37ec8db7e2353eb1e261ce37f2d2fc42205d50"
+    },
+    {
+      "path": "tests/BrushLayersTests.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7c922c027487430d1c4c6d77a3b635456e09eb2e",
+      "size": 14467,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/7c922c027487430d1c4c6d77a3b635456e09eb2e"
+    },
+    {
+      "path": "tests/EditorUITests.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d27ad86a949b089174563ce1cfcf1d9933e544b4",
+      "size": 17447,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/d27ad86a949b089174563ce1cfcf1d9933e544b4"
+    },
+    {
+      "path": "tests/MaterialDocumentTests.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b86c18489cdd6803b360e36aaeaa9a2c2cd543ad",
+      "size": 10719,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/b86c18489cdd6803b360e36aaeaa9a2c2cd543ad"
+    },
+    {
+      "path": "tests/ParserTests.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1e5ad9207061b8c27a6a05ddbd1d3fba2de243c5",
+      "size": 9792,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/1e5ad9207061b8c27a6a05ddbd1d3fba2de243c5"
+    },
+    {
+      "path": "tests/SurfaceReliefTests.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d5b5b3d9d3a09cdaaec40c19bd90dc0bd9adc782",
+      "size": 8124,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/d5b5b3d9d3a09cdaaec40c19bd90dc0bd9adc782"
+    },
+    {
+      "path": "tests/ViewportToolsTests.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e3a6cc1503fd57db1dbf1c19a1e227934bcc963b",
+      "size": 6469,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/e3a6cc1503fd57db1dbf1c19a1e227934bcc963b"
+    },
+    {
+      "path": "tests/WorkflowTests.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "160fea9d7a26e588395a4b0d1ac5b9abe0eee200",
+      "size": 9701,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/160fea9d7a26e588395a4b0d1ac5b9abe0eee200"
+    },
+    {
+      "path": "tests/reference_audit_act_bandit.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "dc3c525a629cd3da8109fce4f1231209c0dda914",
+      "size": 3411,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/dc3c525a629cd3da8109fce4f1231209c0dda914"
+    },
+    {
+      "path": "third_party",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "d6ee9d7cb1f45363b601b79ac7b214ba60c47699",
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/trees/d6ee9d7cb1f45363b601b79ac7b214ba60c47699"
+    },
+    {
+      "path": "third_party/imgui",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "c643bfa10bd0c8a5ae7db575d3f8cc7e8d28deb9",
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/trees/c643bfa10bd0c8a5ae7db575d3f8cc7e8d28deb9"
+    },
+    {
+      "path": "third_party/imgui/LICENSE.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "00ae473abe62bf1c53b333613bd9e05aa72e2ca0",
+      "size": 1083,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/00ae473abe62bf1c53b333613bd9e05aa72e2ca0"
+    },
+    {
+      "path": "third_party/imgui/VERSION.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "17b7243153611dfd2442e24dcdf61e1445e3a5b9",
+      "size": 155,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/17b7243153611dfd2442e24dcdf61e1445e3a5b9"
+    },
+    {
+      "path": "third_party/imgui/backends",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "3b3f4f11584f3568e905f3560af8c14980f7fa84",
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/trees/3b3f4f11584f3568e905f3560af8c14980f7fa84"
+    },
+    {
+      "path": "third_party/imgui/backends/imgui_impl_dx11.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9f39588810eb648a5c4569a5f157cb94903642f5",
+      "size": 30818,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/9f39588810eb648a5c4569a5f157cb94903642f5"
+    },
+    {
+      "path": "third_party/imgui/backends/imgui_impl_dx11.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "772c1b920c0546be02657f2812258cc8e2b6bd17",
+      "size": 2335,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/772c1b920c0546be02657f2812258cc8e2b6bd17"
+    },
+    {
+      "path": "third_party/imgui/backends/imgui_impl_win32.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2c749515d221fcb2916833a5efda095ff684f6ea",
+      "size": 49602,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/2c749515d221fcb2916833a5efda095ff684f6ea"
+    },
+    {
+      "path": "third_party/imgui/backends/imgui_impl_win32.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "083fe385f6fa0738ecb43756e7e97a007082e235",
+      "size": 3549,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/083fe385f6fa0738ecb43756e7e97a007082e235"
+    },
+    {
+      "path": "third_party/imgui/imconfig.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a1e29e849bc8c6125a0c567fa6cb528a293025cb",
+      "size": 11579,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/a1e29e849bc8c6125a0c567fa6cb528a293025cb"
+    },
+    {
+      "path": "third_party/imgui/imgui.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7ec19227897180787843dc65b1238ac9494433c5",
+      "size": 882057,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/7ec19227897180787843dc65b1238ac9494433c5"
+    },
+    {
+      "path": "third_party/imgui/imgui.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "75750ae10904989cd7bdefb413fabd056696816a",
+      "size": 378236,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/75750ae10904989cd7bdefb413fabd056696816a"
+    },
+    {
+      "path": "third_party/imgui/imgui_draw.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2731015291896890d5f46c8563198074fb7f14cb",
+      "size": 258761,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/2731015291896890d5f46c8563198074fb7f14cb"
+    },
+    {
+      "path": "third_party/imgui/imgui_internal.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ddf9ea3e9afd59e948fbf34c3edf614d1623b2ef",
+      "size": 272833,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/ddf9ea3e9afd59e948fbf34c3edf614d1623b2ef"
+    },
+    {
+      "path": "third_party/imgui/imgui_tables.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c98aea2d1cc7c6a2d64e8d27c70d6c724005f5ba",
+      "size": 247597,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/c98aea2d1cc7c6a2d64e8d27c70d6c724005f5ba"
+    },
+    {
+      "path": "third_party/imgui/imgui_widgets.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c997e17b61c6d506b496f6f990e67c88cace65f0",
+      "size": 517769,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/c997e17b61c6d506b496f6f990e67c88cace65f0"
+    },
+    {
+      "path": "third_party/imgui/imstb_rectpack.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f6917e7a6e56a03dcee169bf4e08c32611b761c9",
+      "size": 20344,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/f6917e7a6e56a03dcee169bf4e08c32611b761c9"
+    },
+    {
+      "path": "third_party/imgui/imstb_textedit.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b7a761c85381993be0f4cd78539f277c06eb407e",
+      "size": 57128,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/b7a761c85381993be0f4cd78539f277c06eb407e"
+    },
+    {
+      "path": "third_party/imgui/imstb_truetype.h",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "976f09cb92780b0d0db6fdfa3b2714df2567b320",
+      "size": 199485,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/976f09cb92780b0d0db6fdfa3b2714df2567b320"
+    },
+    {
+      "path": "tools",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "28f6ad7ba2608c3ff82c50509f2794f5e6e1d4bf",
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/trees/28f6ad7ba2608c3ff82c50509f2794f5e6e1d4bf"
+    },
+    {
+      "path": "tools/MaterialReferenceAudit.cpp",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "014bc35281c2511827e893cef0a095d964b624b4",
+      "size": 6658,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/014bc35281c2511827e893cef0a095d964b624b4"
+    },
+    {
+      "path": "tools/audit_reference.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "420fc129ec5b09d9199a4d9a4b39bb3b06c29070",
+      "size": 2770,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/420fc129ec5b09d9199a4d9a4b39bb3b06c29070"
+    },
+    {
+      "path": "verification",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "b90d9d613a1b1712cba838c56fc1070aa88bb0d2",
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/trees/b90d9d613a1b1712cba838c56fc1070aa88bb0d2"
+    },
+    {
+      "path": "verification/asan-ubsan-tests.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3f132639dd0f6f1838e170d9bc1cc8829712d9e9",
+      "size": 5114,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/3f132639dd0f6f1838e170d9bc1cc8829712d9e9"
+    },
+    {
+      "path": "verification/build-info.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4a1f1707950c554db2ccee6b5d28285230fdd4bb",
+      "size": 758,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/4a1f1707950c554db2ccee6b5d28285230fdd4bb"
+    },
+    {
+      "path": "verification/icon-verification.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "58b19c8d628ae64aea5d4f09227d07fcff9936d5",
+      "size": 347,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/58b19c8d628ae64aea5d4f09227d07fcff9936d5"
+    },
+    {
+      "path": "verification/portable-tests.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ebd54382e52696e7ab8687a3f259fbf5466eeaf7",
+      "size": 5058,
+      "url": "https://api.github.com/repos/BCZUnofficial/Kich-Ray_Materal_Lab/git/blobs/ebd54382e52696e7ab8687a3f259fbf5466eeaf7"
+    }
+  ],
+  "truncated": false
+}

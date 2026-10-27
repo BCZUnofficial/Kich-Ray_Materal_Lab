@@ -18,6 +18,7 @@
 #include "Core.h"
 #include "ViewportTools.h"
 #include "MaterialAlpha.h"
+#include "AttachmentPreview.h"
 namespace lab {
 class Renderer {
   using Dev=Microsoft::WRL::ComPtr<ID3D11Device>;
@@ -48,6 +49,11 @@ class Renderer {
     DirectX::XMFLOAT4X4 alphaSortView{};
     bool alphaSortValid=false;
   };
+  struct Attachment {
+    size_t bone=0;
+    AttachmentTransform transform;
+    std::vector<RenderPart> parts;
+  };
   Dev device_;Ctx context_;
   Microsoft::WRL::ComPtr<IDXGISwapChain> swap_;
   Microsoft::WRL::ComPtr<ID3D11RenderTargetView> rtv_,uiRtv_;
@@ -69,6 +75,8 @@ class Renderer {
   std::vector<RenderPart> parts_;
   std::vector<Bone> bones_;
   std::vector<Motion> motions_;
+  std::vector<DirectX::XMFLOAT4X4> boneTransforms_;
+  std::vector<Attachment> attachments_;
   UINT skeletonVertexCount_=0,brushVertexCount_=0,width_=0,height_=0,windowWidth_=0,windowHeight_=0;
   V3 modelCenter_{}; float modelScale_=1.f;
   ViewportCamera camera_;
@@ -76,6 +84,8 @@ class Renderer {
   float modelYaw_=0.f,modelPitch_=0.f;
   float normalStrength_=1.f,glossStrength_=0.5f;
   float lightIntensity_=1.f;
+  V3 environment_{};
+  float hemisphere_=1.f,exposure_=1.f,r4GlossFactor_=1.f;
   int materialClass_=-1;
   bool glossEnabled_=true;
   float background_[3]={.095f,.105f,.12f};
@@ -90,6 +100,12 @@ class Renderer {
   bool createViews(UINT w,UINT h,std::wstring& error);
   bool makeTexture(const Image& img,Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>& out,Microsoft::WRL::ComPtr<ID3D11Texture2D>* textureOut=nullptr,const std::vector<Image>* mips=nullptr);
   bool uploadBindPose(std::wstring* error=nullptr);
+  void cacheBindTransforms();
+  bool buildParts(const Mesh& mesh,V3 center,float scale,std::vector<RenderPart>& parts,std::wstring& error,bool animate);
+  bool setPartImages(RenderPart& part,const PartImages& images);
+  DirectX::XMMATRIX attachmentWorld(const Attachment& attachment)const;
+  void drawScene(bool clean,bool transparent);
+  bool readSceneImage(Image& image,std::wstring* error=nullptr);
 public:
   bool Init(HWND hwnd,std::wstring& error,bool software=false);
   // Window and scene surfaces are independent: the scene is displayed by ImGui.
@@ -116,17 +132,30 @@ public:
   size_t MotionCount()const{return motions_.size();}
   const Motion* MotionAt(size_t index)const{return index<motions_.size()?&motions_[index]:nullptr;}
   bool HasSkeleton()const{return !bones_.empty()&&skeletonVB_;}
+  size_t BoneCount()const{return bones_.size();}
+  const Bone* BoneAt(size_t index)const{return index<bones_.size()?&bones_[index]:nullptr;}
+  struct BonePoint {size_t index=0;std::string name;float x=0,y=0;bool visible=false;};
+  std::vector<BonePoint> BonePoints()const;
+  bool SetAttachment(size_t bone,const Mesh& mesh,const std::vector<PartImages>& images,const AttachmentTransform& transform,std::wstring& error);
+  bool SetAttachmentTransform(size_t bone,const AttachmentTransform& transform,std::wstring& error);
+  void SetAttachmentMaterialClass(size_t bone,size_t part,float material);
+  void RemoveAttachment(size_t bone);
+  void ClearAttachments(){attachments_.clear();}
+  bool HasAttachment(size_t bone)const;
   void SetColor(int which,COLORREF color);
   COLORREF GetColor(int which) const;
   void OrbitCamera(float dx,float dy);
+  ViewportCamera CameraState()const{return camera_;}
   void FlyCameraEnabled(bool on){camera_.fly=on;}
   void MoveCamera(float right,float up,float forward){camera_.move(right,up,forward);}
   void PanCamera(float dx,float dy){camera_.pan(dx,dy);}
   void FrameSelection();
   void AlignAxis(int axis){camera_.alignAxis(axis);FrameSelection();}
   void SetLightIntensity(float intensity){lightIntensity_=std::clamp(intensity,0.f,8.f);}
+  float LightIntensity()const{return lightIntensity_;}
+  void SetEnvironmentLighting(V3 environment,float hemisphere,float exposure,float glossFactor);
   void SetMaterialClass(int material){materialClass_=std::clamp(material,-1,3);}
-  void SetPartMaterialClass(size_t part,float material){if(part<parts_.size()&&std::isfinite(material))parts_[part].materialClass=std::clamp(material,0.f,4.f);}
+  void SetPartMaterialClass(size_t part,float material){if(part<parts_.size()&&std::isfinite(material))parts_[part].materialClass=std::clamp(material,0.f,3.f);}
   void SetBackground(const float* rgb){for(int i=0;i<3;++i)background_[i]=std::clamp(rgb[i],0.f,1.f);}
   void GlossEnabled(bool enabled){glossEnabled_=enabled;}
   void RotateModel(float dx,float dy);
@@ -169,5 +198,6 @@ public:
   int SelectedPart()const{return selectedPrimary_;}
   void Draw(bool present=true);
   bool CaptureFrame(Image& image);
+  bool CaptureTransparent(Image& image,uint32_t maxDimension,std::wstring& error);
 };
 }
